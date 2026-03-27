@@ -7,4 +7,5 @@ Text embeddings for edge devices, constrained to tens of megabytes of RAM.
 - [ ] implement layer streaming
 - [ ] implement embedder interface
 - [ ] implement layer-wise batch processing (for performance)
-- [ ] implement JS wrapper (for node) 
+- [ ] implement JS wrapper (for node)
+- [ ] support hardware accelerator (Metal/Vulkan/etc)
