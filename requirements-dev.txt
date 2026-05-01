@@ -1,0 +1,15 @@
+# Python tooling for fixture/golden generation and benchmark scripts.
+# Used at *development time only* — not a runtime dependency.
+#
+# Setup:
+#   python3 -m venv .venv
+#   .venv/bin/pip install -r requirements-dev.txt
+#   source .venv/bin/activate  (optional)
+
+transformers>=4.40.0
+numpy>=1.26.0
+datasets>=2.18.0
+pyyaml>=6.0          # for bench/scenarios.yaml
+
+# M3c (golden vectors) and beyond:
+sentence-transformers>=2.7.0

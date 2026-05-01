@@ -43,7 +43,8 @@ add_subdirectory(third_party/ggml EXCLUDE_FROM_ALL)
 # ---- Core library -----------------------------------------------------------
 add_library(nanoembed_core STATIC
     src/api/c_api.cpp
-    src/gguf_scanner.cpp)
+    src/gguf_scanner.cpp
+    src/tokenizer/wordpiece.cpp)
 
 target_include_directories(nanoembed_core
     PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -86,10 +87,21 @@ if(BUILD_TESTING)
     target_compile_options(nanoembed_scanner_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
     add_test(NAME scanner COMMAND nanoembed_scanner_test)
 
-    # Pass the local model path to scanner_test so the happy-path case runs.
+    # WordPiece tokenizer parity test against HuggingFace fixture.
+    add_executable(nanoembed_tokenizer_test tests/unit/tokenizer_test.cpp)
+    target_include_directories(nanoembed_tokenizer_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(nanoembed_tokenizer_test PRIVATE nanoembed_core ggml::ggml)
+    target_compile_options(nanoembed_tokenizer_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME tokenizer COMMAND nanoembed_tokenizer_test)
+
+    # Wire the local model + fixture into env-gated tests.
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf)
+        set(_NANOEMBED_MODEL "${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf")
         set_tests_properties(scanner PROPERTIES
+            ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
+        set_tests_properties(tokenizer PROPERTIES
             ENVIRONMENT
-            "NANOEMBED_TEST_MODEL=${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf")
+            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_TOKENIZER_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tokenizer/bge-small-eval.tsv")
     endif()
 endif()
