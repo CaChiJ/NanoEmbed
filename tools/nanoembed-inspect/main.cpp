@@ -1,15 +1,20 @@
-// nanoembed-inspect: dump GGUF metadata.
+// nanoembed-inspect: dump GGUF metadata and (when BERT) the structured manifest.
 //
-// M1 scope: header summary (version, tensor count, KV count) plus a
-// best-effort listing of metadata KV pairs and tensors. The structured
-// BERT layer map lands in M2 alongside the GGUF scanner.
+// Usage:
+//   nanoembed-inspect <gguf-file> [--tensors]
+//
+// Default output: header summary + metadata KV + BERT manifest (if applicable).
+// --tensors also dumps the raw tensor table (long).
 
 #include "ggml.h"
 #include "gguf.h"
 
+#include "gguf_scanner.h"
+
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace {
@@ -30,7 +35,6 @@ void print_kv_value(const gguf_context * ctx, int64_t i) {
         case GGUF_TYPE_BOOL:    std::printf("%s",   gguf_get_val_bool(ctx, i) ? "true" : "false"); break;
         case GGUF_TYPE_STRING: {
             const char * s = gguf_get_val_str(ctx, i);
-            // Truncate long strings (vocab merges, tokenizer config) for readability.
             const size_t maxlen = 80;
             const size_t len = std::strlen(s);
             if (len <= maxlen) {
@@ -54,10 +58,10 @@ void print_kv_value(const gguf_context * ctx, int64_t i) {
 
 void print_summary(const gguf_context * ctx, const char * path) {
     std::printf("file=%s\n", path);
-    std::printf("version=%u\n",     gguf_get_version(ctx));
-    std::printf("tensors=%" PRId64 "\n", gguf_get_n_tensors(ctx));
-    std::printf("metadata_kv=%" PRId64 "\n", gguf_get_n_kv(ctx));
-    std::printf("alignment=%zu\n",   gguf_get_alignment(ctx));
+    std::printf("version=%u\n",                 gguf_get_version(ctx));
+    std::printf("tensors=%" PRId64 "\n",        gguf_get_n_tensors(ctx));
+    std::printf("metadata_kv=%" PRId64 "\n",    gguf_get_n_kv(ctx));
+    std::printf("alignment=%zu\n",              gguf_get_alignment(ctx));
 }
 
 void print_metadata(const gguf_context * ctx) {
@@ -84,22 +88,76 @@ void print_tensors(const gguf_context * ctx) {
     }
 }
 
+void print_manifest(const nanoembed::ModelManifest & m) {
+    const auto & a = m.arch;
+    std::printf("\n# bert manifest\n");
+    std::printf("  layers=%d hidden=%d heads=%d head_dim=%d ffn=%d\n",
+                a.n_layer, a.n_embed, a.n_head,
+                a.n_head > 0 ? a.n_embed / a.n_head : 0,
+                a.n_ff);
+    std::printf("  vocab=%d max_seq_len=%d ln_eps=%g\n",
+                a.n_vocab, a.max_seq_len,
+                static_cast<double>(a.layer_norm_eps));
+
+    auto t_str = [](int t) { return ggml_type_name(static_cast<ggml_type>(t)); };
+    std::printf("  embedding tensors:\n");
+    std::printf("    token_embd        ne=[%" PRId64 ",%" PRId64 "] type=%s\n",
+                m.tok_embed_w.ne[0], m.tok_embed_w.ne[1], t_str(m.tok_embed_w.ggml_type));
+    std::printf("    position_embd     ne=[%" PRId64 ",%" PRId64 "] type=%s\n",
+                m.pos_embed_w.ne[0], m.pos_embed_w.ne[1], t_str(m.pos_embed_w.ggml_type));
+    std::printf("    token_types       ne=[%" PRId64 ",%" PRId64 "] type=%s\n",
+                m.type_embed_w.ne[0], m.type_embed_w.ne[1], t_str(m.type_embed_w.ggml_type));
+
+    std::printf("  per-layer tensor count: 16 (q/k/v/o w+b, 2 LN w+b, ffn_up/down w+b)\n");
+    std::printf("  layer 0 spot-check:\n");
+    if (!m.layers.empty()) {
+        const auto & s = m.layers.front();
+        std::printf("    blk.0.attn_q.weight  ne=[%" PRId64 ",%" PRId64 "] type=%s\n",
+                    s.attn_q_w.ne[0], s.attn_q_w.ne[1], t_str(s.attn_q_w.ggml_type));
+        std::printf("    blk.0.ffn_up.weight  ne=[%" PRId64 ",%" PRId64 "] type=%s\n",
+                    s.ffn_up_w.ne[0], s.ffn_up_w.ne[1], t_str(s.ffn_up_w.ggml_type));
+    }
+
+    if (m.pooler_w.valid()) {
+        std::printf("  pooler: present\n");
+    }
+}
+
+void print_usage(const char * prog) {
+    std::fprintf(stderr,
+        "usage: %s <gguf-file> [--tensors]\n"
+        "\n"
+        "Prints GGUF header summary, metadata KV pairs, and the BERT\n"
+        "manifest (when applicable). Use --tensors to also dump the raw\n"
+        "tensor table.\n",
+        prog);
+}
+
 } // namespace
 
 int main(int argc, char ** argv) {
-    if (argc < 2) {
-        std::fprintf(stderr,
-            "usage: %s <gguf-file>\n"
-            "\n"
-            "Prints GGUF header summary, metadata KV pairs, and tensor list.\n",
-            argv[0]);
+    bool         show_tensors = false;
+    const char * path         = nullptr;
+
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--tensors") == 0) {
+            show_tensors = true;
+        } else if (path == nullptr) {
+            path = argv[i];
+        } else {
+            std::fprintf(stderr, "error: unexpected argument: %s\n", argv[i]);
+            print_usage(argv[0]);
+            return 2;
+        }
+    }
+
+    if (path == nullptr) {
+        print_usage(argv[0]);
         return 2;
     }
 
-    const char * path = argv[1];
-
     gguf_init_params params;
-    params.no_alloc = true;   // header-only; do not read tensor data.
+    params.no_alloc = true;
     params.ctx      = nullptr;
 
     gguf_context * ctx = gguf_init_from_file(path, params);
@@ -110,7 +168,19 @@ int main(int argc, char ** argv) {
 
     print_summary(ctx, path);
     print_metadata(ctx);
-    print_tensors(ctx);
+
+    // Best-effort BERT manifest scan. Run this in addition to the raw dump
+    // so users get both the structured view and (with --tensors) the raw view.
+    try {
+        nanoembed::ScanResult scan = nanoembed::scan_gguf(path);
+        print_manifest(scan.manifest());
+    } catch (const nanoembed::ScanError & e) {
+        std::printf("\n# manifest: scan failed — %s\n", e.what());
+    }
+
+    if (show_tensors) {
+        print_tensors(ctx);
+    }
 
     gguf_free(ctx);
     return 0;

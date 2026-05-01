@@ -42,7 +42,8 @@ add_subdirectory(third_party/ggml EXCLUDE_FROM_ALL)
 
 # ---- Core library -----------------------------------------------------------
 add_library(nanoembed_core STATIC
-    src/api/c_api.cpp)
+    src/api/c_api.cpp
+    src/gguf_scanner.cpp)
 
 target_include_directories(nanoembed_core
     PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -59,7 +60,11 @@ add_library(nanoembed::core ALIAS nanoembed_core)
 add_executable(nanoembed-inspect
     tools/nanoembed-inspect/main.cpp)
 
-target_link_libraries(nanoembed-inspect PRIVATE ggml::ggml)
+# inspect is an internal dev tool, so it gets the private include dir
+# of nanoembed_core to call the scanner. End-users go through include/.
+target_include_directories(nanoembed-inspect
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(nanoembed-inspect PRIVATE nanoembed_core ggml::ggml)
 target_compile_options(nanoembed-inspect PRIVATE ${NANOEMBED_WARNING_FLAGS})
 
 # ---- Tests ------------------------------------------------------------------
@@ -72,4 +77,19 @@ if(BUILD_TESTING)
     target_link_libraries(nanoembed_abi_link_test PRIVATE nanoembed_core)
     target_compile_options(nanoembed_abi_link_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
     add_test(NAME abi_link COMMAND nanoembed_abi_link_test)
+
+    # GGUF scanner unit tests.
+    add_executable(nanoembed_scanner_test tests/unit/scanner_test.cpp)
+    target_include_directories(nanoembed_scanner_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(nanoembed_scanner_test PRIVATE nanoembed_core ggml::ggml)
+    target_compile_options(nanoembed_scanner_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME scanner COMMAND nanoembed_scanner_test)
+
+    # Pass the local model path to scanner_test so the happy-path case runs.
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf)
+        set_tests_properties(scanner PROPERTIES
+            ENVIRONMENT
+            "NANOEMBED_TEST_MODEL=${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf")
+    endif()
 endif()

@@ -7,7 +7,7 @@ See [PLAN.md](PLAN.md) for the milestone-by-milestone build plan.
 ## Roadmap
 
 - [x] vendoring ggml
-- [ ] implement GGUF scanner
+- [x] implement GGUF scanner
 - [ ] implement layer streaming
 - [ ] implement embedder interface
 - [ ] implement layer-wise batch processing (for performance)
