@@ -1,0 +1,34 @@
+# Build artifacts
+build/
+build-*/
+out/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+.history/
+.cache/
+.claude/
+
+# Bench
+bench/results/
+
+# Local models (gitignored — too large for git)
+models/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
