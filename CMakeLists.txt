@@ -44,7 +44,11 @@ add_subdirectory(third_party/ggml EXCLUDE_FROM_ALL)
 add_library(nanoembed_core STATIC
     src/api/c_api.cpp
     src/gguf_scanner.cpp
-    src/tokenizer/wordpiece.cpp)
+    src/tokenizer/wordpiece.cpp
+    src/forward/embed_layer.cpp
+    src/forward/attention.cpp
+    src/forward/ffn.cpp
+    src/forward/encoder_block.cpp)
 
 target_include_directories(nanoembed_core
     PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -95,7 +99,15 @@ if(BUILD_TESTING)
     target_compile_options(nanoembed_tokenizer_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
     add_test(NAME tokenizer COMMAND nanoembed_tokenizer_test)
 
-    # Wire the local model + fixture into env-gated tests.
+    # Forward graph builder parity test against HF activation fixtures.
+    add_executable(nanoembed_forward_test tests/unit/forward_test.cpp)
+    target_include_directories(nanoembed_forward_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(nanoembed_forward_test PRIVATE nanoembed_core ggml::ggml)
+    target_compile_options(nanoembed_forward_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME forward COMMAND nanoembed_forward_test)
+
+    # Wire the local model + fixtures into env-gated tests.
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf)
         set(_NANOEMBED_MODEL "${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf")
         set_tests_properties(scanner PROPERTIES
@@ -103,5 +115,8 @@ if(BUILD_TESTING)
         set_tests_properties(tokenizer PROPERTIES
             ENVIRONMENT
             "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_TOKENIZER_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tokenizer/bge-small-eval.tsv")
+        set_tests_properties(forward PROPERTIES
+            ENVIRONMENT
+            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_ACTIVATION_FIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/activations")
     endif()
 endif()
