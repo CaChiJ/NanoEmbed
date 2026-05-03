@@ -8,8 +8,8 @@ See [PLAN.md](PLAN.md) for the milestone-by-milestone build plan.
 
 - [x] vendoring ggml
 - [x] implement GGUF scanner
+- [x] implement embedder interface
 - [ ] implement layer streaming
-- [ ] implement embedder interface
 - [ ] implement layer-wise batch processing (for performance)
 - [ ] implement KV cache compression
 - [ ] implement JS wrapper (for node)

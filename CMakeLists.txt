@@ -43,12 +43,14 @@ add_subdirectory(third_party/ggml EXCLUDE_FROM_ALL)
 # ---- Core library -----------------------------------------------------------
 add_library(nanoembed_core STATIC
     src/api/c_api.cpp
+    src/embedder.cpp
     src/gguf_scanner.cpp
     src/tokenizer/wordpiece.cpp
     src/forward/embed_layer.cpp
     src/forward/attention.cpp
     src/forward/ffn.cpp
-    src/forward/encoder_block.cpp)
+    src/forward/encoder_block.cpp
+    src/forward/pool.cpp)
 
 target_include_directories(nanoembed_core
     PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -71,6 +73,11 @@ target_include_directories(nanoembed-inspect
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(nanoembed-inspect PRIVATE nanoembed_core ggml::ggml)
 target_compile_options(nanoembed-inspect PRIVATE ${NANOEMBED_WARNING_FLAGS})
+
+add_executable(nanoembed-cli
+    tools/nanoembed-cli/main.cpp)
+target_link_libraries(nanoembed-cli PRIVATE nanoembed_core)
+target_compile_options(nanoembed-cli PRIVATE ${NANOEMBED_WARNING_FLAGS})
 
 # ---- Tests ------------------------------------------------------------------
 include(CTest)
@@ -107,6 +114,12 @@ if(BUILD_TESTING)
     target_compile_options(nanoembed_forward_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
     add_test(NAME forward COMMAND nanoembed_forward_test)
 
+    # End-to-end golden parity test vs sentence-transformers.
+    add_executable(nanoembed_golden_test tests/integration/golden_test.cpp)
+    target_link_libraries(nanoembed_golden_test PRIVATE nanoembed_core)
+    target_compile_options(nanoembed_golden_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME golden COMMAND nanoembed_golden_test)
+
     # Wire the local model + fixtures into env-gated tests.
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf)
         set(_NANOEMBED_MODEL "${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf")
@@ -115,6 +128,12 @@ if(BUILD_TESTING)
         set_tests_properties(tokenizer PROPERTIES
             ENVIRONMENT
             "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_TOKENIZER_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tokenizer/bge-small-eval.tsv")
+        set_tests_properties(forward PROPERTIES
+            ENVIRONMENT
+            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_ACTIVATION_FIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/activations")
+        set_tests_properties(golden PROPERTIES
+            ENVIRONMENT
+            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_GOLDEN_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/st-bge-small.bin")
         set_tests_properties(forward PROPERTIES
             ENVIRONMENT
             "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_ACTIVATION_FIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/activations")

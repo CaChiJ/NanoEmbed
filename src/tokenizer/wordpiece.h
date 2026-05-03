@@ -42,7 +42,11 @@ public:
 
     // Tokenize. Returns token IDs INCLUDING leading [CLS] and trailing [SEP],
     // truncated so the result fits in max_seq_len.
-    std::vector<int> encode(const std::string & text) const;
+    //
+    // If max_seq_len_override > 0 it overrides the configured limit for this
+    // call (used by per-context truncation). 0 means "use configured value".
+    std::vector<int> encode(const std::string & text,
+                            int                 max_seq_len_override = 0) const;
 
     int cls_id()      const noexcept { return cfg_.cls_id; }
     int sep_id()      const noexcept { return cfg_.sep_id; }

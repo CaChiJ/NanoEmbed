@@ -197,16 +197,19 @@ std::vector<int> WordPieceTokenizer::wordpiece(const std::string & word) const {
 
 // ---- encode ----------------------------------------------------------------
 
-std::vector<int> WordPieceTokenizer::encode(const std::string & text) const {
+std::vector<int> WordPieceTokenizer::encode(const std::string & text,
+                                             int                 max_seq_len_override) const {
+    const int limit = (max_seq_len_override > 0) ? max_seq_len_override : cfg_.max_seq_len;
+
     std::vector<int> ids;
-    if (cfg_.max_seq_len < 2) {
+    if (limit < 2) {
         // Pathological config — we still emit [CLS][SEP].
         ids.push_back(cfg_.cls_id);
         ids.push_back(cfg_.sep_id);
         return ids;
     }
 
-    ids.reserve(static_cast<size_t>(cfg_.max_seq_len));
+    ids.reserve(static_cast<size_t>(limit));
     ids.push_back(cfg_.cls_id);
 
     const std::vector<std::string> words = basic_tokenize(text);
@@ -215,7 +218,7 @@ std::vector<int> WordPieceTokenizer::encode(const std::string & text) const {
     for (const auto & w : words) {
         const std::vector<int> pieces = wordpiece(w);
         for (int id : pieces) {
-            if (static_cast<int>(ids.size()) >= cfg_.max_seq_len - 1) {
+            if (static_cast<int>(ids.size()) >= limit - 1) {
                 truncated = true;
                 break;
             }

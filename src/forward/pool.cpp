@@ -1,0 +1,36 @@
+#include "pool.h"
+
+#include "ggml.h"
+
+#include <stdexcept>
+
+namespace nanoembed::forward {
+
+ggml_tensor * build_mean_pool(ggml_context * ctx, ggml_tensor * x) {
+    // x: [H, S, B]. ggml_mean reduces ne[0], so permute S to ne[0] first.
+    ggml_tensor * xt   = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));  // [S, H, B]
+    ggml_tensor * m    = ggml_mean(ctx, xt);                                // [1, H, B]
+    return ggml_reshape_2d(ctx, m, m->ne[1], m->ne[2]);                     // [H, B]
+}
+
+ggml_tensor * build_cls_pool(ggml_context * ctx, ggml_tensor * x) {
+    // x: [H, S, B]. Take the first token along S: x[:, 0, :] -> [H, B].
+    // The B-stride between batch slices is x->nb[2]; offset 0 picks S=0.
+    return ggml_cont(ctx, ggml_view_2d(ctx, x,
+                                       x->ne[0], x->ne[2],
+                                       x->nb[2], /*offset=*/0));
+}
+
+ggml_tensor * build_pool(ggml_context * ctx, ggml_tensor * x, PoolType type) {
+    switch (type) {
+        case PoolType::Mean: return build_mean_pool(ctx, x);
+        case PoolType::Cls:  return build_cls_pool(ctx, x);
+    }
+    throw std::invalid_argument("unknown PoolType");
+}
+
+ggml_tensor * build_l2_normalize(ggml_context * ctx, ggml_tensor * x, float eps) {
+    return ggml_l2_norm(ctx, x, eps);
+}
+
+} // namespace nanoembed::forward
