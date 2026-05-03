@@ -26,3 +26,22 @@ ctest --test-dir build --output-on-failure
 The public C ABI is in [include/nanoembed/nanoembed.h](include/nanoembed/nanoembed.h)
 and is frozen as of M1 — see the milestone matrix in PLAN.md for which
 functions are implemented at which point.
+
+## CLI
+
+```sh
+echo "hello world" | ./build/bin/nanoembed-cli models/bge-small-en-v1.5-f16.gguf
+```
+
+## Bench
+
+```sh
+# generate baseline / current run
+.venv/bin/python bench/runner.py --milestone M3 --out bench/results/local.json
+
+# compare against the milestone baseline
+.venv/bin/python bench/compare.py bench/baseline/M3.json bench/results/local.json
+```
+
+See `bench/scenarios.yaml` for scenario definitions and PLAN.md §벤치마크
+for the regression policy.

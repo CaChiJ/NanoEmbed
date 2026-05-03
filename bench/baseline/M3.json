@@ -1,0 +1,33 @@
+{
+  "milestone": "M3",
+  "git_sha": "caf5d6f",
+  "scenarios": {
+    "single_short_f16": {
+      "scenario": "single_short_f16",
+      "os": "macos",
+      "model": "/Users/cachij/Documents/Repos/NanoEmbed/models/bge-small-en-v1.5-f16.gguf",
+      "inputs": "/Users/cachij/Documents/Repos/NanoEmbed/tests/corpus/eval.txt",
+      "n_inputs": 100,
+      "warmup": 5,
+      "iter": 50,
+      "total_items": 5000,
+      "threads": 4,
+      "pooling": "cls",
+      "normalize": 1,
+      "metrics": {
+        "rss_peak_mb": 331.766,
+        "rss_avg_mb": 194.843,
+        "cpu_user_sec": 127.871,
+        "cpu_sys_sec": 104.88,
+        "page_faults_major": 0,
+        "page_faults_minor": 81960110,
+        "io_read_bytes": 0,
+        "wall_sec": 154.736,
+        "latency_p50_ms": 29.895,
+        "latency_p90_ms": 34.2125,
+        "latency_p99_ms": 47.5013,
+        "throughput_items_per_sec": 32.3131
+      }
+    }
+  }
+}

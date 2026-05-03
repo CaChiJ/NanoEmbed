@@ -79,6 +79,12 @@ add_executable(nanoembed-cli
 target_link_libraries(nanoembed-cli PRIVATE nanoembed_core)
 target_compile_options(nanoembed-cli PRIVATE ${NANOEMBED_WARNING_FLAGS})
 
+add_executable(nanoembed-bench
+    tools/nanoembed-bench/main.cpp
+    tools/nanoembed-bench/metrics.cpp)
+target_link_libraries(nanoembed-bench PRIVATE nanoembed_core)
+target_compile_options(nanoembed-bench PRIVATE ${NANOEMBED_WARNING_FLAGS})
+
 # ---- Tests ------------------------------------------------------------------
 include(CTest)
 
