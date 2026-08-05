@@ -79,11 +79,21 @@ add_executable(nanoembed-cli
 target_link_libraries(nanoembed-cli PRIVATE nanoembed_core)
 target_compile_options(nanoembed-cli PRIVATE ${NANOEMBED_WARNING_FLAGS})
 
-add_executable(nanoembed-bench
-    tools/nanoembed-bench/main.cpp
-    tools/nanoembed-bench/metrics.cpp)
-target_link_libraries(nanoembed-bench PRIVATE nanoembed_core)
-target_compile_options(nanoembed-bench PRIVATE ${NANOEMBED_WARNING_FLAGS})
+# nanoembed-bench is Linux-only: its whole measurement model rests on
+# /proc/<pid>/{status,statm,smaps_rollup,clear_refs}, which have no portable
+# equivalent (macOS in particular offers no way to reset resident_size_max).
+# The library and tests still build everywhere; only the bench tool is gated.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Threads REQUIRED)
+
+    add_executable(nanoembed-bench
+        tools/nanoembed-bench/main.cpp
+        tools/nanoembed-bench/metrics.cpp)
+    target_link_libraries(nanoembed-bench PRIVATE nanoembed_core Threads::Threads)
+    target_compile_options(nanoembed-bench PRIVATE ${NANOEMBED_WARNING_FLAGS})
+else()
+    message(STATUS "nanoembed-bench: skipped (Linux-only)")
+endif()
 
 # ---- Tests ------------------------------------------------------------------
 include(CTest)
@@ -125,6 +135,17 @@ if(BUILD_TESTING)
     target_link_libraries(nanoembed_golden_test PRIVATE nanoembed_core)
     target_compile_options(nanoembed_golden_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
     add_test(NAME golden COMMAND nanoembed_golden_test)
+
+    # Bench harness selftest. Unlike every other test here it needs no GGUF, so
+    # it is the one bench-side check CI can actually run. It asserts that the
+    # fork+exec'd worker's baseline is unaffected by memory the parent dirtied
+    # (i.e. exec really did replace the address space) and that windowed RSS
+    # growth matches a known allocation.
+    if(TARGET nanoembed-bench)
+        add_test(NAME bench_selftest
+                 COMMAND nanoembed-bench --selftest --selftest-alloc-mb 64)
+        set_tests_properties(bench_selftest PROPERTIES TIMEOUT 120)
+    endif()
 
     # Wire the local model + fixtures into env-gated tests.
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf)

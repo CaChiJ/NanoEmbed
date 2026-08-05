@@ -44,6 +44,13 @@ def build_cmd(bench: pathlib.Path, sc: Dict[str, Any], root: pathlib.Path) -> Li
         cmd.append("--no-normalize")
     if sc.get("max_seq_len", 0) > 0:
         cmd += ["--max-seq-len", str(sc["max_seq_len"])]
+    # Sampler cadences: RSS is cheap to poll, smaps_rollup walks the page table
+    # under the worker's mmap_lock and must stay slow. Overridable per scenario
+    # for cases where a short run needs more PSS/USS samples to be meaningful.
+    if sc.get("rss_interval_ms", 0) > 0:
+        cmd += ["--rss-interval-ms", str(sc["rss_interval_ms"])]
+    if sc.get("rollup_interval_ms", 0) > 0:
+        cmd += ["--rollup-interval-ms", str(sc["rollup_interval_ms"])]
     return cmd
 
 

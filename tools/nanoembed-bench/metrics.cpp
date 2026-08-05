@@ -1,17 +1,13 @@
 #include "metrics.h"
 
 #include <sys/resource.h>
+#include <sys/utsname.h>
 
-#if defined(__APPLE__)
-#  include <mach/mach.h>
-#  include <libproc.h>
-#  include <sys/proc_info.h>
-#  include <unistd.h>
-#elif defined(__linux__)
-#  include <fstream>
-#  include <string>
-#  include <unistd.h>
-#endif
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <unistd.h>
 
 namespace nanoembed::bench {
 
@@ -22,143 +18,149 @@ double tv_to_sec(const timeval & tv) {
            static_cast<double>(tv.tv_usec) * 1e-6;
 }
 
-#if defined(__APPLE__)
-
-size_t macos_current_rss() {
-    mach_task_basic_info_data_t info{};
-    mach_msg_type_number_t      count = MACH_TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
-                  reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS) {
-        return 0;
-    }
-    return static_cast<size_t>(info.resident_size);
-}
-
-size_t macos_peak_rss() {
-    mach_task_basic_info_data_t info{};
-    mach_msg_type_number_t      count = MACH_TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
-                  reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS) {
-        return 0;
-    }
-    return static_cast<size_t>(info.resident_size_max);
-}
-
-size_t macos_io_read_bytes() {
-    // proc_pid_rusage with RUSAGE_INFO_CURRENT exposes ri_diskio_bytesread
-    // (cumulative bytes read from disk). Available since macOS 10.9.
-    rusage_info_current ri{};
-    if (proc_pid_rusage(getpid(), RUSAGE_INFO_CURRENT,
-                         reinterpret_cast<rusage_info_t *>(&ri)) != 0) {
-        return 0;
-    }
-    return static_cast<size_t>(ri.ri_diskio_bytesread);
-}
-
-#elif defined(__linux__)
-
-size_t parse_kb_field(const std::string & status, const std::string & key) {
-    const auto pos = status.find(key);
-    if (pos == std::string::npos) return 0;
-    const auto eol = status.find('\n', pos);
-    const std::string line = status.substr(pos, eol - pos);
-    // Format: "VmRSS:\t  12345 kB"
-    size_t i = 0;
-    while (i < line.size() && (line[i] < '0' || line[i] > '9')) ++i;
-    size_t kb = 0;
-    while (i < line.size() && line[i] >= '0' && line[i] <= '9') {
-        kb = kb * 10 + static_cast<size_t>(line[i] - '0');
-        ++i;
-    }
-    return kb * 1024;
-}
-
-std::string slurp(const char * path) {
+std::string slurp(const std::string & path) {
     std::ifstream f(path);
     if (!f) return {};
-    std::string out((std::istreambuf_iterator<char>(f)),
-                     std::istreambuf_iterator<char>());
-    return out;
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
 }
 
-size_t linux_current_rss() {
-    return parse_kb_field(slurp("/proc/self/status"), "VmRSS:");
+std::string proc_path(int pid, const char * name) {
+    return "/proc/" + std::to_string(pid) + "/" + name;
 }
 
-size_t linux_peak_rss() {
-    return parse_kb_field(slurp("/proc/self/status"), "VmHWM:");
+// Advance past a line; returns npos-safe next line start.
+size_t next_line(std::string_view text, size_t pos) {
+    const size_t nl = text.find('\n', pos);
+    return (nl == std::string_view::npos) ? text.size() : nl + 1;
 }
 
-size_t linux_io_read_bytes() {
-    const auto io = slurp("/proc/self/io");
-    if (io.empty()) return 0;
-    const std::string key = "read_bytes:";
-    const auto pos = io.find(key);
-    if (pos == std::string::npos) return 0;
-    size_t i = pos + key.size();
-    while (i < io.size() && (io[i] == ' ' || io[i] == '\t')) ++i;
+size_t parse_leading_number(std::string_view s) {
+    size_t i = 0;
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
     size_t v = 0;
-    while (i < io.size() && io[i] >= '0' && io[i] <= '9') {
-        v = v * 10 + static_cast<size_t>(io[i] - '0');
+    while (i < s.size() && s[i] >= '0' && s[i] <= '9') {
+        v = v * 10 + static_cast<size_t>(s[i] - '0');
         ++i;
     }
     return v;
 }
 
-#endif
+} // namespace
+
+namespace {
+
+// Value following "Key:" on a line that starts with Key, unscaled.
+size_t parse_value_line(std::string_view text, std::string_view key) {
+    for (size_t pos = 0; pos < text.size(); pos = next_line(text, pos)) {
+        if (text.compare(pos, key.size(), key) != 0) continue;
+        const size_t eol  = text.find('\n', pos);
+        const auto   line = text.substr(pos + key.size(),
+                                        (eol == std::string_view::npos)
+                                            ? std::string_view::npos
+                                            : eol - pos - key.size());
+        return parse_leading_number(line);
+    }
+    return 0;
+}
 
 } // namespace
 
-size_t current_rss_bytes() {
-#if defined(__APPLE__)
-    return macos_current_rss();
-#elif defined(__linux__)
-    return linux_current_rss();
-#else
-    return 0;
-#endif
+size_t parse_kb_line(std::string_view text, std::string_view key) {
+    return parse_value_line(text, key) * 1024;
 }
 
-size_t peak_rss_bytes() {
-#if defined(__APPLE__)
-    return macos_peak_rss();
-#elif defined(__linux__)
-    return linux_peak_rss();
-#else
-    return 0;
-#endif
-}
+MemSample parse_smaps_rollup(std::string_view rollup) {
+    MemSample s;
+    if (rollup.empty()) return s;
 
-Snapshot snapshot() {
-    Snapshot s;
-
-    rusage ru{};
-    if (getrusage(RUSAGE_SELF, &ru) == 0) {
-        s.cpu_user_sec      = tv_to_sec(ru.ru_utime);
-        s.cpu_sys_sec       = tv_to_sec(ru.ru_stime);
-        s.page_faults_major = ru.ru_majflt;
-        s.page_faults_minor = ru.ru_minflt;
-    }
-
-    s.rss_current_bytes = current_rss_bytes();
-
-#if defined(__APPLE__)
-    s.io_read_bytes = macos_io_read_bytes();
-#elif defined(__linux__)
-    s.io_read_bytes = linux_io_read_bytes();
-#endif
-
+    s.rss_bytes = parse_kb_line(rollup, "Rss:");
+    s.pss_bytes = parse_kb_line(rollup, "Pss:");
+    s.uss_bytes = parse_kb_line(rollup, "Private_Clean:") +
+                  parse_kb_line(rollup, "Private_Dirty:");
+    // Rss is the only field guaranteed non-zero for a live process; treat its
+    // absence as "the file was not in the shape we expect".
+    s.valid = s.rss_bytes > 0;
     return s;
 }
 
-const char * os_label() {
-#if defined(__APPLE__)
-    return "macos";
-#elif defined(__linux__)
-    return "linux";
-#else
-    return "unknown";
-#endif
+std::string read_proc_file(int pid, const char * name) {
+    return slurp(proc_path(pid, name));
+}
+
+size_t read_peak_rss(int pid) {
+    return parse_kb_line(read_proc_file(pid, "status"), "VmHWM:");
+}
+
+size_t read_current_rss(int pid) {
+    // statm is a single short line of page counts; field 2 is resident. Far
+    // cheaper than status (no per-field formatting) and far cheaper than
+    // smaps_rollup (no page-table walk).
+    const std::string statm = read_proc_file(pid, "statm");
+    if (statm.empty()) return 0;
+
+    const size_t sp = statm.find(' ');
+    if (sp == std::string::npos) return 0;
+
+    const size_t resident_pages = parse_leading_number(
+        std::string_view(statm).substr(sp + 1));
+    const long page_size = sysconf(_SC_PAGESIZE);
+    return resident_pages * static_cast<size_t>(page_size > 0 ? page_size : 4096);
+}
+
+MemSample read_mem_sample(int pid) {
+    return parse_smaps_rollup(read_proc_file(pid, "smaps_rollup"));
+}
+
+bool reset_peak_rss(int pid) {
+    const std::string path = proc_path(pid, "clear_refs");
+    FILE * f = std::fopen(path.c_str(), "w");
+    if (!f) return false;
+    const bool ok = std::fputs("5\n", f) >= 0;
+    return (std::fclose(f) == 0) && ok;
+}
+
+ResourceCounters read_self_counters() {
+    ResourceCounters c;
+
+    rusage ru{};
+    if (getrusage(RUSAGE_SELF, &ru) == 0) {
+        c.cpu_user_sec      = tv_to_sec(ru.ru_utime);
+        c.cpu_sys_sec       = tv_to_sec(ru.ru_stime);
+        c.page_faults_major = ru.ru_majflt;
+        c.page_faults_minor = ru.ru_minflt;
+    }
+
+    // /proc/self/io is in raw bytes, not kB. read_bytes counts what actually
+    // hit the block layer, so page-cache hits read as 0 — that is the intent:
+    // it measures real disk I/O, not mmap traffic.
+    c.io_read_bytes = parse_value_line(slurp("/proc/self/io"), "read_bytes:");
+
+    return c;
+}
+
+Environment read_environment() {
+    Environment e;
+
+    utsname u{};
+    if (uname(&u) == 0) e.kernel = u.release;
+
+    const std::string cpuinfo = slurp("/proc/cpuinfo");
+    const size_t      pos     = cpuinfo.find("model name");
+    if (pos != std::string::npos) {
+        const size_t colon = cpuinfo.find(':', pos);
+        const size_t eol   = cpuinfo.find('\n', pos);
+        if (colon != std::string::npos && eol != std::string::npos && colon < eol) {
+            size_t b = colon + 1;
+            while (b < eol && (cpuinfo[b] == ' ' || cpuinfo[b] == '\t')) ++b;
+            e.cpu_model = cpuinfo.substr(b, eol - b);
+        }
+    }
+
+    e.nproc     = static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
+    e.page_size = sysconf(_SC_PAGESIZE);
+    return e;
 }
 
 } // namespace nanoembed::bench

@@ -35,7 +35,14 @@ echo "hello world" | ./build/bin/nanoembed-cli models/bge-small-en-v1.5-f16.gguf
 
 ## Bench
 
+Linux only — the measurement rests on `/proc/<pid>/{status,statm,smaps_rollup,
+clear_refs}`, so `nanoembed-bench` is not built on other platforms. The library
+and `ctest` still build everywhere.
+
 ```sh
+# verify the harness itself; needs no model
+./build/bin/nanoembed-bench --selftest
+
 # generate baseline / current run
 .venv/bin/python bench/runner.py --milestone M3 --out bench/results/local.json
 
@@ -43,5 +50,15 @@ echo "hello world" | ./build/bin/nanoembed-cli models/bge-small-en-v1.5-f16.gguf
 .venv/bin/python bench/compare.py bench/baseline/M3.json bench/results/local.json
 ```
 
+`nanoembed-bench` runs the workload in a `fork+exec`'d worker and measures it
+from the parent, so nothing the harness allocates lands in the numbers. Peak RSS
+is scoped to the measurement window by resetting `VmHWM` through `clear_refs`,
+and is reported both windowed and lifetime. RSS, PSS and USS are all recorded —
+they nearly coincide today and diverge once M4 mmaps the GGUF.
+
+Numbers are machine-specific. Every run stamps an `environment` fingerprint and
+`compare.py` refuses (under `--strict`) to compare across machines, so re-run
+the baseline on your own hardware before reading any delta.
+
 See `bench/scenarios.yaml` for scenario definitions and PLAN.md §벤치마크
-for the regression policy.
+for the metric definitions and regression policy.

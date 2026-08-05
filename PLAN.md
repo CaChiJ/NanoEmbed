@@ -241,18 +241,42 @@ const char* nanoembed_last_error(void); /* thread-local */
 
 ## 벤치마크
 
-**원칙** 매 마일스톤 종료 시 동일 슈트 실행 → JSON을 직전 baseline과 비교 → 회귀 검출. 수치는 환경 의존이라 동일 CI 러너(macOS arm64 + Linux x86_64)에서만 비교.
+**원칙** 매 마일스톤 종료 시 동일 슈트 실행 → JSON을 직전 baseline과 비교 → 회귀 검출. 수치는 환경 의존이므로 **같은 머신에서만** 비교하며, 이를 사람 기억이 아니라 도구가 강제한다 (아래 「환경 고정」).
+
+**플랫폼: Linux 전용.** 측정이 `/proc/<pid>/{status,statm,smaps_rollup,clear_refs}`에 전면 의존하므로 `nanoembed-bench`는 Linux에서만 빌드된다 (CMake에서 타겟 자체를 게이트). 라이브러리와 `ctest`는 계속 모든 플랫폼에서 빌드된다.
+
+**측정 구조: fork + exec 격리.** 오케스트레이터(부모)는 모델을 로드하지 않는다. 자기 자신을 `--worker`로 `fork+exec`한 뒤 바깥에서 `/proc`으로 워커를 관찰한다.
+
+- **`exec`까지 하는 이유**: 단순 `fork`는 부모가 더럽힌 페이지를 COW로 물려주고, 그 페이지가 자식 RSS에 그대로 잡힌다. `exec`은 주소 공간을 갈아엎어 워커를 ~4MB 바닥에서 출발시킨다. 실측(부모가 8MB 점유):
+
+  | | 시작 RSS | 60MB 작업 후 |
+  |---|---|---|
+  | fork only | 8552 kB | 70192 kB |
+  | fork + exec | **1152 kB** | **62796 kB** |
+
+  RSS가 USS 못지않게 신뢰 가능해지는 게 요점이다 — M4 메모리 예산이 RSS로 서술돼 있기 때문.
+- **측정 구간 정합**: `VmHWM`은 스스로 내려가지 않으므로 끝에서 읽으면 로드·warmup까지 포함한 peak이 나와, 측정 루프에 한정된 CPU/page-fault 델타와 **다른 구간**을 재게 된다. 창을 열기 직전 `/proc/<pid>/clear_refs`에 `5`를 써서 `VmHWM`을 현재 RSS로 리셋하고, 리셋 **전에** 한 번 읽어 두 구간을 모두 보고한다.
 
 **지표**
 
-| 지표 | 출처 |
-|---|---|
-| Peak RSS / 평균 RSS | macOS `mach_task_basic_info`, Linux `/proc/self/status` VmHWM. 평균은 50ms 간격 샘플링 (백그라운드 스레드) |
-| CPU user + sys | `getrusage(RUSAGE_SELF)` |
-| Major / minor page faults | `getrusage` `ru_majflt` / `ru_minflt` — mmap I/O 비용 추정 |
-| 디스크 read bytes | macOS `proc_pidinfo(PROC_PIDTASKINFO)`, Linux `/proc/self/io` `read_bytes` |
-| Latency p50/p90/p99 (ms) | `clock_gettime(CLOCK_MONOTONIC)`, warmup 50회 후 N회 |
-| Throughput (items/sec) | total items / wall time, 배치 모드 |
+| 지표 | 출처 | 구간 |
+|---|---|---|
+| `rss_peak_lifetime_mb` | `VmHWM` (리셋 전 판독과 최종 판독의 max). 커널 추적이라 정확 — 샘플 사이로 스파이크가 새지 않음 | 워커 전 생애 (로드 스파이크 포함) ★ **회귀 게이트** |
+| `rss_peak_window_mb` | `VmHWM` (리셋 후) | 측정 루프 |
+| `rss_baseline_mb` | 창 시작 시점 `smaps_rollup` | peak 해석용 바닥값 |
+| `rss_avg_mb` / `rss_max_sampled_mb` | `/proc/<pid>/statm`, 50ms 샘플링 (~0.004ms/회) | 측정 루프 |
+| `pss_*` / `uss_*` | `/proc/<pid>/smaps_rollup`, **500ms** 샘플링 | 측정 루프 |
+| CPU user + sys | 워커가 `getrusage(RUSAGE_SELF)`로 자기 보고 (창 경계 델타) | 측정 루프 |
+| Major / minor page faults | 워커 자기 보고 `ru_majflt` / `ru_minflt` | 측정 루프 |
+| 디스크 read bytes | 워커 자기 보고 `/proc/self/io` `read_bytes` | 측정 루프 |
+| Latency p50/p90/p99 (ms) | 워커가 `steady_clock`으로 호출별 기록 → 창 종료 후 파이프로 벌크 전송, 부모가 퍼센타일 계산 | 측정 루프 |
+| Throughput (items/sec) | total items / wall time | 측정 루프 |
+
+**RSS / PSS / USS를 모두 재는 이유** — 셋의 질문이 다르다: RSS는 "디바이스에 얼마나 비어 있어야 하나"(→ 게이트), PSS는 "워커를 여러 개 띄우면 총합이 얼마인가", USS는 "이 프로세스를 죽이면 얼마가 회수되나". M3에서는 모델이 익명 메모리로 올라가 셋이 거의 붙어 있고, **M4에서 GGUF를 mmap하면 갈라진다** — 그때를 위한 계측이다.
+
+**두 종류의 peak** — `VmHWM`은 RSS에만 있다. PSS/USS는 커널 high-water mark가 없어 peak을 샘플 최대값으로 구하므로, 키 이름에 `_sampled`를 박아 이를 드러낸다. 또한 `smaps_rollup`은 대상의 `mmap_lock`을 잡고 페이지 테이블 전체를 걷는다 — 300MB 상주 기준 **약 6ms**(`statm`의 1400배)라, RSS와 같은 주기로 돌리면 측정 대상을 교란한다. 그래서 주기를 분리했다.
+
+**환경 고정** — 모든 실행이 `environment` 블록(`kernel`, `cpu_model`, `nproc`, `page_size_bytes`)을 기록한다. `compare.py`는 baseline과 fingerprint가 다르면 경고하고 `--strict`에서는 비교를 거부한다(exit 2). 하드웨어 차이가 코드 변경으로 오독되는 걸 막기 위함이다.
 
 **시나리오** (`bench/scenarios.yaml`) — 마일스톤이 지원하는 시점부터 슈트에 추가
 
@@ -262,17 +286,21 @@ const char* nanoembed_last_error(void); /* thread-local */
 - `batch128_mixed_q8` — M5+ — 같은 코퍼스, batch=128
 
 **도구 체인**
-- `tools/nanoembed-bench`: 시나리오 1개 실행 → JSON (stdout 또는 `--out`)
+- `tools/nanoembed-bench`: 시나리오 1개 실행 → JSON (stdout 또는 `--out`). `--selftest`는 GGUF 없이 하네스 자체를 검증
 - `bench/runner.py`: `scenarios.yaml`의 모든 시나리오 실행 → `bench/results/<git_sha>.json` 으로 합침
-- `bench/compare.py base.json cur.json`: 표 출력 + 회귀 시 non-zero exit
+- `bench/compare.py base.json cur.json`: 환경 fingerprint 확인 + 표 출력 + 회귀 시 non-zero exit
 
 **Baseline / 회귀 정책**
 - `bench/baseline/M3.json`, `bench/baseline/M4.json`, ... 마일스톤 통과 시점에 commit. 다음 마일스톤은 직전 baseline 대비.
-- 임계 (`compare.py` 디폴트): latency ±15%, peak RSS 단조 비증가 (의도적 증가는 baseline 갱신 PR로 명시), major page faults는 마일스톤 의도와 일치 (M3→M4 증가 OK, M4→M5 *per-item* 감소 필수).
+- 임계 (`compare.py` 디폴트): latency ±15%, `rss_peak_lifetime_mb` 단조 비증가 (의도적 증가는 baseline 갱신 PR로 명시), major page faults는 마일스톤 의도와 일치 (M3→M4 증가 OK, M4→M5 *per-item* 감소 필수).
+- PSS/USS는 **표에만** 싣고 게이트하지 않는다. 샘플링 기반이라 5% 임계를 걸기엔 노이즈가 크다. M4에서 mmap이 들어와 RSS 해석이 갈리면 재검토.
+- 낡은 baseline은 지우지 않고 `bench/baseline/archive/`로 옮긴다 (`archive/README.md`에 왜 비교 불가인지 기록).
 
 **CI 정책**
-- 매 PR: 빠른 모드 (`single_short_f16` 1개 시나리오 × 100 iter). 결과는 PR 코멘트.
-- Nightly: full suite. 결과는 아티팩트 + main 브랜치 RSS 그래프.
+- 매 PR: `ctest`의 `bench_selftest` — 모델 없이 도는 유일한 벤치 측 검증. fork+exec 격리(워커 baseline이 부모 오염과 무관한가)와 `clear_refs` 리셋, 창 한정 RSS 증가분을 어서션.
+- 성능 수치 자체는 **당분간** CI에서 재지 않는다. GGUF 다운로드·캐시 스텝이 아직 없고, 무엇보다 GitHub 공용 러너는 실행마다 배정 하드웨어가 달라(`ubuntu-latest`가 Intel/AMD를 오간다) `environment` fingerprint가 거의 항상 불일치한다 → 모든 PR이 비교 거부로 실패한다. 그 동안 **성능 baseline은 고정된 개발 머신에서 수동 측정**한다.
+- (예정) **self-hosted runner**를 구성해 환경을 고정한 뒤 원래 계획대로 복귀: 매 PR 빠른 모드 + PR 코멘트, nightly full suite + main 브랜치 RSS 그래프. fingerprint가 고정되므로 커밋된 baseline과 직접 비교가 성립한다.
+- 참고: 러너를 확보하더라도 게이트는 메모리 지표에 두는 편이 낫다. 같은 머신 반복 측정에서 `rss_peak`은 편차 0.15%로 결정적인 반면 latency는 부하에 따라 크게 흔들린다.
 
 ---
 
