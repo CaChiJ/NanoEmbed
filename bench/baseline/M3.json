@@ -1,32 +1,54 @@
 {
   "milestone": "M3",
-  "git_sha": "caf5d6f",
+  "git_sha": "e3afab7",
   "scenarios": {
     "single_short_f16": {
       "scenario": "single_short_f16",
-      "os": "macos",
-      "model": "/Users/cachij/Documents/Repos/NanoEmbed/models/bge-small-en-v1.5-f16.gguf",
-      "inputs": "/Users/cachij/Documents/Repos/NanoEmbed/tests/corpus/eval.txt",
-      "n_inputs": 100,
+      "os": "linux",
+      "model": "/home/user/gnb-stat-mcp/pingpong-ai/temp/nanoembed/models/bge-small-en-v1.5-f16.gguf",
+      "inputs": "/home/user/gnb-stat-mcp/pingpong-ai/temp/nanoembed/tests/corpus/eval.txt",
       "warmup": 5,
       "iter": 50,
       "total_items": 5000,
       "threads": 4,
       "pooling": "cls",
       "normalize": 1,
+      "environment": {
+        "kernel": "6.8.0-136-generic",
+        "cpu_model": "AMD Ryzen 5 3500U with Radeon Vega Mobile Gfx",
+        "nproc": 6,
+        "page_size_bytes": 4096
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "hwm_reset": true,
+        "rss_interval_ms": 50,
+        "rollup_interval_ms": 500,
+        "rss_samples": 24600,
+        "rollup_samples": 2460
+      },
       "metrics": {
-        "rss_peak_mb": 331.766,
-        "rss_avg_mb": 194.843,
-        "cpu_user_sec": 127.871,
-        "cpu_sys_sec": 104.88,
+        "rss_peak_lifetime_mb": 330.047,
+        "rss_peak_window_mb": 330.047,
+        "rss_baseline_mb": 74.0234,
+        "rss_avg_mb": 215.567,
+        "rss_max_sampled_mb": 330.031,
+        "pss_baseline_mb": 69.8203,
+        "pss_avg_mb": 202.192,
+        "pss_peak_sampled_mb": 326.851,
+        "uss_baseline_mb": 68.6914,
+        "uss_avg_mb": 200.942,
+        "uss_peak_sampled_mb": 325.598,
+        "cpu_user_sec": 1019.51,
+        "cpu_sys_sec": 914.654,
         "page_faults_major": 0,
-        "page_faults_minor": 81960110,
+        "page_faults_minor": 327685001,
         "io_read_bytes": 0,
-        "wall_sec": 154.736,
-        "latency_p50_ms": 29.895,
-        "latency_p90_ms": 34.2125,
-        "latency_p99_ms": 47.5013,
-        "throughput_items_per_sec": 32.3131
+        "wall_sec": 1249.89,
+        "latency_p50_ms": 240.053,
+        "latency_p90_ms": 325.114,
+        "latency_p99_ms": 401.71,
+        "throughput_items_per_sec": 4.00036
       }
     }
   }
