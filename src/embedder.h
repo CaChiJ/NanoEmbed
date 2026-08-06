@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -32,6 +33,11 @@ public:
     int n_embed()     const noexcept;
     int n_layer()     const noexcept;
     int max_seq_len() const noexcept;
+
+    // Bytes reserved for graph activations, fixed at construction against the
+    // worst case (max_seq_len) and reused by every call. Reported by the bench
+    // and inspect tools; the M4 budget is stated partly against this.
+    size_t graph_buffer_size() const noexcept;
 
     // Tokenize, run forward, pool, normalize. out length = n_embed.
     // Throws std::runtime_error on tokenizer / forward failures.

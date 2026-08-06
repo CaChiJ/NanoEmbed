@@ -2,7 +2,9 @@
 """Compare two aggregated bench JSON files; flag regressions.
 
 Regression policy (PLAN.md §벤치마크):
-  - Latency p50/p90/p99: tolerate ±15% drift.
+  - Latency p50/p90/p99: tolerate ±15% drift. Checked both ways (a large
+    unexplained speedup is also worth a look) but only slowdowns are
+    regressions; speedups are reported under IMPROVEMENTS.
   - Peak RSS: monotonic non-increasing across milestones (5% noise allowed).
     Gated on rss_peak_lifetime_mb — the whole-worker number the M4 budget is
     stated against, and exact because the kernel tracks VmHWM for us.
@@ -22,7 +24,7 @@ import argparse
 import json
 import pathlib
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
 LATENCY_TOL = 0.15   # ±15%
@@ -42,8 +44,16 @@ def metric_delta(base: float, cur: float) -> float:
     return (cur - base) / base
 
 
-def compare_scenario(name: str, base: Dict[str, Any], cur: Dict[str, Any]) -> List[str]:
-    issues: List[str] = []
+def compare_scenario(name: str, base: Dict[str, Any], cur: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    """Return (regressions, improvements) for one scenario.
+
+    Latency drift is checked in both directions on purpose — a large
+    unexplained speedup usually means the workload or the measurement changed,
+    not that the code got 6x faster. But an improvement is not a regression, so
+    the two are reported apart and only regressions fail --strict.
+    """
+    regressions:  List[str] = []
+    improvements: List[str] = []
     bm = base["metrics"]
     cm = cur["metrics"]
 
@@ -53,21 +63,24 @@ def compare_scenario(name: str, base: Dict[str, Any], cur: Dict[str, Any]) -> Li
             continue
         d = metric_delta(b, c)
         if abs(d) > LATENCY_TOL:
-            issues.append(
-                f"{name} {key}: {b:.3f} -> {c:.3f} ({fmt_pct(d)}, "
-                f"> ±{fmt_pct(LATENCY_TOL)})"
-            )
+            msg = (f"{name} {key}: {b:.3f} -> {c:.3f} ({fmt_pct(d)}, "
+                   f"> ±{fmt_pct(LATENCY_TOL)})")
+            (regressions if d > 0 else improvements).append(msg)
 
     b, c = bm.get("rss_peak_lifetime_mb", 0.0), cm.get("rss_peak_lifetime_mb", 0.0)
     if b > 0.0:
         d = metric_delta(b, c)
         if d > RSS_TOL:
-            issues.append(
+            regressions.append(
                 f"{name} rss_peak_lifetime_mb: {b:.1f} -> {c:.1f} ({fmt_pct(d)}, "
                 f"peak RSS must be non-increasing within ±{fmt_pct(RSS_TOL)})"
             )
+        elif -d > RSS_TOL:
+            improvements.append(
+                f"{name} rss_peak_lifetime_mb: {b:.1f} -> {c:.1f} ({fmt_pct(d)})"
+            )
 
-    return issues
+    return regressions, improvements
 
 
 METRICS_FOR_TABLE = (
@@ -161,15 +174,25 @@ def main() -> int:
     print_table(base, cur)
     print()
 
-    issues: List[str] = []
+    regressions:  List[str] = []
+    improvements: List[str] = []
     for name in cur.get("scenarios", {}):
         if name in base.get("scenarios", {}):
-            issues += compare_scenario(name, base["scenarios"][name],
-                                              cur["scenarios"][name])
+            r, i = compare_scenario(name, base["scenarios"][name],
+                                          cur["scenarios"][name])
+            regressions  += r
+            improvements += i
 
-    if issues:
+    if improvements:
+        print("IMPROVEMENTS (beyond tolerance — confirm they are real, then "
+              "commit a new baseline):")
+        for i in improvements:
+            print(f"  - {i}")
+        print()
+
+    if regressions:
         print("REGRESSIONS:")
-        for i in issues:
+        for i in regressions:
             print(f"  - {i}")
         return 1 if args.strict else 0
 

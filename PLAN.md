@@ -280,7 +280,8 @@ const char* nanoembed_last_error(void); /* thread-local */
 
 **시나리오** (`bench/scenarios.yaml`) — 마일스톤이 지원하는 시점부터 슈트에 추가
 
-- `single_short_f16` — M3+ — bge-small F16, batch=1, 짧은 문장 50개
+- `single_short_f16` — M3+ — bge-small F16, batch=1, 짧은 문장 100개 코퍼스
+- `single_long_f16` — M3.5+ — 같은 모델, 매 줄이 512토큰 캡을 채우는 장문 (M3의 고정 아레나로는 실행 불가였음)
 - `single_short_q8_streaming` — M4+ — bge-small Q8_0, batch=1, streaming on
 - `batch32_mixed_q8` — M5+ — 길이 분산 있는 500개, batch=32
 - `batch128_mixed_q8` — M5+ — 같은 코퍼스, batch=128
@@ -477,6 +478,64 @@ NanoEmbed/
 **리스크**
 - F16 + reduction order 차이로 인한 수치 drift → 레이어별 tolerance를 경험적으로 설정. 레이어 격리 테스트가 첫 깨지는 블록 식별
 - WordPiece edge case → 토크나이저를 먼저 통과시킨 뒤 골든·격리 픽스처 생성
+
+---
+
+### M3.5 — 그래프 아레나 정리 (M4 진입 선행)
+**목표** `embed()`가 호출마다 고정 256 MiB 아레나를 잡고 버리던 구조를 ggml 그래프 할당기로 교체. **수치는 M3와 동일**(골든이 oracle)하고, 메모리·크래시만 고친다.
+
+M4에 합치지 않고 분리한 이유는 **측정 가능성**이다. M3 peak RSS 330 MiB의 78%가 그래프 아레나라, 이 상태로 스트리밍을 넣으면 가중치 절감분이 아레나 노이즈에 묻혀 M4가 자기 효과를 증명하지 못한다.
+
+**M3 baseline 해부 (실측)**
+
+| 구성 | 크기 | 실사용 |
+|---|---|---|
+| 프로세스 바닥 | 4.15 MiB | — |
+| 모델 가중치 | ~64.2 MiB | 전부 |
+| 토크나이저 + 메타 | ~5.7 MiB | 전부 |
+| **그래프 아레나** | **256.0 MiB** | **12.3 MiB (4.8%)** |
+| **peak** | **330.05 MiB** | |
+
+원인은 `ggml_context`가 bump allocator라 12개 블록의 중간 텐서를 **재사용 없이** 전부 살려두는 것. 게다가 `std::vector<uint8_t>`의 값 초기화가 256 MiB 전체를 매 호출 memset해 안 쓰는 95%까지 상주시킨다. 같은 이유로 S≳270에서 아레나가 넘쳐 `GGML_ASSERT`로 **abort** — 기본 `max_seq_len`이 512이므로 이건 옵트인 엣지케이스가 아니라 기본 설정에서 닿는 경로였다.
+
+**산출물 (구현)**
+- `src/embedder.{h,cpp}` — `ggml_graph_compute_with_ctx` + `no_alloc=false` 아레나 → `ggml_backend_t`(CPU) + `ggml_gallocr` 조합으로 전환:
+  - 호출마다 여는 컨텍스트는 `no_alloc=true`인 **메타 컨텍스트**(텐서 구조체 전용, 수백 KB). 텐서 데이터는 galloc이 소유한 단일 버퍼에서 수명 분석 기반으로 배치·재사용
+  - 입력 텐서는 `ggml_set_input`으로 표시하고 **할당 이후** `ggml_backend_tensor_set`으로 주입 (`alloc_graph` 전에는 `->data`가 없음)
+  - 버퍼는 핸들 수명 동안 유지 → 호출당 재폴트 소멸
+- **생성 시점 worst-case 예약** — 생성자에서 `max_seq_len` 기준 `ggml_gallocr_reserve`. 부담 불가한 모델은 추론 도중이 아니라 로드 시점에 실패하고(§6 에러 모델), peak RSS가 입력 길이와 무관하게 확정된다. `size_max >= node_size` 비교 덕에 이후 짧은 입력은 재할당 없이 이 예약을 재사용한다
+- `abort()` 제거 — 예약/할당 실패를 예외로 올려 C ABI 경계에서 `nanoembed_status_t`로 변환
+- `nanoembed-inspect --graph` — 예약된 활성값 버퍼 크기 보고 (C ABI는 M1에서 동결이므로 진단 도구 쪽에 노출)
+
+**산출물 (테스트/벤치)**
+- `tests/integration/seq_len_test.cpp` — 기본 파라미터로 (1) 512토큰 입력 성공, (2) 초과 입력은 truncate, (3) 장문/단문을 교차 반복해도 재사용 버퍼가 결과를 오염시키지 않음(cosine ≥ 0.99999)
+- `tests/corpus/eval_long.txt` + `bench/scenarios.yaml`의 `single_long_f16` (S=512 포화) — **M3에서는 실행 자체가 불가능했던** 시나리오라 M3 baseline이 없고 M3.5부터 시작
+- `bench/baseline/M3.5.json` commit
+
+**검증**
+- 골든 파리티 **무변경** 통과 (min cosine ≥ 0.9999, mean ≥ 0.99999) — "수치를 안 바꿨다"의 유일한 증거
+- 레이어 격리 12블록 통과, `ctest` 7/7
+- `nanoembed-inspect --graph`: max_seq_len=512 worst case **15.76 MiB** (M3의 고정 256 MiB 대비 1/16, 옛 방식이 S=512에서 *필요로 했을* ~600 MiB 대비 1/38)
+- `compare.py` (M3 baseline 대비, 동일 머신) — `single_short_f16`:
+
+  | 지표 | M3 | M3.5 | |
+  |---|---|---|---|
+  | `rss_peak_lifetime_mb` | 330.05 | **76.35** | −76.9% |
+  | `pss_peak_sampled_mb` | 326.9 | 73.13 | −77.6% |
+  | `uss_peak_sampled_mb` | 325.6 | 71.85 | −77.9% |
+  | `page_faults_minor` | 327,685,001 | **0** | 아레나 재폴트 소멸 |
+  | `latency_p50_ms` | 240.05 | **41.97** | −82.5% |
+  | `throughput_items_per_sec` | 4.00 | 20.27 | +407% |
+
+  peak == baseline == 76.35 MiB로 **측정 창 안에서 메모리가 전혀 자라지 않는다**. 지연 5.7배 개선은 알고리즘이 아니라 호출마다 256 MiB를 memset하던 비용이 사라진 것.
+- 신규 `single_long_f16` (S=512 포화, M3에는 대응 baseline 없음): peak **93.01 MiB**, minor fault 1, p50 2084 ms. 예약은 가상이고 상주는 실사용을 따르므로, 짧은 입력은 15.76 MiB 예약분 중 ~2 MiB만 상주한다 — worst-case 예약이 단문 RSS를 손해보지 않는 이유
+- 부수 수정: `compare.py`가 지연 **개선**을 "REGRESSION"으로 라벨링하던 문제 — 양방향 감지는 유지하되 IMPROVEMENTS로 분리하고 `--strict`는 악화에만 실패
+
+**리스크**
+- **가중치 텐서의 버퍼 소속** — 가중치는 여전히 평범한 `ggml_context`(`gguf_init_from_file(no_alloc=false)`)에 있다. CPU 백엔드는 호스트 포인터를 그대로 읽고 gallocr은 `->data`가 이미 있는 텐서를 건너뛰므로 그대로 동작함을 확인했다. 다른 백엔드를 붙이거나 ggml을 올릴 때 "모든 텐서는 backend buffer 소속" 어서션이 들어오면 `ggml_backend_alloc_ctx_tensors` 경로로 옮겨야 한다
+- 입력 주입 순서를 되돌리면 널 참조 — `seq_len_test`와 골든이 회귀를 잡는다
+
+**범위 밖 (M4)** 레이어 스트리밍, 양자화 가중치, 배치. **M3.5 이후에도 peak은 ~74 MiB 밑으로 못 내려간다** — 그중 64 MiB가 가중치이고 그건 스트리밍이 푸는 문제다. M4의 "peak RSS < 40MB"는 M3.5(아레나) + M4(스트리밍+양자화)가 **둘 다** 있어야 도달한다.
 
 ---
 

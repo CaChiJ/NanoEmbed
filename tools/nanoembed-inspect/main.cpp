@@ -1,14 +1,16 @@
 // nanoembed-inspect: dump GGUF metadata and (when BERT) the structured manifest.
 //
 // Usage:
-//   nanoembed-inspect <gguf-file> [--tensors]
+//   nanoembed-inspect <gguf-file> [--tensors] [--graph]
 //
 // Default output: header summary + metadata KV + BERT manifest (if applicable).
-// --tensors also dumps the raw tensor table (long).
+// --tensors also dumps the raw tensor table (long); --graph loads the model
+// and reports the reserved activation buffer size.
 
 #include "ggml.h"
 #include "gguf.h"
 
+#include "embedder.h"
 #include "gguf_scanner.h"
 
 #include <cinttypes>
@@ -123,13 +125,28 @@ void print_manifest(const nanoembed::ModelManifest & m) {
     }
 }
 
+// Costs a full weight load, so it is opt-in rather than part of the default
+// dump: constructing an Embedder is what sizes the graph buffer.
+void print_graph_budget(const char * path) {
+    std::printf("\n# graph budget\n");
+    try {
+        const nanoembed::Embedder e(path);
+        const double mib = static_cast<double>(e.graph_buffer_size()) / (1024.0 * 1024.0);
+        std::printf("  activations reserved at max_seq_len=%d: %.2f MiB\n",
+                    e.max_seq_len(), mib);
+    } catch (const std::exception & ex) {
+        std::printf("  unavailable — %s\n", ex.what());
+    }
+}
+
 void print_usage(const char * prog) {
     std::fprintf(stderr,
-        "usage: %s <gguf-file> [--tensors]\n"
+        "usage: %s <gguf-file> [--tensors] [--graph]\n"
         "\n"
         "Prints GGUF header summary, metadata KV pairs, and the BERT\n"
         "manifest (when applicable). Use --tensors to also dump the raw\n"
-        "tensor table.\n",
+        "tensor table, and --graph to load the model and report the\n"
+        "reserved activation buffer size.\n",
         prog);
 }
 
@@ -137,11 +154,14 @@ void print_usage(const char * prog) {
 
 int main(int argc, char ** argv) {
     bool         show_tensors = false;
+    bool         show_graph   = false;
     const char * path         = nullptr;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--tensors") == 0) {
             show_tensors = true;
+        } else if (std::strcmp(argv[i], "--graph") == 0) {
+            show_graph = true;
         } else if (path == nullptr) {
             path = argv[i];
         } else {
@@ -180,6 +200,10 @@ int main(int argc, char ** argv) {
 
     if (show_tensors) {
         print_tensors(ctx);
+    }
+
+    if (show_graph) {
+        print_graph_budget(path);
     }
 
     gguf_free(ctx);

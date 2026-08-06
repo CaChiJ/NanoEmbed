@@ -13,7 +13,20 @@ scenarios:
     threads: 4
     warmup: 5
     iter: 50
-    milestones: [M3, M4, M5, M6, M7, M8]
+    milestones: [M3, M3.5, M4, M5, M6, M7, M8]
+
+  # Full-context inputs (every line saturates the 512-token cap). Impossible
+  # before M3.5 — the old fixed graph arena aborted at S~270 — so this has no
+  # M3 baseline to compare against and starts from M3.5.
+  - name: single_long_f16
+    model: models/bge-small-en-v1.5-f16.gguf
+    inputs: tests/corpus/eval_long.txt
+    pooling: cls
+    normalize: true
+    threads: 4
+    warmup: 2
+    iter: 10
+    milestones: ["M3.5", M4, M5, M6, M7, M8]
 
   # Future scenarios:
   # - name: single_short_q8_streaming     # M4+

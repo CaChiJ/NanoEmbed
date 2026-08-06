@@ -136,6 +136,13 @@ if(BUILD_TESTING)
     target_compile_options(nanoembed_golden_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
     add_test(NAME golden COMMAND nanoembed_golden_test)
 
+    # Sequence-length / buffer-reuse regression (M3.5 graph allocator).
+    add_executable(nanoembed_seq_len_test tests/integration/seq_len_test.cpp)
+    target_link_libraries(nanoembed_seq_len_test PRIVATE nanoembed_core)
+    target_compile_options(nanoembed_seq_len_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME seq_len COMMAND nanoembed_seq_len_test)
+    set_tests_properties(seq_len PROPERTIES TIMEOUT 600)
+
     # Bench harness selftest. Unlike every other test here it needs no GGUF, so
     # it is the one bench-side check CI can actually run. It asserts that the
     # fork+exec'd worker's baseline is unaffected by memory the parent dirtied
@@ -161,6 +168,8 @@ if(BUILD_TESTING)
         set_tests_properties(golden PROPERTIES
             ENVIRONMENT
             "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_GOLDEN_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/st-bge-small.bin")
+        set_tests_properties(seq_len PROPERTIES
+            ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
         set_tests_properties(forward PROPERTIES
             ENVIRONMENT
             "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_ACTIVATION_FIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/activations")

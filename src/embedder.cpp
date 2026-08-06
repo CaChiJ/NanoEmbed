@@ -7,15 +7,42 @@
 #include "tokenizer/wordpiece.h"
 
 #include "ggml.h"
+#include "ggml-alloc.h"
+#include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
 #include <vector>
 
 namespace nanoembed {
+
+namespace {
+
+forward::PoolType to_forward_pool(PoolType p) {
+    return (p == PoolType::Cls) ? forward::PoolType::Cls : forward::PoolType::Mean;
+}
+
+// Upper bound on tensors in one forward graph. 12 BERT blocks come to a few
+// hundred nodes; the slack is cheap because this context holds ggml_tensor
+// structs only (no_alloc), not tensor data.
+constexpr size_t kMaxGraphTensors = 4096;
+
+// Everything the caller needs from a freshly built graph. The input tensors
+// have no backing store until ggml_gallocr_alloc_graph runs, so they are
+// handed back to be filled afterwards rather than written at build time.
+struct GraphIO {
+    ggml_cgraph * graph     = nullptr;
+    ggml_tensor * token_ids = nullptr;
+    ggml_tensor * pos_ids   = nullptr;
+    ggml_tensor * type_ids  = nullptr;
+    ggml_tensor * out       = nullptr;
+};
+
+} // namespace
 
 struct Embedder::Impl {
     ModelManifest                       manifest;
@@ -25,23 +52,69 @@ struct Embedder::Impl {
     forward::EmbedWeights               embed_w;
     std::vector<forward::LayerWeights>  layer_w;
 
+    // Graph machinery, persistent for the handle's lifetime. `meta_buf` holds
+    // tensor structs; `galloc` owns the one data buffer that every call reuses
+    // under ggml's liveness analysis.
+    ggml_backend_t       backend = nullptr;
+    ggml_gallocr_t       galloc  = nullptr;
+    std::vector<uint8_t> meta_buf;
+
+    // Build the forward graph into `gctx` (which must be no_alloc).
+    GraphIO build_graph(ggml_context * gctx,
+                        int64_t        S,
+                        PoolType       pooling,
+                        bool           normalize) const {
+        const auto &  arch = manifest.arch;
+        const int64_t B    = 1;
+        GraphIO io;
+
+        io.token_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
+        io.pos_ids   = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
+        io.type_ids  = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
+        // Inputs are written after allocation, so they must not share storage
+        // with anything the allocator would otherwise overlap them with.
+        ggml_set_input(io.token_ids);
+        ggml_set_input(io.pos_ids);
+        ggml_set_input(io.type_ids);
+
+        ggml_tensor * x = forward::build_embed_layer(
+            gctx, io.token_ids, io.pos_ids, io.type_ids, embed_w, arch.layer_norm_eps);
+        for (int li = 0; li < arch.n_layer; ++li) {
+            x = forward::build_encoder_block(
+                gctx, x, /*kq_mask=*/nullptr, arch.n_head,
+                layer_w[static_cast<size_t>(li)], arch.layer_norm_eps);
+        }
+
+        io.out = forward::build_pool(gctx, x, to_forward_pool(pooling));
+        if (normalize) {
+            io.out = forward::build_l2_normalize(gctx, io.out);
+        }
+        // Read back after compute, so it must survive the whole graph.
+        ggml_set_output(io.out);
+
+        io.graph = ggml_new_graph(gctx);
+        ggml_build_forward_expand(io.graph, io.out);
+        return io;
+    }
+
+    // A no_alloc context over the persistent meta buffer. Structs only.
+    ggml_context * new_meta_ctx() {
+        ggml_init_params p;
+        p.mem_size   = meta_buf.size();
+        p.mem_buffer = meta_buf.data();
+        p.no_alloc   = true;
+        ggml_context * c = ggml_init(p);
+        if (!c) throw std::runtime_error("ggml_init failed for graph meta context");
+        return c;
+    }
+
     ~Impl() {
+        if (galloc)    ggml_gallocr_free(galloc);
+        if (backend)   ggml_backend_free(backend);
         if (model_ctx) ggml_free(model_ctx);
         if (gguf)      gguf_free(gguf);
     }
 };
-
-namespace {
-
-forward::PoolType to_forward_pool(PoolType p) {
-    return (p == PoolType::Cls) ? forward::PoolType::Cls : forward::PoolType::Mean;
-}
-
-// Sized for 12 BERT blocks at S<=512, B=1 with comfortable headroom.
-// Generous on purpose — M3 baseline is "ignore the memory budget".
-constexpr size_t kGraphMemSize = 256ull * 1024 * 1024;
-
-} // namespace
 
 Embedder::Embedder(const std::string & gguf_path)
     : impl_(std::make_unique<Impl>()) {
@@ -93,6 +166,34 @@ Embedder::Embedder(const std::string & gguf_path)
         lw.ffn.norm_w  = T(p + "layer_output_norm.weight");
         lw.ffn.norm_b  = T(p + "layer_output_norm.bias");
     }
+
+    impl_->backend = ggml_backend_cpu_init();
+    if (!impl_->backend) throw std::runtime_error("ggml_backend_cpu_init failed");
+
+    impl_->galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(impl_->backend));
+    if (!impl_->galloc) throw std::runtime_error("ggml_gallocr_new failed");
+
+    impl_->meta_buf.resize(kMaxGraphTensors * ggml_tensor_overhead() + ggml_graph_overhead());
+
+    // Reserve against the worst case this handle can ever see, so an
+    // unaffordable model fails here rather than mid-inference, and so peak RSS
+    // is fixed at construction instead of drifting with input length.
+    {
+        ggml_context * gctx = impl_->new_meta_ctx();
+        const GraphIO  io   = impl_->build_graph(
+            gctx, impl_->manifest.arch.max_seq_len, PoolType::Mean, /*normalize=*/true);
+        const bool ok = ggml_gallocr_reserve(impl_->galloc, io.graph);
+        ggml_free(gctx);
+        if (!ok) {
+            throw std::runtime_error(
+                "failed to reserve the graph buffer for max_seq_len=" +
+                std::to_string(impl_->manifest.arch.max_seq_len));
+        }
+    }
+}
+
+size_t Embedder::graph_buffer_size() const noexcept {
+    return ggml_gallocr_get_buffer_size(impl_->galloc, 0);
 }
 
 Embedder::~Embedder() = default;
@@ -109,52 +210,42 @@ void Embedder::embed(const std::string &    text,
 
     const std::vector<int> ids = impl_->tokenizer.encode(text, cfg.max_seq_len);
     const int64_t S = static_cast<int64_t>(ids.size());
-    const int64_t B = 1;
 
-    std::vector<uint8_t> graph_buf(kGraphMemSize);
-    ggml_init_params gip;
-    gip.mem_size   = graph_buf.size();
-    gip.mem_buffer = graph_buf.data();
-    gip.no_alloc   = false;
-    ggml_context * gctx = ggml_init(gip);
-    if (!gctx) throw std::runtime_error("ggml_init failed");
+    ggml_backend_cpu_set_n_threads(impl_->backend, n_threads);
 
-    // Inputs.
-    ggml_tensor * token_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
-    std::memcpy(token_ids->data, ids.data(), ids.size() * sizeof(int32_t));
+    // The context holds tensor structs only; tensor data comes from galloc's
+    // reused buffer, which is why this costs a few hundred KB per call instead
+    // of re-faulting a fresh arena.
+    ggml_context * gctx = impl_->new_meta_ctx();
+    try {
+        const GraphIO io = impl_->build_graph(gctx, S, cfg.pooling, cfg.normalize);
 
-    ggml_tensor * pos_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
-    auto * pos_data = static_cast<int32_t *>(pos_ids->data);
-    for (int64_t s = 0; s < S; ++s) pos_data[s] = static_cast<int32_t>(s);
+        if (!ggml_gallocr_alloc_graph(impl_->galloc, io.graph)) {
+            throw std::runtime_error("failed to allocate the graph buffer");
+        }
 
-    ggml_tensor * type_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
-    std::memset(type_ids->data, 0, static_cast<size_t>(S * B) * sizeof(int32_t));
+        // Only now do the input tensors have storage.
+        ggml_backend_tensor_set(io.token_ids, ids.data(), 0,
+                                ids.size() * sizeof(int32_t));
 
-    // Forward.
-    ggml_tensor * x = forward::build_embed_layer(
-        gctx, token_ids, pos_ids, type_ids, impl_->embed_w, arch.layer_norm_eps);
-    for (int li = 0; li < arch.n_layer; ++li) {
-        x = forward::build_encoder_block(
-            gctx, x, /*kq_mask=*/nullptr, arch.n_head,
-            impl_->layer_w[static_cast<size_t>(li)], arch.layer_norm_eps);
-    }
+        std::vector<int32_t> scratch(static_cast<size_t>(S));
+        for (int64_t s = 0; s < S; ++s) scratch[static_cast<size_t>(s)] = static_cast<int32_t>(s);
+        ggml_backend_tensor_set(io.pos_ids, scratch.data(), 0, scratch.size() * sizeof(int32_t));
 
-    ggml_tensor * pooled = forward::build_pool(gctx, x, to_forward_pool(cfg.pooling));
-    if (cfg.normalize) {
-        pooled = forward::build_l2_normalize(gctx, pooled);
-    }
+        std::fill(scratch.begin(), scratch.end(), 0);
+        ggml_backend_tensor_set(io.type_ids, scratch.data(), 0, scratch.size() * sizeof(int32_t));
 
-    ggml_cgraph * graph = ggml_new_graph(gctx);
-    ggml_build_forward_expand(graph, pooled);
-    const ggml_status st = ggml_graph_compute_with_ctx(gctx, graph, n_threads);
-    if (st != GGML_STATUS_SUCCESS) {
+        const ggml_status st = ggml_backend_graph_compute(impl_->backend, io.graph);
+        if (st != GGML_STATUS_SUCCESS) {
+            throw std::runtime_error("ggml_backend_graph_compute failed");
+        }
+
+        ggml_backend_tensor_get(io.out, out, 0,
+                                static_cast<size_t>(arch.n_embed) * sizeof(float));
+    } catch (...) {
         ggml_free(gctx);
-        throw std::runtime_error("ggml_graph_compute failed");
+        throw;
     }
-
-    std::memcpy(out, pooled->data,
-                static_cast<size_t>(arch.n_embed) * sizeof(float));
-
     ggml_free(gctx);
 }
 

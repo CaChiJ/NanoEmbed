@@ -1,0 +1,104 @@
+{
+  "milestone": "M3.5",
+  "git_sha": "7115f75",
+  "scenarios": {
+    "single_short_f16": {
+      "scenario": "single_short_f16",
+      "os": "linux",
+      "model": "/home/user/gnb-stat-mcp/pingpong-ai/temp/nanoembed/models/bge-small-en-v1.5-f16.gguf",
+      "inputs": "/home/user/gnb-stat-mcp/pingpong-ai/temp/nanoembed/tests/corpus/eval.txt",
+      "warmup": 5,
+      "iter": 50,
+      "total_items": 5000,
+      "threads": 4,
+      "pooling": "cls",
+      "normalize": 1,
+      "environment": {
+        "kernel": "6.8.0-136-generic",
+        "cpu_model": "AMD Ryzen 5 3500U with Radeon Vega Mobile Gfx",
+        "nproc": 6,
+        "page_size_bytes": 4096
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "hwm_reset": true,
+        "rss_interval_ms": 50,
+        "rollup_interval_ms": 500,
+        "rss_samples": 4847,
+        "rollup_samples": 485
+      },
+      "metrics": {
+        "rss_peak_lifetime_mb": 76.3516,
+        "rss_peak_window_mb": 76.3516,
+        "rss_baseline_mb": 76.3516,
+        "rss_avg_mb": 76.3516,
+        "rss_max_sampled_mb": 76.3516,
+        "pss_baseline_mb": 73.127,
+        "pss_avg_mb": 73.1214,
+        "pss_peak_sampled_mb": 73.127,
+        "uss_baseline_mb": 71.8516,
+        "uss_avg_mb": 71.8516,
+        "uss_peak_sampled_mb": 71.8516,
+        "cpu_user_sec": 967.648,
+        "cpu_sys_sec": 3.16927,
+        "page_faults_major": 0,
+        "page_faults_minor": 0,
+        "io_read_bytes": 0,
+        "wall_sec": 246.677,
+        "latency_p50_ms": 41.9666,
+        "latency_p90_ms": 78.3055,
+        "latency_p99_ms": 131.212,
+        "throughput_items_per_sec": 20.2694
+      }
+    },
+    "single_long_f16": {
+      "scenario": "single_long_f16",
+      "os": "linux",
+      "model": "/home/user/gnb-stat-mcp/pingpong-ai/temp/nanoembed/models/bge-small-en-v1.5-f16.gguf",
+      "inputs": "/home/user/gnb-stat-mcp/pingpong-ai/temp/nanoembed/tests/corpus/eval_long.txt",
+      "warmup": 2,
+      "iter": 10,
+      "total_items": 200,
+      "threads": 4,
+      "pooling": "cls",
+      "normalize": 1,
+      "environment": {
+        "kernel": "6.8.0-136-generic",
+        "cpu_model": "AMD Ryzen 5 3500U with Radeon Vega Mobile Gfx",
+        "nproc": 6,
+        "page_size_bytes": 4096
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "hwm_reset": true,
+        "rss_interval_ms": 50,
+        "rollup_interval_ms": 500,
+        "rss_samples": 8183,
+        "rollup_samples": 819
+      },
+      "metrics": {
+        "rss_peak_lifetime_mb": 93.0078,
+        "rss_peak_window_mb": 93.0078,
+        "rss_baseline_mb": 93.0039,
+        "rss_avg_mb": 93.0078,
+        "rss_max_sampled_mb": 93.0078,
+        "pss_baseline_mb": 89.8242,
+        "pss_avg_mb": 89.828,
+        "pss_peak_sampled_mb": 89.8301,
+        "uss_baseline_mb": 88.5703,
+        "uss_avg_mb": 88.5742,
+        "uss_peak_sampled_mb": 88.5742,
+        "cpu_user_sec": 1639.16,
+        "cpu_sys_sec": 3.51615,
+        "page_faults_major": 0,
+        "page_faults_minor": 1,
+        "io_read_bytes": 0,
+        "wall_sec": 417.652,
+        "latency_p50_ms": 2084.03,
+        "latency_p90_ms": 2160.57,
+        "latency_p99_ms": 2260.8,
+        "throughput_items_per_sec": 0.478868
+      }
+    }
+  }
+}

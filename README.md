@@ -31,6 +31,10 @@ functions are implemented at which point.
 
 ```sh
 echo "hello world" | ./build/bin/nanoembed-cli models/bge-small-en-v1.5-f16.gguf
+
+# inspect a GGUF; --graph also loads it and reports the reserved
+# activation buffer (the memory one forward pass can ever need)
+./build/bin/nanoembed-inspect models/bge-small-en-v1.5-f16.gguf --graph
 ```
 
 ## Bench
@@ -43,10 +47,10 @@ and `ctest` still build everywhere.
 # verify the harness itself; needs no model
 ./build/bin/nanoembed-bench --selftest
 
-# generate baseline / current run
-.venv/bin/python bench/runner.py --milestone M3 --out bench/results/local.json
+# generate baseline / current run (a full suite is ~20 min: 5000 embeds)
+.venv/bin/python bench/runner.py --milestone M3.5 --out bench/results/local.json
 
-# compare against the milestone baseline
+# compare against the previous milestone baseline
 .venv/bin/python bench/compare.py bench/baseline/M3.json bench/results/local.json
 ```
 
