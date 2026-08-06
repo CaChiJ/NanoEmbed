@@ -10,13 +10,13 @@
 
 #pragma once
 
+#include "arch/model_arch.h"   // ArchParams, PoolType
+
 #include <cstddef>
 #include <memory>
 #include <string>
 
 namespace nanoembed {
-
-enum class PoolType { Mean, Cls };
 
 struct EmbedderConfig {
     int      n_threads   = 0;            // 0 = auto
@@ -32,7 +32,24 @@ public:
 
     int n_embed()     const noexcept;
     int n_layer()     const noexcept;
-    int max_seq_len() const noexcept;
+    int max_seq_len() const noexcept;   // the model's own context length
+
+    // general.architecture of the loaded file ("bert", ...).
+    const std::string & architecture() const noexcept;
+
+    // Pooling the loaded model was trained for.
+    PoolType default_pooling() const noexcept;
+
+    // Grow the activation reservation to cover sequences up to max_seq_len.
+    // Idempotent and monotonic. Called when a context declares its cap, since
+    // reserving a long-context model's full window up front is prohibitive
+    // (attention is O(S^2)).
+    void reserve(int max_seq_len);
+
+    // Sequence length the activation buffer is currently sized for. May be
+    // below max_seq_len(): the reservation follows what contexts asked for,
+    // not the model's full context window.
+    int reserved_seq_len() const noexcept;
 
     // Bytes reserved for graph activations, fixed at construction against the
     // worst case (max_seq_len) and reused by every call. Reported by the bench

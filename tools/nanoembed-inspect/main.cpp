@@ -132,8 +132,10 @@ void print_graph_budget(const char * path) {
     try {
         const nanoembed::Embedder e(path);
         const double mib = static_cast<double>(e.graph_buffer_size()) / (1024.0 * 1024.0);
-        std::printf("  activations reserved at max_seq_len=%d: %.2f MiB\n",
-                    e.max_seq_len(), mib);
+        std::printf("  architecture: %s (model context length %d)\n",
+                    e.architecture().c_str(), e.max_seq_len());
+        std::printf("  activations reserved for seq_len=%d: %.2f MiB\n",
+                    e.reserved_seq_len(), mib);
     } catch (const std::exception & ex) {
         std::printf("  unavailable — %s\n", ex.what());
     }

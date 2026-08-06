@@ -72,6 +72,10 @@ nanoembed_context_params nanoembed_context_default_params(void) {
     nanoembed_context_params p;
     p.n_threads     = 0;
     p.max_batch     = 64;
+    // A deliberate cap, not the model's context length. Activation memory is
+    // O(max_seq_len^2) in attention, so defaulting to a long-context model's
+    // full window (eurobert declares 8192) would reserve gigabytes for inputs
+    // that are never that long. Callers who want more ask for it explicitly.
     p.max_seq_len   = 512;
     p.use_streaming = 0;
     p.pooling       = NANOEMBED_POOL_MEAN;
@@ -131,6 +135,11 @@ nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
         return nullptr;
     }
     try {
+        // Size the shared activation buffer for this context's cap before the
+        // context exists, so an unaffordable request fails here rather than on
+        // the first embed call. Monotonic across contexts on one model.
+        model->embedder.reserve(params.max_seq_len);
+
         auto * c   = new nanoembed_context;
         c->model   = model;
         c->cfg     = from_params(params);

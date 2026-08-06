@@ -539,6 +539,55 @@ M4에 합치지 않고 분리한 이유는 **측정 가능성**이다. M3 peak R
 
 ---
 
+### M3.6 — 모델 교체 가능 구조 + eurobert(jina-v5-nano) 지원
+**목표** GGUF 모델 패밀리를 갈아끼울 수 있게 만들고, 두 번째 패밀리로 `jina-embeddings-v5-text-nano-retrieval`(arch `eurobert`)을 붙인다. **M4 스트리밍의 메모리 절감을 잴 대상 모델이 이것**이므로 M4 선행이다 — bge-small은 가중치가 64 MiB뿐이라 스트리밍 효과를 과소평가한다.
+
+**두 모델이 실제로 얼마나 다른가** (`nanoembed-inspect`로 확인)
+
+| | bge-small (`bert`) | jina-v5-nano (`eurobert`) |
+|---|---|---|
+| 위치 인코딩 | 학습된 `position_embd` | **RoPE** (`rope.freq_base=1e6`) |
+| 정규화 | LayerNorm (weight+bias) | **RMSNorm** (weight만) |
+| FFN | `up`/`down` + GELU | **`gate`/`up`/`down` (SwiGLU)** |
+| attention bias | q/k/v/o 전부 | **없음** |
+| segment embedding | `token_types` | **없음** |
+| 토크나이저 | WordPiece 30,522 | **byte-level BPE 128,256 + merges 280,147** (`pre="jina-v5-nano"`) |
+| pooling | CLS | `pooling_type=3` (**LAST**) |
+| context | 512 | 8,192 |
+| 파라미터 | 33M | 212M |
+
+겹치는 텐서가 사실상 없다 — `token_embd.weight` 하나뿐이고 블록은 `attn_norm`/`ffn_gate`/`ffn_up`/`ffn_down`/`ffn_norm` 구성. **모델 경로 교체가 아니라 새 패밀리 구현**이다.
+
+**산출물 (구조 — 완료)**
+- `src/arch/model_arch.h` — `ModelArch` 인터페이스(`params`/`inputs`/`default_pooling`/`bind_weights`/`build_graph`) + `create_model_arch()` 레지스트리 (`general.architecture` 디스패치)
+- `src/arch/bert_arch.{h,cpp}` — 기존 BERT 경로를 인터페이스 뒤로 이동. `scan_gguf`/`ModelManifest`(M2 산출물)는 **BERT의 사적 디테일로 강등** — 공유 계약이 아님
+- `src/tokenizer/tokenizer.h` + `registry.cpp` — `Tokenizer` 인터페이스 + `tokenizer.ggml.model` 디스패치. 아키텍처와 **독립적으로** 변하므로 별도 seam
+- `forward::PoolType::Last` 추가
+- `bench/model_source.py` — 시나리오의 `model:`이 `hf:<repo>:<file.gguf>` 형식을 받는다. **캐시에서만 해석하고 절대 자동 다운로드하지 않는다** (벤치가 조용히 다른 quant을 재는 사고 방지)
+- **활성값 예약 시점 이동** — 생성자에서 모델 context 전체를 예약하던 것을 `Embedder::reserve(max_seq_len)`로 옮겨 context 생성 시 호출. eurobert의 8192 context를 그대로 예약하면 attention이 O(S²)이라 12 heads × 8192² × 4B ≈ **3.2 GB**가 된다. 기본 캡은 512, 더 원하는 호출자는 명시하고 지불
+
+**산출물 (eurobert — 미구현)**
+- `src/arch/eurobert_arch.{h,cpp}` — RoPE + RMSNorm + SwiGLU + bias 없는 projection. **ggml 내장으로 대부분 해결**(`ggml_rope_ext`, `ggml_rms_norm`, `ggml_silu`)이라 forward 자체는 블록 하나 분량
+- `src/tokenizer/bpe.{h,cpp}` — byte-level BPE. **이 마일스톤 비용의 대부분**. `tokenizer.ggml.merges`(280k) 로드, byte-level 매핑, `pre="jina-v5-nano"` pre-tokenizer 정규식
+- `tests/fixtures/tokenizer/jina-v5-nano-eval.tsv` — HF 토큰 ID 픽스처 (BPE 정확도 oracle)
+- `tests/fixtures/golden/st-jina-v5-nano.bin` — 골든 임베딩 픽스처
+- 공개 ABI에 `NANOEMBED_POOL_LAST` 추가 (M1 동결 정책상 **추가는 허용**)
+
+**검증**
+- BERT 경로 **무변경**: 골든/레이어격리/토크나이저 픽스처 전부 그대로 통과 (구조 리팩터링 시점에 확인 완료)
+- eurobert 토크나이저: HF tokenizer와 토큰 ID 완전 일치
+- eurobert 골든: sentence-transformers 대비 min cosine ≥ 0.9999, mean ≥ 0.99999
+- **Q3_K_M 동작 확인** — `ggml_mul_mat`/`ggml_get_rows`가 K-quant를 네이티브 처리하므로 forward 수정 없이 될 가능성이 높지만 **가정이며 검증 대상**. F16 대비 정확도 열화폭도 같이 기록
+- `bench/scenarios.yaml`의 `single_short_jina_q3km` 실행 → `bench/baseline/M3.6.json`
+
+**리스크**
+- **BPE 토크나이저가 실제 비용의 대부분**이고 정확도 오라클(HF 픽스처)을 새로 떠야 한다. WordPiece와 공유할 코드가 없다
+- Q3_K_M이 그냥 되지 않으면(예: `get_rows`가 특정 K-quant를 미지원) F16/Q8_0으로 먼저 정합성을 잡고 quant을 분리 처리
+- `pooling_type=3`의 LAST가 padding 없는 B=1 경로 가정에 의존 — M5 배치에서 mask-aware로 다시 봐야 함
+- eurobert의 8192 context에서 장문 벤치를 돌리면 활성값이 지배적이 된다. M4 스트리밍은 **가중치**를 줄이는 것이므로, 절감폭 측정은 예약 캡을 고정한 채 비교해야 의미가 있다
+
+---
+
 ### M4 — 레이어 스트리밍 (헤드라인 기능) + 양자화 가중치 지원
 **목표** M3의 "전부 로드"를 **레이어별 load → compute → free**로 교체. 단일 입력 모드. 출력은 M3와 동일 tolerance, RSS 급감. **여기서 Q8_0/Q4_K_M 양자화 가중치 도입** (스트리밍의 핵심 가치는 양자화 모델에서 두드러지므로 같이 묶음).
 

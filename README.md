@@ -37,6 +37,37 @@ echo "hello world" | ./build/bin/nanoembed-cli models/bge-small-en-v1.5-f16.gguf
 ./build/bin/nanoembed-inspect models/bge-small-en-v1.5-f16.gguf --graph
 ```
 
+## Models
+
+Model families are resolved from the GGUF itself: `general.architecture`
+selects the forward implementation and `tokenizer.ggml.model` selects the
+tokenizer, independently of each other. Adding a family means implementing
+`ModelArch` (`src/arch/`) and/or `Tokenizer` (`src/tokenizer/`) and adding one
+line to the corresponding registry; no existing family's code changes.
+
+| architecture | tokenizer | status |
+|---|---|---|
+| `bert` (bge-small-en-v1.5) | `bert` — WordPiece | supported |
+| `eurobert` (jina-embeddings-v5-text-nano) | `gpt2` — byte-level BPE | planned, PLAN.md M3.6 |
+
+Unsupported files fail at load with the tag they actually carry:
+
+```
+$ nanoembed-inspect v5-nano-retrieval-F16.gguf --graph
+  unavailable — architecture 'eurobert' is not implemented yet — planned as
+  PLAN.md M3.6 (rotary/RMSNorm/SwiGLU + byte-level BPE)
+```
+
+Bench scenarios can name a Hugging Face file instead of a checked-in path:
+
+```yaml
+model: "hf:jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF:v5-nano-retrieval-Q3_K_M.gguf"
+```
+
+This resolves against the local HF cache only — a bench run never downloads
+implicitly, so it cannot silently measure a different quantization than the one
+requested. Missing files print the `huggingface-cli download` command to run.
+
 ## Bench
 
 Linux only — the measurement rests on `/proc/<pid>/{status,statm,smaps_rollup,

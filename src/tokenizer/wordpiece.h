@@ -11,7 +11,8 @@
 
 #pragma once
 
-#include <stdexcept>
+#include "tokenizer.h"
+
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -29,12 +30,7 @@ struct TokenizerConfig {
     bool do_lower_case = true;
 };
 
-class TokenizerError : public std::runtime_error {
-public:
-    explicit TokenizerError(const std::string & w) : std::runtime_error(w) {}
-};
-
-class WordPieceTokenizer {
+class WordPieceTokenizer : public Tokenizer {
 public:
     // Build by reading vocab + special token IDs from GGUF metadata.
     // Throws TokenizerError on missing keys.
@@ -46,20 +42,20 @@ public:
     // If max_seq_len_override > 0 it overrides the configured limit for this
     // call (used by per-context truncation). 0 means "use configured value".
     std::vector<int> encode(const std::string & text,
-                            int                 max_seq_len_override = 0) const;
+                            int                 max_seq_len_override = 0) const override;
 
     int cls_id()      const noexcept { return cfg_.cls_id; }
     int sep_id()      const noexcept { return cfg_.sep_id; }
     int pad_id()      const noexcept { return cfg_.pad_id; }
     int unk_id()      const noexcept { return cfg_.unk_id; }
-    int max_seq_len() const noexcept { return cfg_.max_seq_len; }
-    int vocab_size()  const noexcept { return static_cast<int>(vocab_.size()); }
+    int max_seq_len() const noexcept override { return cfg_.max_seq_len; }
+    int vocab_size()  const noexcept override { return static_cast<int>(vocab_.size()); }
 
     // Read-only access to the loaded vocab (id -> piece string).
     const std::vector<std::string> & vocab() const noexcept { return vocab_; }
 
     // Override max sequence length (defaults to GGUF / config value, 512).
-    void set_max_seq_len(int n) { cfg_.max_seq_len = n; }
+    void set_max_seq_len(int n) override { cfg_.max_seq_len = n; }
 
 private:
     TokenizerConfig                      cfg_;

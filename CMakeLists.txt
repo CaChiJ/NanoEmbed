@@ -45,6 +45,9 @@ add_library(nanoembed_core STATIC
     src/api/c_api.cpp
     src/embedder.cpp
     src/gguf_scanner.cpp
+    src/arch/registry.cpp
+    src/arch/bert_arch.cpp
+    src/tokenizer/registry.cpp
     src/tokenizer/wordpiece.cpp
     src/forward/embed_layer.cpp
     src/forward/attention.cpp

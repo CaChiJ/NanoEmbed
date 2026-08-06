@@ -12,6 +12,9 @@ import pathlib
 import shutil
 import subprocess
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import model_source  # noqa: E402
 from typing import Any, Dict, List
 
 
@@ -31,7 +34,7 @@ def git_sha() -> str:
 def build_cmd(bench: pathlib.Path, sc: Dict[str, Any], root: pathlib.Path) -> List[str]:
     cmd: List[str] = [
         str(bench),
-        "--model",     str(root / sc["model"]),
+        "--model",     str(model_source.resolve(sc["model"], root)),
         "--inputs",    str(root / sc["inputs"]),
         "--scenario",  sc["name"],
         "--warmup",    str(sc.get("warmup", 5)),

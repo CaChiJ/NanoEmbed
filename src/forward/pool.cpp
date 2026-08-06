@@ -21,10 +21,21 @@ ggml_tensor * build_cls_pool(ggml_context * ctx, ggml_tensor * x) {
                                        x->nb[2], /*offset=*/0));
 }
 
+ggml_tensor * build_last_pool(ggml_context * ctx, ggml_tensor * x) {
+    // x: [H, S, B]. Take the final token along S: x[:, S-1, :] -> [H, B].
+    // No padding in the B=1 path, so the last position is always the real
+    // final token; a mask-aware variant lands with M5 batching.
+    const size_t offset = static_cast<size_t>(x->ne[1] - 1) * x->nb[1];
+    return ggml_cont(ctx, ggml_view_2d(ctx, x,
+                                       x->ne[0], x->ne[2],
+                                       x->nb[2], offset));
+}
+
 ggml_tensor * build_pool(ggml_context * ctx, ggml_tensor * x, PoolType type) {
     switch (type) {
         case PoolType::Mean: return build_mean_pool(ctx, x);
         case PoolType::Cls:  return build_cls_pool(ctx, x);
+        case PoolType::Last: return build_last_pool(ctx, x);
     }
     throw std::invalid_argument("unknown PoolType");
 }

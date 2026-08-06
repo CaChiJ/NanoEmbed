@@ -28,6 +28,19 @@ scenarios:
     iter: 10
     milestones: ["M3.5", M4, M5, M6, M7, M8]
 
+  # Larger model for the M4 streaming memory story. bge-small's weights are
+  # only 64 MiB, which understates what streaming buys; jina-v5-nano at Q3_K_M
+  # is the model the savings get measured on. Needs eurobert (M3.6) first, and
+  # the file has to be in the local HF cache -- see bench/model_source.py.
+  - name: single_short_jina_q3km
+    model: "hf:jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF:v5-nano-retrieval-Q3_K_M.gguf"
+    inputs: tests/corpus/eval.txt
+    normalize: true
+    threads: 4
+    warmup: 5
+    iter: 10
+    milestones: ["M3.6", M4, M5, M6, M7, M8]
+
   # Future scenarios:
   # - name: single_short_q8_streaming     # M4+
   # - name: batch32_mixed_q8              # M5+
