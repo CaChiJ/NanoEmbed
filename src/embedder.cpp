@@ -10,10 +10,15 @@
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#endif
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace nanoembed {
@@ -41,6 +46,24 @@ constexpr size_t kMaxGraphTensors = 4096;
 // gigabytes for inputs that are never that long. Callers who do want the full
 // context ask for it explicitly and pay for it.
 constexpr int kDefaultReserveSeqLen = 512;
+
+// "auto" means performance cores on hybrid Macs. ggml synchronizes its CPU
+// workers at per-node barriers, so adding slower efficiency cores can reduce
+// throughput substantially.
+int resolve_n_threads(int requested) {
+    if (requested > 0) return requested;
+
+#if defined(__APPLE__)
+    int n = 0;
+    size_t len = sizeof(n);
+    if (sysctlbyname("hw.perflevel0.logicalcpu", &n, &len, nullptr, 0) == 0 && n > 0) {
+        return n;
+    }
+#endif
+
+    const unsigned hw = std::thread::hardware_concurrency();
+    return hw == 0 ? 4 : static_cast<int>(hw);
+}
 
 // Everything the caller needs from a freshly built graph. The input tensors
 // have no backing store until ggml_gallocr_alloc_graph runs, so they are
@@ -201,7 +224,7 @@ void Embedder::embed(const std::string &    text,
                      const EmbedderConfig & cfg,
                      float *                out) {
     const int n_embed   = impl_->arch->params().n_embed;
-    const int n_threads = (cfg.n_threads <= 0) ? 4 : cfg.n_threads;
+    const int n_threads = resolve_n_threads(cfg.n_threads);
 
     const std::vector<int> ids = impl_->tokenizer->encode(text, cfg.max_seq_len);
     const int64_t S = static_cast<int64_t>(ids.size());
