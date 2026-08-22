@@ -87,8 +87,9 @@ typedef struct nanoembed_context nanoembed_context;
 typedef struct {
     int                  n_threads;     /* 0 = auto (performance cores)       */
     int                  max_batch;     /* > 0; over-batch is auto-subdivided */
-    int                  max_seq_len;   /* > 0; longer inputs are truncated   */
-    int                  use_streaming; /* 0/1 — ignored in M3, honored M4+   */
+    int                  max_seq_len;   /* > 0; longer inputs are truncated,  */
+                                        /* and clamped to the model's context */
+    int                  use_streaming; /* 0/1 — rejected until M4            */
     nanoembed_pool_type  pooling;
     int                  normalize;     /* 0/1 — L2 normalize output          */
 } nanoembed_context_params;

@@ -25,6 +25,28 @@ struct EmbedderConfig {
     bool     normalize   = true;         // L2 normalize the pooled output
 };
 
+// Per-caller compute workspace: graph-metadata arena, reusable graph
+// allocator, and CPU backend. Held across calls so a steady-state embed()
+// performs no large allocation.
+//
+// NOT thread-safe, and deliberately separate from Embedder: the C ABI
+// promises that distinct nanoembed_context handles may be used concurrently
+// against one model, so the mutable scratch belongs to the context, not to
+// the (shared, read-only) model.
+class ComputeScratch {
+public:
+    ComputeScratch();
+    ~ComputeScratch();
+
+    ComputeScratch(const ComputeScratch &)             = delete;
+    ComputeScratch & operator=(const ComputeScratch &) = delete;
+
+private:
+    friend class Embedder;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
 class Embedder {
 public:
     explicit Embedder(const std::string & gguf_path);
@@ -40,25 +62,28 @@ public:
     // Pooling the loaded model was trained for.
     PoolType default_pooling() const noexcept;
 
-    // Grow the activation reservation to cover sequences up to max_seq_len.
+    // Grow a context's activation reservation to cover max_seq_len.
     // Idempotent and monotonic. Called when a context declares its cap, since
     // reserving a long-context model's full window up front is prohibitive
     // (attention is O(S^2)).
-    void reserve(int max_seq_len);
+    void reserve(ComputeScratch & scratch, int max_seq_len) const;
 
-    // Sequence length the activation buffer is currently sized for. May be
+    // Sequence length this context's activation buffer is sized for. May be
     // below max_seq_len(): the reservation follows what contexts asked for,
     // not the model's full context window.
-    int reserved_seq_len() const noexcept;
+    int reserved_seq_len(const ComputeScratch & scratch) const noexcept;
 
-    // Bytes reserved for graph activations, fixed at construction against the
-    // worst case (max_seq_len) and reused by every call. Reported by the bench
-    // and inspect tools; the M4 budget is stated partly against this.
-    size_t graph_buffer_size() const noexcept;
+    // Bytes reserved for this context's graph activations and reused by every
+    // call. Reported by the inspect tool; the M4 budget is stated partly
+    // against this.
+    size_t graph_buffer_size(const ComputeScratch & scratch) const noexcept;
 
     // Tokenize, run forward, pool, normalize. out length = n_embed.
-    // Throws std::runtime_error on tokenizer / forward failures.
-    void embed(const std::string &    text,
+    // `scratch` carries the reusable compute buffers; it must not be shared
+    // between threads. Throws std::runtime_error on tokenizer / forward
+    // failures.
+    void embed(ComputeScratch &       scratch,
+               const std::string &    text,
                const EmbedderConfig & cfg,
                float *                out);
 

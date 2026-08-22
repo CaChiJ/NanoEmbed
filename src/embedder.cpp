@@ -40,13 +40,6 @@ forward::PoolType to_forward_pool(PoolType p) {
 // 1.52 MiB and doubling it showed up as a 1.5 MiB rise in peak RSS.
 constexpr size_t kMaxGraphTensors = 4096;
 
-// Fallback cap for the activation reservation when the caller never states a
-// max_seq_len. Long-context models make "just reserve the model maximum"
-// untenable: attention is O(S^2), so eurobert's 8192 context would reserve
-// gigabytes for inputs that are never that long. Callers who do want the full
-// context ask for it explicitly and pay for it.
-constexpr int kDefaultReserveSeqLen = 512;
-
 // "auto" means performance cores on hybrid Macs. ggml synchronizes its CPU
 // workers at per-node barriers, so adding slower efficiency cores can reduce
 // throughput substantially.
@@ -83,14 +76,6 @@ struct Embedder::Impl {
     gguf_context * gguf      = nullptr;
     ggml_context * model_ctx = nullptr;
 
-    // Graph machinery, persistent for the handle's lifetime. `meta_buf` holds
-    // tensor structs; `galloc` owns the one data buffer that every call reuses
-    // under ggml's liveness analysis.
-    ggml_backend_t       backend = nullptr;
-    ggml_gallocr_t       galloc  = nullptr;
-    std::vector<uint8_t> meta_buf;
-    int                  reserved_seq_len = 0;
-
     GraphIO build_graph(ggml_context * gctx,
                         int64_t        S,
                         PoolType       pooling,
@@ -124,7 +109,34 @@ struct Embedder::Impl {
         return io;
     }
 
-    // A no_alloc context over the persistent meta buffer. Structs only.
+    ~Impl() {
+        if (model_ctx) ggml_free(model_ctx);
+        if (gguf)      gguf_free(gguf);
+    }
+};
+
+struct ComputeScratch::Impl {
+    ggml_backend_t       backend = nullptr;
+    ggml_gallocr_t       galloc  = nullptr;
+    std::vector<uint8_t> meta_buf;
+    int                  reserved_seq_len = 0;
+
+    Impl() {
+        backend = ggml_backend_cpu_init();
+        if (!backend) throw std::runtime_error("ggml_backend_cpu_init failed");
+        galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend));
+        if (!galloc) {
+            ggml_backend_free(backend);
+            throw std::runtime_error("ggml_gallocr_new failed");
+        }
+        meta_buf.resize(kMaxGraphTensors * ggml_tensor_overhead() + ggml_graph_overhead());
+    }
+
+    ~Impl() {
+        if (galloc)  ggml_gallocr_free(galloc);
+        if (backend) ggml_backend_free(backend);
+    }
+
     ggml_context * new_meta_ctx() {
         ggml_init_params p;
         p.mem_size   = meta_buf.size();
@@ -134,34 +146,10 @@ struct Embedder::Impl {
         if (!c) throw std::runtime_error("ggml_init failed for graph meta context");
         return c;
     }
-
-    // Size the activation buffer for sequences up to `seq_len`. Idempotent and
-    // monotonic: several contexts may share one model handle, and the buffer
-    // has to satisfy the longest of them.
-    void reserve_for(int seq_len) {
-        const int want = std::min(std::max(seq_len, 1), arch->params().max_seq_len);
-        if (want <= reserved_seq_len) return;
-
-        ggml_context * gctx = new_meta_ctx();
-        const GraphIO  io   = build_graph(gctx, want, arch->default_pooling(),
-                                          /*normalize=*/true);
-        const bool ok = ggml_gallocr_reserve(galloc, io.graph);
-        ggml_free(gctx);
-        if (!ok) {
-            throw std::runtime_error(
-                "failed to reserve the graph buffer for max_seq_len=" +
-                std::to_string(want));
-        }
-        reserved_seq_len = want;
-    }
-
-    ~Impl() {
-        if (galloc)    ggml_gallocr_free(galloc);
-        if (backend)   ggml_backend_free(backend);
-        if (model_ctx) ggml_free(model_ctx);
-        if (gguf)      gguf_free(gguf);
-    }
 };
+
+ComputeScratch::ComputeScratch() : impl_(std::make_unique<Impl>()) {}
+ComputeScratch::~ComputeScratch() = default;
 
 Embedder::Embedder(const std::string & gguf_path)
     : impl_(std::make_unique<Impl>()) {
@@ -182,18 +170,6 @@ Embedder::Embedder(const std::string & gguf_path)
     impl_->tokenizer = create_tokenizer(impl_->gguf);
     impl_->arch->bind_weights(impl_->model_ctx);
 
-    impl_->backend = ggml_backend_cpu_init();
-    if (!impl_->backend) throw std::runtime_error("ggml_backend_cpu_init failed");
-
-    impl_->galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(impl_->backend));
-    if (!impl_->galloc) throw std::runtime_error("ggml_gallocr_new failed");
-
-    impl_->meta_buf.resize(kMaxGraphTensors * ggml_tensor_overhead() + ggml_graph_overhead());
-
-    // Reserve up front so an unaffordable model fails at load rather than
-    // mid-inference, and so peak RSS is fixed instead of drifting with input
-    // length. reserve_for() grows this if a context asks for more.
-    impl_->reserve_for(kDefaultReserveSeqLen);
 }
 
 Embedder::~Embedder() = default;
@@ -210,35 +186,63 @@ PoolType Embedder::default_pooling() const noexcept {
     return impl_->arch->default_pooling();
 }
 
-int Embedder::reserved_seq_len() const noexcept { return impl_->reserved_seq_len; }
-
-size_t Embedder::graph_buffer_size() const noexcept {
-    return ggml_gallocr_get_buffer_size(impl_->galloc, 0);
+int Embedder::reserved_seq_len(const ComputeScratch & scratch) const noexcept {
+    return scratch.impl_->reserved_seq_len;
 }
 
-void Embedder::reserve(int max_seq_len) {
-    impl_->reserve_for(max_seq_len);
+size_t Embedder::graph_buffer_size(const ComputeScratch & scratch) const noexcept {
+    return ggml_gallocr_get_buffer_size(scratch.impl_->galloc, 0);
 }
 
-void Embedder::embed(const std::string &    text,
+void Embedder::reserve(ComputeScratch & scratch, int max_seq_len) const {
+    ComputeScratch::Impl & sc = *scratch.impl_;
+    const int want = std::min(std::max(max_seq_len, 1), impl_->arch->params().max_seq_len);
+    if (want <= sc.reserved_seq_len) return;
+
+    ggml_context * gctx = sc.new_meta_ctx();
+    try {
+        const GraphIO io = impl_->build_graph(gctx, want, impl_->arch->default_pooling(),
+                                              /*normalize=*/true);
+        if (!ggml_gallocr_reserve(sc.galloc, io.graph)) {
+            throw std::runtime_error(
+                "failed to reserve the graph buffer for max_seq_len=" +
+                std::to_string(want));
+        }
+    } catch (...) {
+        ggml_free(gctx);
+        throw;
+    }
+    ggml_free(gctx);
+    sc.reserved_seq_len = want;
+}
+
+void Embedder::embed(ComputeScratch &       scratch,
+                     const std::string &    text,
                      const EmbedderConfig & cfg,
                      float *                out) {
     const int n_embed   = impl_->arch->params().n_embed;
     const int n_threads = resolve_n_threads(cfg.n_threads);
 
-    const std::vector<int> ids = impl_->tokenizer->encode(text, cfg.max_seq_len);
+    int limit = cfg.max_seq_len > 0 ? cfg.max_seq_len : impl_->arch->params().max_seq_len;
+    limit = std::min(limit, impl_->arch->params().max_seq_len);
+    const std::vector<int> ids = impl_->tokenizer->encode(text, limit);
     const int64_t S = static_cast<int64_t>(ids.size());
 
-    ggml_backend_cpu_set_n_threads(impl_->backend, n_threads);
+    ComputeScratch::Impl & sc = *scratch.impl_;
+    if (S > sc.reserved_seq_len) {
+        reserve(scratch, static_cast<int>(S));
+    }
+
+    ggml_backend_cpu_set_n_threads(sc.backend, n_threads);
 
     // The context holds tensor structs only; tensor data comes from galloc's
     // reused buffer, which is why this costs a few hundred KB per call instead
     // of re-faulting a fresh arena.
-    ggml_context * gctx = impl_->new_meta_ctx();
+    ggml_context * gctx = sc.new_meta_ctx();
     try {
         const GraphIO io = impl_->build_graph(gctx, S, cfg.pooling, cfg.normalize);
 
-        if (!ggml_gallocr_alloc_graph(impl_->galloc, io.graph)) {
+        if (!ggml_gallocr_alloc_graph(sc.galloc, io.graph)) {
             throw std::runtime_error("failed to allocate the graph buffer");
         }
 
@@ -258,7 +262,7 @@ void Embedder::embed(const std::string &    text,
                                     scratch.size() * sizeof(int32_t));
         }
 
-        const ggml_status st = ggml_backend_graph_compute(impl_->backend, io.graph);
+        const ggml_status st = ggml_backend_graph_compute(sc.backend, io.graph);
         if (st != GGML_STATUS_SUCCESS) {
             throw std::runtime_error("ggml_backend_graph_compute failed");
         }

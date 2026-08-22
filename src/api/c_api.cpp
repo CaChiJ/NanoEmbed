@@ -9,6 +9,7 @@
 
 #include <cstring>
 #include <exception>
+#include <memory>
 #include <string>
 
 // ---- Error handling ---------------------------------------------------------
@@ -62,6 +63,10 @@ struct nanoembed_model {
 struct nanoembed_context {
     nanoembed_model *         model = nullptr;
     nanoembed::EmbedderConfig cfg;
+    // Per-context compute buffers. Keeping them here (rather than on the
+    // shared model) is what lets two contexts on one model run concurrently,
+    // as the header promises.
+    nanoembed::ComputeScratch scratch;
 };
 
 // ---- Public C API -----------------------------------------------------------
@@ -134,17 +139,22 @@ nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
         set_error("max_batch and max_seq_len must be positive");
         return nullptr;
     }
+    // Fail loudly rather than silently embedding non-streamed: streaming is
+    // the M4 deliverable.
+    if (params.use_streaming != 0) {
+        set_error("use_streaming is not supported yet (lands in M4)");
+        return nullptr;
+    }
     try {
-        // Size the shared activation buffer for this context's cap before the
-        // context exists, so an unaffordable request fails here rather than on
-        // the first embed call. Monotonic across contexts on one model.
-        model->embedder.reserve(params.max_seq_len);
-
-        auto * c   = new nanoembed_context;
+        // Size this context's activation buffer up front so an unaffordable
+        // request fails here rather than on the first embed call.
+        std::unique_ptr<nanoembed_context> holder(new nanoembed_context);
+        auto * c   = holder.get();
         c->model   = model;
         c->cfg     = from_params(params);
+        model->embedder.reserve(c->scratch, params.max_seq_len);
         clear_error();
-        return c;
+        return holder.release();
     } catch (const std::exception & e) {
         set_error_from_exception(e);
         return nullptr;
@@ -166,7 +176,7 @@ int nanoembed_embed(nanoembed_context * ctx,
         return NANOEMBED_ERR_INVALID_ARG;
     }
     try {
-        ctx->model->embedder.embed(std::string(text), ctx->cfg, out);
+        ctx->model->embedder.embed(ctx->scratch, std::string(text), ctx->cfg, out);
         clear_error();
         return NANOEMBED_OK;
     } catch (const std::exception & e) {
@@ -199,7 +209,7 @@ int nanoembed_embed_batch(nanoembed_context *  ctx,
                 set_error("null pointer in texts[]");
                 return NANOEMBED_ERR_INVALID_ARG;
             }
-            ctx->model->embedder.embed(std::string(texts[i]), ctx->cfg,
+            ctx->model->embedder.embed(ctx->scratch, std::string(texts[i]), ctx->cfg,
                                        out + static_cast<size_t>(i) * static_cast<size_t>(H));
         }
         clear_error();

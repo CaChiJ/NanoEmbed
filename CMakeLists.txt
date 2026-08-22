@@ -146,6 +146,12 @@ if(BUILD_TESTING)
     add_test(NAME seq_len COMMAND nanoembed_seq_len_test)
     set_tests_properties(seq_len PROPERTIES TIMEOUT 600)
 
+    # Sequence-length limits / clamping behaviour.
+    add_executable(nanoembed_limits_test tests/integration/limits_test.cpp)
+    target_link_libraries(nanoembed_limits_test PRIVATE nanoembed_core)
+    target_compile_options(nanoembed_limits_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME limits COMMAND nanoembed_limits_test)
+
     # Bench harness selftest. Unlike every other test here it needs no GGUF, so
     # it is the one bench-side check CI can actually run. It asserts that the
     # fork+exec'd worker's baseline is unaffected by memory the parent dirtied
@@ -172,6 +178,8 @@ if(BUILD_TESTING)
             ENVIRONMENT
             "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_GOLDEN_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/st-bge-small.bin")
         set_tests_properties(seq_len PROPERTIES
+            ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
+        set_tests_properties(limits PROPERTIES
             ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
         set_tests_properties(forward PROPERTIES
             ENVIRONMENT
