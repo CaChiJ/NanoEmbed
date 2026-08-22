@@ -30,11 +30,30 @@ jobs:
         with:
           submodules: recursive
 
+      # The accuracy tests (scanner / tokenizer / forward / golden / limits)
+      # skip themselves without a model, which would make a green CI run
+      # meaningless. Fetch it here and configure with NANOEMBED_REQUIRE_MODEL=ON
+      # so a missing file fails the build instead of quietly skipping.
+      - name: Cache model
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: bge-small-en-v1.5-f16-gguf-v1
+
+      - name: Download model
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p models
+          curl -fsSL -o models/bge-small-en-v1.5-f16.gguf \
+            https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-f16.gguf
+
       - name: Configure
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DNANOEMBED_REQUIRE_MODEL=ON
 
       - name: Build
         run: cmake --build build -j
@@ -42,13 +61,14 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      - name: Smoke-test inspect tool (no GGUF — usage only)
-        # Real GGUF inspection is gated on having a model file, which is
-        # handled by the M3+ download/cache step. M1 only verifies the
-        # binary exists and prints help.
+      - name: Smoke-test inspect tool
         run: |
-          if [ -x build/bin/nanoembed-inspect ]; then
-            build/bin/nanoembed-inspect 2>&1 | grep -q "usage:" || exit 1
-          else
-            echo "nanoembed-inspect binary missing"; exit 1
-          fi
+          build/bin/nanoembed-inspect 2>&1 | grep -q "usage:" || exit 1
+          build/bin/nanoembed-inspect models/bge-small-en-v1.5-f16.gguf | tee /dev/stderr \
+            | grep -q "layers=12" || exit 1
+
+      - name: Smoke-test CLI
+        run: |
+          echo "hello world" \
+            | build/bin/nanoembed-cli models/bge-small-en-v1.5-f16.gguf \
+            | grep -q "," || exit 1

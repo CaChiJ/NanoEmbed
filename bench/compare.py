@@ -183,6 +183,13 @@ def main() -> int:
             regressions  += r
             improvements += i
 
+    # A vanished scenario is a regression too; otherwise an incomplete run
+    # could compare cleanly simply because it produced no result.
+    for name in base.get("scenarios", {}):
+        if name not in cur.get("scenarios", {}):
+            regressions.append(
+                f"{name}: present in baseline, missing from current run")
+
     if improvements:
         print("IMPROVEMENTS (beyond tolerance — confirm they are real, then "
               "commit a new baseline):")

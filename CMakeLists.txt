@@ -163,26 +163,37 @@ if(BUILD_TESTING)
         set_tests_properties(bench_selftest PROPERTIES TIMEOUT 120)
     endif()
 
-    # Wire the local model + fixtures into env-gated tests.
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf)
-        set(_NANOEMBED_MODEL "${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf")
+    # Wire the local model + fixtures into env-gated tests. CI opts into a
+    # hard failure so an unavailable model cannot turn skips into a green run.
+    set(NANOEMBED_TEST_MODEL "${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf"
+        CACHE FILEPATH "GGUF model used by the accuracy tests")
+    option(NANOEMBED_REQUIRE_MODEL
+        "Fail configuration if the accuracy-test model is missing" OFF)
+
+    if(EXISTS ${NANOEMBED_TEST_MODEL})
+        set(_NANOEMBED_MODEL "${NANOEMBED_TEST_MODEL}")
+        set(_NANOEMBED_FIXTURES "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
         set_tests_properties(scanner PROPERTIES
             ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
         set_tests_properties(tokenizer PROPERTIES
             ENVIRONMENT
-            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_TOKENIZER_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tokenizer/bge-small-eval.tsv")
+            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_TOKENIZER_FIXTURE=${_NANOEMBED_FIXTURES}/tokenizer/bge-small-eval.tsv")
         set_tests_properties(forward PROPERTIES
             ENVIRONMENT
-            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_ACTIVATION_FIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/activations")
+            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_ACTIVATION_FIXTURES=${_NANOEMBED_FIXTURES}/activations")
         set_tests_properties(golden PROPERTIES
             ENVIRONMENT
-            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_GOLDEN_FIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/st-bge-small.bin")
+            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_GOLDEN_FIXTURE=${_NANOEMBED_FIXTURES}/golden/st-bge-small.bin")
         set_tests_properties(seq_len PROPERTIES
             ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
         set_tests_properties(limits PROPERTIES
             ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
-        set_tests_properties(forward PROPERTIES
-            ENVIRONMENT
-            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_ACTIVATION_FIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/activations")
+    elseif(NANOEMBED_REQUIRE_MODEL)
+        message(FATAL_ERROR
+            "NANOEMBED_REQUIRE_MODEL=ON but no model at ${NANOEMBED_TEST_MODEL}. "
+            "The accuracy tests would silently skip.")
+    else()
+        message(STATUS
+            "No model at ${NANOEMBED_TEST_MODEL} — accuracy tests will skip.")
     endif()
 endif()
