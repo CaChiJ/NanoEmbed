@@ -65,7 +65,7 @@ public:
                             int                 max_seq_len_override = 0) const override;
 
     int  max_seq_len() const noexcept override { return max_seq_len_; }
-    int  vocab_size()  const noexcept override { return static_cast<int>(vocab_.size()); }
+    int  vocab_size()  const noexcept override { return vocab_size_; }
     void set_max_seq_len(int n) override { max_seq_len_ = n; }
 
     int bos_id() const noexcept { return bos_id_; }
@@ -78,15 +78,17 @@ public:
     int prefix_id() const noexcept { return prefix_id_; }
     int suffix_id() const noexcept { return suffix_id_; }
 
-    const std::vector<std::string> & vocab() const noexcept { return vocab_; }
-
 private:
     struct MergeRule {
         int rank   = 0;   // position in tokenizer.ggml.merges; lower wins
         int merged = -1;  // vocab ID of the concatenation
     };
 
-    std::vector<std::string> vocab_;      // id -> piece
+    // Deliberately no id -> piece table. encode() never needs one: the merge
+    // rules are keyed by ID pairs and the seed symbols come from char_ix_.
+    // Holding all 262k pieces for a 262k vocab costs several MB resident, and
+    // this library exists to fit in tens of MB.
+    int vocab_size_ = 0;
 
     // Only the single-codepoint pieces, which is all encode() needs to seed
     // the symbol list.

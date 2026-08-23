@@ -102,7 +102,7 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
     std::unordered_map<std::string, int> ix;
     ix.reserve(n * 2);
 
-    t.vocab_.reserve(n);
+    t.vocab_size_ = static_cast<int>(n);
     for (size_t i = 0; i < n; ++i) {
         std::string piece = gguf_get_arr_str(ctx, tk, i);
         const int   id    = static_cast<int>(i);
@@ -111,8 +111,7 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
         if (b >= 0) t.byte_id_[b] = id;
         if (is_single_codepoint(piece)) t.char_ix_.emplace(piece, id);
 
-        ix.emplace(piece, id);
-        t.vocab_.emplace_back(std::move(piece));
+        ix.emplace(std::move(piece), id);
     }
 
     // ---- Merges ----
