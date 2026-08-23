@@ -30,23 +30,30 @@ jobs:
         with:
           submodules: recursive
 
-      # The accuracy tests (scanner / tokenizer / forward / golden / limits)
-      # skip themselves without a model, which would make a green CI run
-      # meaningless. Fetch it here and configure with NANOEMBED_REQUIRE_MODEL=ON
-      # so a missing file fails the build instead of quietly skipping.
-      - name: Cache model
+      # Every accuracy test skips itself without a model, which would make a
+      # green CI run meaningless. Both families are fetched here and the
+      # configure step sets NANOEMBED_REQUIRE_MODEL=ON, so a missing file fails
+      # the build instead of quietly turning assertions into skips.
+      #
+      # harrier is the F32 export (1.1 GB) rather than a quantized one on
+      # purpose: the golden thresholds assume the reference and the model run
+      # at the same precision, and a quantized file would need its own looser
+      # bar. Quantization is measured separately, not gated here.
+      - name: Cache models
         id: model-cache
         uses: actions/cache@v4
         with:
           path: models
-          key: bge-small-en-v1.5-f16-gguf-v1
+          key: models-bge-small-f16-harrier-270m-f32-v1
 
-      - name: Download model
+      - name: Download models
         if: steps.model-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p models
           curl -fsSL -o models/bge-small-en-v1.5-f16.gguf \
             https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-f16.gguf
+          curl -fsSL -o models/harrier-270m.gguf \
+            https://huggingface.co/cstr/harrier-270m-GGUF/resolve/main/harrier-270m.gguf
 
       - name: Configure
         run: |
@@ -66,9 +73,13 @@ jobs:
           build/bin/nanoembed-inspect 2>&1 | grep -q "usage:" || exit 1
           build/bin/nanoembed-inspect models/bge-small-en-v1.5-f16.gguf | tee /dev/stderr \
             | grep -q "layers=12" || exit 1
+          # Asserts the head geometry that BERT's division would get wrong:
+          # 4 query heads of width 256 over a 640-wide model, one shared KV head.
+          build/bin/nanoembed-inspect models/harrier-270m.gguf | tee /dev/stderr \
+            | grep -q "heads=4 kv_heads=1 head_dim=256" || exit 1
 
       - name: Smoke-test CLI
         run: |
-          echo "hello world" \
-            | build/bin/nanoembed-cli models/bge-small-en-v1.5-f16.gguf \
-            | grep -q "," || exit 1
+          for m in models/bge-small-en-v1.5-f16.gguf models/harrier-270m.gguf; do
+            echo "hello world" | build/bin/nanoembed-cli "$m" | grep -q "," || exit 1
+          done
