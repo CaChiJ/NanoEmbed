@@ -96,6 +96,18 @@ struct WorkerReport {
 
 // ---- Args ------------------------------------------------------------------
 
+// What the run asked for. "model-default" is recorded verbatim rather than
+// resolved: the parent never loads the model, and guessing here would put a
+// wrong value in a results file that outlives the run.
+const char * pool_name(nanoembed_pool_type p) {
+    switch (p) {
+        case NANOEMBED_POOL_MEAN: return "mean";
+        case NANOEMBED_POOL_CLS:  return "cls";
+        case NANOEMBED_POOL_LAST: return "last";
+        default:                  return "model-default";
+    }
+}
+
 struct Args {
     std::string model_path;
     std::string inputs_path;
@@ -105,7 +117,10 @@ struct Args {
     int  iter               = 50;
     int  threads            = 0;       // 0 = auto
     int  max_seq_len        = 0;       // 0 = model default
-    bool use_cls            = false;
+    // Unset means the model's own pooling, matching the library default.
+    // Naming one here would mean-pool a last-token model and time a graph the
+    // library never builds.
+    nanoembed_pool_type pooling = NANOEMBED_POOL_MODEL_DEFAULT;
     bool normalize          = true;
     int  rss_interval_ms    = 50;
     int  rollup_interval_ms = 500;
@@ -165,7 +180,9 @@ bool parse_args(int argc, char ** argv, Args & a) {
         else if (int_opt("--rollup-interval-ms", a.rollup_interval_ms)) { }
         else if (int_opt("--timeout-sec",        a.timeout_sec))        { }
         else if (int_opt("--selftest-alloc-mb",  a.selftest_alloc_mb))  { }
-        else if (std::strcmp(t, "--cls")          == 0) { a.use_cls   = true;  }
+        else if (std::strcmp(t, "--mean")         == 0) { a.pooling = NANOEMBED_POOL_MEAN; }
+        else if (std::strcmp(t, "--cls")          == 0) { a.pooling = NANOEMBED_POOL_CLS;  }
+        else if (std::strcmp(t, "--last")         == 0) { a.pooling = NANOEMBED_POOL_LAST; }
         else if (std::strcmp(t, "--no-normalize") == 0) { a.normalize = false; }
         else if (std::strcmp(t, "--worker")       == 0) { a.is_worker = true;  }
         else if (std::strcmp(t, "--selftest")     == 0) { a.selftest  = true;  }
@@ -282,7 +299,7 @@ int run_worker(const Args & a) {
         }
 
         nanoembed_context_params p = nanoembed_context_default_params();
-        p.pooling   = a.use_cls ? NANOEMBED_POOL_CLS : NANOEMBED_POOL_MEAN;
+        p.pooling   = a.pooling;
         p.normalize = a.normalize ? 1 : 0;
         if (a.threads     > 0) p.n_threads   = a.threads;
         if (a.max_seq_len > 0) p.max_seq_len = a.max_seq_len;
@@ -430,7 +447,12 @@ std::vector<std::string> worker_argv(const Args & a) {
     add("--iter",        std::to_string(a.iter));
     add("--threads",     std::to_string(a.threads));
     if (a.max_seq_len > 0) add("--max-seq-len", std::to_string(a.max_seq_len));
-    if (a.use_cls)    v.push_back("--cls");
+    switch (a.pooling) {
+        case NANOEMBED_POOL_MEAN: v.push_back("--mean"); break;
+        case NANOEMBED_POOL_CLS:  v.push_back("--cls");  break;
+        case NANOEMBED_POOL_LAST: v.push_back("--last"); break;
+        default: break;   // MODEL_DEFAULT: say nothing, let the worker decide
+    }
     if (!a.normalize) v.push_back("--no-normalize");
     return v;
 }
@@ -688,7 +710,7 @@ std::string build_json(const Args & a, Measurement & m, const Environment & env)
     w.num_i("iter",        a.iter,       true);
     w.num_i("total_items", static_cast<long long>(m.report.total_items), true);
     w.num_i("threads",     a.threads,    true);
-    w.str  ("pooling",     a.use_cls ? "cls" : "mean", true);
+    w.str  ("pooling",     pool_name(a.pooling), true);
     w.num_i("normalize",   a.normalize ? 1 : 0, true);
 
     // Fingerprint of the machine. compare.py refuses to compare across

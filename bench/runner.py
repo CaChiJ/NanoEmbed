@@ -41,8 +41,15 @@ def build_cmd(bench: pathlib.Path, sc: Dict[str, Any], root: pathlib.Path) -> Li
         "--iter",      str(sc.get("iter", 50)),
         "--threads",   str(sc.get("threads", 0)),
     ]
-    if sc.get("pooling") == "cls":
-        cmd.append("--cls")
+    # Omitting `pooling` means the model's own, which is what the library does
+    # by default. Naming it is for pinning a comparison, not a requirement.
+    pooling = sc.get("pooling")
+    if pooling is not None:
+        if pooling not in ("mean", "cls", "last"):
+            raise SystemExit(
+                f"scenario {sc['name']}: unknown pooling {pooling!r} "
+                "(expected mean, cls or last)")
+        cmd.append("--" + pooling)
     if not sc.get("normalize", True):
         cmd.append("--no-normalize")
     if sc.get("max_seq_len", 0) > 0:

@@ -28,18 +28,33 @@ scenarios:
     iter: 10
     milestones: ["M3.5", M4, M5, M6, M7, M8]
 
-  # Larger model for the M4 streaming memory story. bge-small's weights are
-  # only 64 MiB, which understates what streaming buys; jina-v5-nano at Q3_K_M
-  # is the model the savings get measured on. Needs eurobert (M3.6) first, and
-  # the file has to be in the local HF cache -- see bench/model_source.py.
-  - name: single_short_jina_q3km
-    model: "hf:jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF:v5-nano-retrieval-Q3_K_M.gguf"
+  # The model the streaming story actually gets measured on. bge-small's 64 MiB
+  # of weights understates what M4 buys; harrier-270m is 1.09 GB at F32, and
+  # 63% of that is one token-embedding table that layer streaming cannot touch,
+  # which is the case M4 has to answer. Pooling is left unset so the run uses
+  # what the model was trained with (last-token).
+  #
+  # The file is gitignored -- fetch it as README.md describes.
+  - name: single_short_harrier_f32
+    model: models/harrier-270m.gguf
     inputs: tests/corpus/eval.txt
     normalize: true
     threads: 4
     warmup: 5
     iter: 10
     milestones: ["M3.6", M4, M5, M6, M7, M8]
+
+  # Same model quantized. Records what streaming costs on the file size a
+  # deployment would actually ship, and its embedding table stays q8_0 there
+  # too, so the 63% does not shrink.
+  - name: single_short_harrier_q8
+    model: models/harrier-270m-q8_0.gguf
+    inputs: tests/corpus/eval.txt
+    normalize: true
+    threads: 4
+    warmup: 5
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
 
   # Future scenarios:
   # - name: single_short_q8_streaming     # M4+
