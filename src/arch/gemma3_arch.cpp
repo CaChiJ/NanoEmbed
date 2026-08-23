@@ -102,8 +102,19 @@ Gemma3Manifest scan_gemma3(const std::string & gguf_path) {
     }
     m.attn_scale = 1.0f / std::sqrt(qk_scalar);
 
-    m.pooling   = pooling_from_gguf(read_u32_as_int(gguf.get(), "gemma3.pooling_type"));
-    m.normalize = read_bool_or(gguf.get(), "gemma3.normalize_embeddings", true);
+    m.pooling = pooling_from_gguf(read_u32_as_int(gguf.get(), "gemma3.pooling_type"));
+
+    // Stock Gemma 3 alternates local (sliding-window) and global attention
+    // layers. build_block applies full attention to every layer, so a file
+    // that declares a window would compute silently wrong results for the
+    // local ones. harrier's export states no window — every layer is global —
+    // and anything that does is refused rather than approximated.
+    const int window = read_u32_or(gguf.get(), "gemma3.attention.sliding_window", 0);
+    if (window > 0) {
+        fail("gemma3.attention.sliding_window=" + std::to_string(window) +
+             " is not supported: this implementation applies full attention to "
+             "every layer, which would be wrong for sliding-window layers");
+    }
 
     const int64_t H  = a.n_embed;
     const int64_t F  = a.n_ff;

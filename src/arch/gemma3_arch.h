@@ -67,8 +67,7 @@ struct Gemma3Manifest {
     float embed_scale = 0.0f;        // sqrt(n_embed); not folded into the weights
     float attn_scale  = 0.0f;        // 1/sqrt(query_pre_attn_scalar)
 
-    PoolType pooling    = PoolType::Last;   // gemma3.pooling_type
-    bool     normalize  = true;             // gemma3.normalize_embeddings
+    PoolType pooling = PoolType::Last;      // gemma3.pooling_type
 };
 
 // Validate a gemma3 GGUF and resolve every tensor slot. Throws ScanError on

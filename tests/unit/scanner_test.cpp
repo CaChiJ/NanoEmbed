@@ -80,6 +80,7 @@ bool test_bge_small_happy_path() {
     EXPECT_EQ_INT(m.arch.n_vocab,     30522);
     EXPECT_EQ_INT(m.arch.max_seq_len, 512);
 
+
     // 12 layer slots, all 16 tensors per slot populated.
     EXPECT_EQ_INT(m.layers.size(), 12);
     for (size_t i = 0; i < m.layers.size(); ++i) {
@@ -226,7 +227,6 @@ bool test_harrier_happy_path() {
     EXPECT_NEAR_F(a.norm_eps, 1e-6f, 1e-9);
 
     EXPECT_TRUE(m.pooling == nanoembed::PoolType::Last);
-    EXPECT_TRUE(m.normalize);
     EXPECT_NEAR_F(m.embed_scale, std::sqrt(640.0), 1e-4);   // not folded into token_embd
     EXPECT_NEAR_F(m.attn_scale,  1.0 / 16.0,       1e-6);   // 1/sqrt(query_pre_attn_scalar)
 
