@@ -36,6 +36,8 @@
 #pragma once
 
 #include "arch/model_arch.h"
+#include "forward/gated_ffn.h"
+#include "forward/gqa_attention.h"
 #include "gguf_util.h"
 
 #include <string>
@@ -76,22 +78,16 @@ struct Gemma3Manifest {
 Gemma3Manifest scan_gemma3(const std::string & gguf_path);
 
 // Weight pointers resolved against the context that owns the tensor data.
-struct Gemma3AttnWeights {
-    ggml_tensor * norm;              // pre-attention RMSNorm gain
-    ggml_tensor * q, * k, * v, * o;  // unbiased projections
-    ggml_tensor * q_norm, * k_norm;  // QK-norm, applied before RoPE
-    ggml_tensor * post_norm;         // post-attention RMSNorm gain
-};
-
-struct Gemma3FfnWeights {
-    ggml_tensor * norm;              // pre-FFN RMSNorm gain
-    ggml_tensor * gate, * up, * down;
-    ggml_tensor * post_norm;         // post-FFN RMSNorm gain
-};
-
+// The four RMSNorm gains sit here rather than inside the sub-builders: the
+// sandwich (normalize before *and* after each sub-layer) is this family's
+// block structure, while the attention and FFN builders are shared.
 struct Gemma3LayerWeights {
-    Gemma3AttnWeights attn;
-    Gemma3FfnWeights  ffn;
+    ggml_tensor *                        attn_norm;       // before attention
+    forward::GqaAttentionWeights         attn;
+    ggml_tensor *                        attn_post_norm;  // after attention
+    ggml_tensor *                        ffn_norm;        // before the FFN
+    forward::GatedFfnWeights             ffn;
+    ggml_tensor *                        ffn_post_norm;   // after the FFN
 };
 
 class Gemma3ModelArch : public ModelArch {
@@ -113,6 +109,21 @@ public:
 
     ggml_tensor * build_graph(ggml_context *      gctx,
                               const GraphInputs & in) const override;
+
+    // build_graph is the composition of these three. They are public so the
+    // per-layer parity test can drive the real wiring — feeding HuggingFace's
+    // captured activation for layer N-1 in and comparing layer N out — rather
+    // than reimplementing the block and testing its own copy.
+    ggml_tensor * build_embeddings(ggml_context * gctx, ggml_tensor * token_ids) const;
+    ggml_tensor * build_block(ggml_context * gctx,
+                              ggml_tensor *  x,
+                              ggml_tensor *  pos,
+                              int            layer) const;
+    ggml_tensor * build_final_norm(ggml_context * gctx, ggml_tensor * x) const;
+
+    // Scales the graph applies that are not folded into the weights.
+    float embed_scale() const noexcept { return manifest_.embed_scale; }
+    float attn_scale()  const noexcept { return manifest_.attn_scale; }
 
 private:
     Gemma3Manifest                  manifest_;

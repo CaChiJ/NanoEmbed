@@ -1,5 +1,7 @@
 #include "arch/gemma3_arch.h"
 
+#include "forward/rms_norm.h"
+
 #include "ggml.h"
 #include "gguf.h"
 
@@ -175,32 +177,77 @@ void Gemma3ModelArch::bind_weights(ggml_context * model_ctx) {
         const std::string p = "blk." + std::to_string(li) + ".";
         Gemma3LayerWeights & w = layer_w_[static_cast<size_t>(li)];
 
-        w.attn.norm      = T(p + "attn_norm.weight");
+        w.attn_norm      = T(p + "attn_norm.weight");
         w.attn.q         = T(p + "attn_q.weight");
         w.attn.k         = T(p + "attn_k.weight");
         w.attn.v         = T(p + "attn_v.weight");
         w.attn.o         = T(p + "attn_output.weight");
         w.attn.q_norm    = T(p + "attn_q_norm.weight");
         w.attn.k_norm    = T(p + "attn_k_norm.weight");
-        w.attn.post_norm = T(p + "post_attention_norm.weight");
+        w.attn_post_norm = T(p + "post_attention_norm.weight");
 
-        w.ffn.norm       = T(p + "ffn_norm.weight");
+        w.ffn_norm       = T(p + "ffn_norm.weight");
         w.ffn.gate       = T(p + "ffn_gate.weight");
         w.ffn.up         = T(p + "ffn_up.weight");
         w.ffn.down       = T(p + "ffn_down.weight");
-        w.ffn.post_norm  = T(p + "post_ffw_norm.weight");
+        w.ffn_post_norm  = T(p + "post_ffw_norm.weight");
     }
+}
+
+ggml_tensor * Gemma3ModelArch::build_embeddings(ggml_context * gctx,
+                                                ggml_tensor *  token_ids) const {
+    // Token lookup, then the sqrt(n_embed) scale the converter left unfolded.
+    // It survives into the residual stream: the first thing each block does is
+    // RMSNorm, which would erase it, but the residual branch carries the
+    // unnormalized value forward.
+    ggml_tensor * x = ggml_get_rows(gctx, tok_embed_, token_ids);
+    return ggml_scale(gctx, x, manifest_.embed_scale);
+}
+
+ggml_tensor * Gemma3ModelArch::build_block(ggml_context * gctx,
+                                           ggml_tensor *  x,
+                                           ggml_tensor *  pos,
+                                           int            layer) const {
+    const ArchParams &         a = manifest_.params;
+    const Gemma3LayerWeights & w = layer_w_[static_cast<size_t>(layer)];
+
+    forward::GqaAttentionParams ap;
+    ap.n_head         = a.n_head;
+    ap.n_head_kv      = a.n_head_kv;
+    ap.head_dim       = a.head_dim;
+    ap.scale          = manifest_.attn_scale;
+    ap.norm_eps       = a.norm_eps;
+    ap.rope_freq_base = a.rope_freq_base;
+    ap.n_ctx_orig     = a.max_seq_len;
+    ap.causal         = a.causal;
+
+    // Attention sub-layer. Normalized going in and coming out, with the
+    // residual added last — BERT normalizes only after the residual, and
+    // Llama only before the sub-layer.
+    ggml_tensor * h = forward::build_rms_norm(gctx, x, w.attn_norm, a.norm_eps);
+    h = forward::build_gqa_attention(gctx, h, pos, /*kq_mask=*/nullptr, w.attn, ap);
+    h = forward::build_rms_norm(gctx, h, w.attn_post_norm, a.norm_eps);
+    x = ggml_add(gctx, x, h);
+
+    ggml_tensor * f = forward::build_rms_norm(gctx, x, w.ffn_norm, a.norm_eps);
+    f = forward::build_gated_ffn(gctx, f, w.ffn, forward::GateActivation::Gelu);
+    f = forward::build_rms_norm(gctx, f, w.ffn_post_norm, a.norm_eps);
+    return ggml_add(gctx, x, f);
+}
+
+ggml_tensor * Gemma3ModelArch::build_final_norm(ggml_context * gctx,
+                                                ggml_tensor *  x) const {
+    // BERT has no equivalent; here it is the last thing before pooling.
+    return forward::build_rms_norm(gctx, x, output_norm_, manifest_.params.norm_eps);
 }
 
 ggml_tensor * Gemma3ModelArch::build_graph(ggml_context *      gctx,
                                            const GraphInputs & in) const {
-    (void) gctx;
-    (void) in;
-    // The rotary / RMSNorm / GeGLU / grouped-attention builders land with
-    // PLAN.md M3.6 Phase 3. Scanning and weight binding are already live, so
-    // nanoembed-inspect reports this model correctly even now.
-    throw std::runtime_error(
-        "gemma3 forward graph is not implemented yet (PLAN.md M3.6)");
+    ggml_tensor * x = build_embeddings(gctx, in.token_ids);
+    for (int li = 0; li < manifest_.params.n_layer; ++li) {
+        x = build_block(gctx, x, in.pos_ids, li);
+    }
+    return build_final_norm(gctx, x);
 }
 
 } // namespace nanoembed

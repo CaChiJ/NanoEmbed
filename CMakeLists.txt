@@ -56,7 +56,11 @@ add_library(nanoembed_core STATIC
     src/forward/attention.cpp
     src/forward/ffn.cpp
     src/forward/encoder_block.cpp
-    src/forward/pool.cpp)
+    src/forward/pool.cpp
+    src/forward/rms_norm.cpp
+    src/forward/rope.cpp
+    src/forward/gated_ffn.cpp
+    src/forward/gqa_attention.cpp)
 
 target_include_directories(nanoembed_core
     PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -149,6 +153,15 @@ if(BUILD_TESTING)
     add_test(NAME seq_len COMMAND nanoembed_seq_len_test)
     set_tests_properties(seq_len PROPERTIES TIMEOUT 600)
 
+    # Per-layer parity for the gemma3 forward path.
+    add_executable(nanoembed_gemma3_forward_test tests/unit/gemma3_forward_test.cpp)
+    target_include_directories(nanoembed_gemma3_forward_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(nanoembed_gemma3_forward_test PRIVATE nanoembed_core ggml::ggml)
+    target_compile_options(nanoembed_gemma3_forward_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME gemma3_forward COMMAND nanoembed_gemma3_forward_test)
+    set_tests_properties(gemma3_forward PROPERTIES TIMEOUT 600)
+
     # Sequence-length limits / clamping behaviour.
     add_executable(nanoembed_limits_test tests/integration/limits_test.cpp)
     target_link_libraries(nanoembed_limits_test PRIVATE nanoembed_core)
@@ -214,6 +227,11 @@ if(BUILD_TESTING)
     list(APPEND _NE_ENV
         "NANOEMBED_ACTIVATION_FIXTURES=${_NE_FIXTURES}/activations")
     set_tests_properties(forward PROPERTIES ENVIRONMENT "${_NE_ENV}")
+
+    set(_NE_ENV ${_NE_MODELS})
+    list(APPEND _NE_ENV
+        "NANOEMBED_ACTIVATION_FIXTURES_GEMMA3=${_NE_FIXTURES}/activations_gemma3")
+    set_tests_properties(gemma3_forward PROPERTIES ENVIRONMENT "${_NE_ENV}")
 
     set(_NE_ENV ${_NE_MODELS})
     list(APPEND _NE_ENV
