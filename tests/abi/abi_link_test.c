@@ -35,7 +35,8 @@ int main(void) {
     nanoembed_context_params p = nanoembed_context_default_params();
     EXPECT(p.max_batch     >  0,                       "max_batch must be > 0");
     EXPECT(p.max_seq_len   >  0,                       "max_seq_len must be > 0");
-    EXPECT(p.pooling       == NANOEMBED_POOL_MEAN,     "pooling defaults to MEAN");
+    EXPECT(p.pooling       == NANOEMBED_POOL_MODEL_DEFAULT,
+           "pooling defaults to the model's own");
     EXPECT(p.normalize     == 1,                       "normalize defaults on");
     EXPECT(p.use_streaming == 0,                       "streaming defaults off");
 

@@ -104,8 +104,12 @@ int main() {
         return 1;
     }
 
+    // The fixture comes from sentence-transformers, which uses whatever the
+    // model's own 1_Pooling config says — CLS for bge-small, last-token for
+    // harrier. Naming one here would make this test model-specific for no
+    // reason, and would silently compare the wrong pooling for the other.
     nanoembed_context_params params = nanoembed_context_default_params();
-    params.pooling   = NANOEMBED_POOL_CLS;  // bge-small-en-v1.5 default in sentence-transformers
+    params.pooling   = NANOEMBED_POOL_MODEL_DEFAULT;
     params.normalize = 1;
 
     nanoembed_context * ctx = nanoembed_new_context(model, params);

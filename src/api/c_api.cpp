@@ -40,13 +40,35 @@ void set_error_unknown() {
     set_error("unknown internal error");
 }
 
-nanoembed::EmbedderConfig from_params(const nanoembed_context_params & p) {
+nanoembed_pool_type to_public_pool(nanoembed::PoolType p) {
+    switch (p) {
+        case nanoembed::PoolType::Cls:  return NANOEMBED_POOL_CLS;
+        case nanoembed::PoolType::Last: return NANOEMBED_POOL_LAST;
+        default:                        return NANOEMBED_POOL_MEAN;
+    }
+}
+
+// `fallback` is the model's trained pooling, used when the caller asked for
+// MODEL_DEFAULT. Returns false for an enum value outside the public set rather
+// than quietly picking one.
+bool to_internal_pool(nanoembed_pool_type   p,
+                      nanoembed::PoolType   fallback,
+                      nanoembed::PoolType & out) {
+    switch (p) {
+        case NANOEMBED_POOL_MODEL_DEFAULT: out = fallback;                    return true;
+        case NANOEMBED_POOL_MEAN:          out = nanoembed::PoolType::Mean;   return true;
+        case NANOEMBED_POOL_CLS:           out = nanoembed::PoolType::Cls;    return true;
+        case NANOEMBED_POOL_LAST:          out = nanoembed::PoolType::Last;   return true;
+        default:                                                              return false;
+    }
+}
+
+nanoembed::EmbedderConfig from_params(const nanoembed_context_params & p,
+                                      nanoembed::PoolType              pooling) {
     nanoembed::EmbedderConfig c;
     c.n_threads   = p.n_threads;
     c.max_seq_len = p.max_seq_len;
-    c.pooling     = (p.pooling == NANOEMBED_POOL_CLS)
-                      ? nanoembed::PoolType::Cls
-                      : nanoembed::PoolType::Mean;
+    c.pooling     = pooling;
     c.normalize   = (p.normalize != 0);
     return c;
 }
@@ -83,7 +105,7 @@ nanoembed_context_params nanoembed_context_default_params(void) {
     // that are never that long. Callers who want more ask for it explicitly.
     p.max_seq_len   = 512;
     p.use_streaming = 0;
-    p.pooling       = NANOEMBED_POOL_MEAN;
+    p.pooling       = NANOEMBED_POOL_MODEL_DEFAULT;
     p.normalize     = 1;
     return p;
 }
@@ -129,6 +151,14 @@ int nanoembed_n_layer(const nanoembed_model * model) {
     return model->embedder.n_layer();
 }
 
+nanoembed_pool_type nanoembed_model_default_pooling(const nanoembed_model * model) {
+    if (model == nullptr) {
+        set_error("model is null");
+        return NANOEMBED_POOL_MEAN;
+    }
+    return to_public_pool(model->embedder.default_pooling());
+}
+
 nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
                                           nanoembed_context_params  params) {
     if (model == nullptr) {
@@ -145,13 +175,18 @@ nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
         set_error("use_streaming is not supported yet (lands in M4)");
         return nullptr;
     }
+    nanoembed::PoolType pooling = nanoembed::PoolType::Mean;
+    if (!to_internal_pool(params.pooling, model->embedder.default_pooling(), pooling)) {
+        set_error("pooling is not a valid nanoembed_pool_type");
+        return nullptr;
+    }
     try {
         // Size this context's activation buffer up front so an unaffordable
         // request fails here rather than on the first embed call.
         std::unique_ptr<nanoembed_context> holder(new nanoembed_context);
         auto * c   = holder.get();
         c->model   = model;
-        c->cfg     = from_params(params);
+        c->cfg     = from_params(params, pooling);
         model->embedder.reserve(c->scratch, params.max_seq_len);
         clear_error();
         return holder.release();

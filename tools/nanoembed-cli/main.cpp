@@ -1,7 +1,8 @@
 // nanoembed-cli: read one line from stdin, embed it, print the vector.
 //
 // Usage:
-//   echo "hello world" | nanoembed-cli model.gguf [--cls] [--no-normalize] [--threads N]
+//   echo "hello world" | nanoembed-cli model.gguf [--mean|--cls|--last]
+//                                                 [--no-normalize] [--threads N]
 //
 // Output: comma-separated f32 values on one line, "%.6g" precision, to stdout.
 // Diagnostics go to stderr.
@@ -19,7 +20,10 @@ namespace {
 
 void print_usage(const char * prog) {
     std::fprintf(stderr,
-        "usage: %s <gguf-file> [--cls] [--no-normalize] [--threads N] [--max-seq-len N]\n"
+        "usage: %s <gguf-file> [--mean|--cls|--last] [--no-normalize]\n"
+        "       [--threads N] [--max-seq-len N]\n"
+        "\n"
+        "Pooling defaults to whatever the model was trained with.\n"
         "\n"
         "Reads a single line from stdin and prints the embedding as comma-\n"
         "separated f32 values on one line.\n",
@@ -30,7 +34,10 @@ void print_usage(const char * prog) {
 
 int main(int argc, char ** argv) {
     const char * model_path  = nullptr;
-    bool         use_cls     = false;
+    // Unset means "whatever the model was trained with", which is the only
+    // safe default: mean-pooling a last-token model returns a wrong vector
+    // with nothing to indicate it.
+    nanoembed_pool_type pooling = NANOEMBED_POOL_MODEL_DEFAULT;
     bool         normalize   = true;
     int          n_threads   = 0;
     int          max_seq_len = 0;
@@ -38,7 +45,11 @@ int main(int argc, char ** argv) {
     for (int i = 1; i < argc; ++i) {
         const char * a = argv[i];
         if (std::strcmp(a, "--cls") == 0) {
-            use_cls = true;
+            pooling = NANOEMBED_POOL_CLS;
+        } else if (std::strcmp(a, "--mean") == 0) {
+            pooling = NANOEMBED_POOL_MEAN;
+        } else if (std::strcmp(a, "--last") == 0) {
+            pooling = NANOEMBED_POOL_LAST;
         } else if (std::strcmp(a, "--no-normalize") == 0) {
             normalize = false;
         } else if (std::strcmp(a, "--threads") == 0 && i + 1 < argc) {
@@ -70,7 +81,7 @@ int main(int argc, char ** argv) {
     }
 
     nanoembed_context_params params = nanoembed_context_default_params();
-    params.pooling   = use_cls ? NANOEMBED_POOL_CLS : NANOEMBED_POOL_MEAN;
+    params.pooling   = pooling;
     params.normalize = normalize ? 1 : 0;
     if (n_threads   > 0) params.n_threads   = n_threads;
     if (max_seq_len > 0) params.max_seq_len = max_seq_len;

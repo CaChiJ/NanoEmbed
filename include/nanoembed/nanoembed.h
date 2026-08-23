@@ -73,8 +73,14 @@ typedef enum {
 /* ---- Pooling -------------------------------------------------------- */
 
 typedef enum {
-    NANOEMBED_POOL_MEAN = 0, /* mean over non-pad tokens */
-    NANOEMBED_POOL_CLS  = 1  /* [CLS] token only */
+    /* Whatever the loaded model was trained with. The default, because the
+       right choice is a property of the model, not of the caller: pooling a
+       last-token model with MEAN returns a confident, wrong vector and
+       nothing in the output says so. */
+    NANOEMBED_POOL_MODEL_DEFAULT = -1,
+    NANOEMBED_POOL_MEAN          =  0, /* mean over non-pad tokens */
+    NANOEMBED_POOL_CLS           =  1, /* first token (BERT's [CLS]) */
+    NANOEMBED_POOL_LAST          =  2  /* last token (decoder-derived models) */
 } nanoembed_pool_type;
 
 /* ---- Opaque handles ------------------------------------------------- */
@@ -103,6 +109,10 @@ NANOEMBED_API void              nanoembed_free_model(nanoembed_model * model);
 
 NANOEMBED_API int               nanoembed_n_embed(const nanoembed_model * model);
 NANOEMBED_API int               nanoembed_n_layer(const nanoembed_model * model);
+
+/* Pooling the model was trained for. Never returns MODEL_DEFAULT. */
+NANOEMBED_API nanoembed_pool_type
+                                nanoembed_model_default_pooling(const nanoembed_model * model);
 
 /* ---- Context: per-instance runtime state --------------------------- */
 
