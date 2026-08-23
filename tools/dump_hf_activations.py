@@ -55,6 +55,23 @@ def _write_tensors(path: pathlib.Path, tensors: Dict[str, "np.ndarray"]) -> None
             f.write(arr.tobytes())
 
 
+def layout(model):
+    """Locate (embedding module, block list, final norm) for a model family.
+
+    BERT keeps its blocks under encoder.layer and has no post-stack norm;
+    Llama/Gemma-style decoders use embed_tokens/layers/norm. Returning the
+    final norm matters for the latter: it is the last thing that runs before
+    pooling, so a fixture without it cannot localize an error to the norm.
+    """
+    if hasattr(model, "embeddings") and hasattr(model, "encoder"):
+        return model.embeddings, model.encoder.layer, None
+    if hasattr(model, "embed_tokens") and hasattr(model, "layers"):
+        return model.embed_tokens, model.layers, getattr(model, "norm", None)
+    raise SystemExit(
+        f"unrecognized model layout: {type(model).__name__} has neither "
+        "embeddings/encoder nor embed_tokens/layers")
+
+
 def dump_one(model, tokenizer, text: str):
     import numpy as np
     import torch
@@ -70,9 +87,16 @@ def dump_one(model, tokenizer, text: str):
             captures[name] = t.detach().to(torch.float32).cpu().numpy()
         return hook
 
-    hooks.append(model.embeddings.register_forward_hook(grab("embed_out")))
-    for i, layer in enumerate(model.encoder.layer):
+    embed, blocks, final_norm = layout(model)
+
+    # For Gemma this captures the *scaled* embedding: the module multiplies by
+    # sqrt(hidden_size) inside forward, and that scaled tensor is what enters
+    # block 0.
+    hooks.append(embed.register_forward_hook(grab("embed_out")))
+    for i, layer in enumerate(blocks):
         hooks.append(layer.register_forward_hook(grab(f"layer_{i}_out")))
+    if final_norm is not None:
+        hooks.append(final_norm.register_forward_hook(grab("final_norm_out")))
 
     with torch.no_grad():
         model(**enc)
@@ -95,6 +119,12 @@ def main() -> int:
         "The quick brown fox jumps over the lazy dog.",
         "A man is cutting carpet with a knife.",
     ])
+    # float32 even for a bf16 checkpoint: the oracle should differ from our
+    # graph only by implementation, not by arithmetic precision. Our GGUF is
+    # F32, so running the reference in bf16 would inject rounding we do not
+    # have and make a real bug indistinguishable from dtype noise.
+    parser.add_argument("--dtype", default="float32",
+                        choices=["float32", "bfloat16", "float16"])
     args = parser.parse_args()
 
     try:
@@ -105,7 +135,13 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    model = AutoModel.from_pretrained(args.model)
+    import torch
+    # eager attention so the reference follows the written-down math rather
+    # than a fused kernel's associativity.
+    model = AutoModel.from_pretrained(
+        args.model,
+        dtype=getattr(torch, args.dtype),
+        attn_implementation="eager")
     model.eval()
     tok = AutoTokenizer.from_pretrained(args.model)
 
