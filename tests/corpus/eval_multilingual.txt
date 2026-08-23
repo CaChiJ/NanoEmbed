@@ -1,0 +1,32 @@
+한국어 문장을 임베딩합니다.
+형태소 분석 없이 서브워드로 나뉜다
+日本語のテスト文です。
+これは埋め込みモデルの検証です
+这是一个中文测试句子。
+機器學習與自然語言處理
+Тестовое предложение на русском языке.
+Ελληνικό κείμενο για δοκιμή
+هذه جملة اختبار باللغة العربية
+זהו משפט בדיקה בעברית
+यह एक हिंदी परीक्षण वाक्य है
+นี่คือประโยคทดสอบภาษาไทย
+Où est la bibliothèque française ?
+Größe, Straße und Fußgängerzone
+Đây là một câu tiếng Việt
+Çalışma masası üzerinde kitap var
+just shipped it 🚀
+family emoji 👨‍👩‍👧‍👦 renders as one grapheme
+wave 👋🏽 with a skin tone modifier
+mixed 🇰🇷 flag and text
+Ω ≈ ç √ ∫ ˜ µ ≤ ≥ ÷
+E = mc² and ∇·B = 0
+→ ← ↑ ↓ ⇒ ⇔ ∀ ∃ ∈ ∉
+double  spaces  between  words
+   leading spaces
+trailing spaces   
+tabs are excluded but  multiple   runs   are   not
+GPU에서 inference를 돌리면 latency가 줄어든다
+The 東京 office ships 100% of 주문 daily.
+Version 3.14.159 — released 2026-08-23 (final).
+ALL CAPS, mixed Case, and lower case
+url-like text: https://example.com/path?q=1&r=2

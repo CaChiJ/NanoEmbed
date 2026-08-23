@@ -1,4 +1,4 @@
-# cls=101 sep=102 pad=0 unk=100 max_seq_len=512 do_lower_case=1 n=100 model=BAAI/bge-small-en-v1.5
+# model=BAAI/bge-small-en-v1.5 n=100 vocab_size=30522 max_seq_len=512 cls=101 sep=102 pad=0 unk=100 bos=-1 eos=-1 do_lower_case=1
 Kodak expects earnings of 5 cents to 25 cents a share in the quarter.	101,12849,23597,24273,16565,1997,1019,16653,2000,2423,16653,1037,3745,1999,1996,4284,1012,102
 A man is cutting carpet with a knife.	101,1037,2158,2003,6276,10135,2007,1037,5442,1012,102
 The benchmark 10-year Treasury note yield <US10YT=RR> dipped below 4.20 percent on Tuesday.	101,1996,6847,10665,2184,1011,2095,9837,3602,10750,1026,2149,10790,22123,1027,25269,1028,13537,2917,1018,1012,2322,3867,2006,9857,1012,102

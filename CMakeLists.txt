@@ -51,6 +51,7 @@ add_library(nanoembed_core STATIC
     src/arch/gemma3_arch.cpp
     src/tokenizer/registry.cpp
     src/tokenizer/wordpiece.cpp
+    src/tokenizer/spm_bpe.cpp
     src/forward/embed_layer.cpp
     src/forward/attention.cpp
     src/forward/ffn.cpp
@@ -205,7 +206,8 @@ if(BUILD_TESTING)
     # an absent model leaves no stray empty entry behind.
     set(_NE_ENV ${_NE_MODELS})
     list(APPEND _NE_ENV
-        "NANOEMBED_TOKENIZER_FIXTURE=${_NE_FIXTURES}/tokenizer/bge-small-eval.tsv")
+        "NANOEMBED_TOKENIZER_FIXTURE=${_NE_FIXTURES}/tokenizer/bge-small-eval.tsv"
+        "NANOEMBED_TOKENIZER_FIXTURE_GEMMA3=${_NE_FIXTURES}/tokenizer/harrier-270m-eval.tsv")
     set_tests_properties(tokenizer PROPERTIES ENVIRONMENT "${_NE_ENV}")
 
     set(_NE_ENV ${_NE_MODELS})
