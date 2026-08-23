@@ -110,6 +110,11 @@ NANOEMBED_API void              nanoembed_free_model(nanoembed_model * model);
 NANOEMBED_API int               nanoembed_n_embed(const nanoembed_model * model);
 NANOEMBED_API int               nanoembed_n_layer(const nanoembed_model * model);
 
+/* The model's own context length. Callers need it to choose max_seq_len:
+   activation memory grows with its square, so a long-context model's full
+   window can be far more than a machine has. */
+NANOEMBED_API int               nanoembed_model_max_seq_len(const nanoembed_model * model);
+
 /* Pooling the model was trained for. Never returns MODEL_DEFAULT. */
 NANOEMBED_API nanoembed_pool_type
                                 nanoembed_model_default_pooling(const nanoembed_model * model);

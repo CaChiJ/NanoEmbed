@@ -151,6 +151,14 @@ int nanoembed_n_layer(const nanoembed_model * model) {
     return model->embedder.n_layer();
 }
 
+int nanoembed_model_max_seq_len(const nanoembed_model * model) {
+    if (model == nullptr) {
+        set_error("model is null");
+        return NANOEMBED_ERR_INVALID_ARG;
+    }
+    return model->embedder.max_seq_len();
+}
+
 nanoembed_pool_type nanoembed_model_default_pooling(const nanoembed_model * model) {
     if (model == nullptr) {
         set_error("model is null");

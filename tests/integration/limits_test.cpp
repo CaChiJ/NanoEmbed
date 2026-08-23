@@ -1,6 +1,6 @@
 // Sequence-length limit behaviour.
 //
-// The golden corpus is all short sentences, so it never exercised the top of
+// The golden corpus is all short sentences, so it never exercises the top of
 // the length range. This covers the boundary:
 //   1. an input longer than the model's context embeds without aborting
 //      (it used to overflow the graph memory pool and kill the process),
@@ -8,7 +8,8 @@
 //      indexing the positional embedding table out of bounds,
 //   3. use_streaming is rejected until M4 implements it.
 //
-// Skipped if NANOEMBED_TEST_MODEL is unset.
+// Runs for every configured family; each is skipped when its model env var is
+// unset.
 
 #include "nanoembed/nanoembed.h"
 
@@ -29,11 +30,14 @@ void check(bool cond, const char * what) {
     }
 }
 
-// Comfortably more WordPiece pieces than bge-small's 512-token context.
+// Comfortably past a 512-token context for any tokenizer. A repeated *phrase*
+// rather than a repeated word on purpose: BPE vocabularies carry merges for
+// long runs of one repeated token, so "hello hello hello ..." can collapse to
+// far fewer tokens than words and quietly stop being a long input.
 std::string long_text() {
     std::string s;
-    for (int i = 0; i < 400; ++i) {
-        s += "embedding tokenization stress ";
+    for (int i = 0; i < 150; ++i) {
+        s += "the quick brown fox jumps over the lazy dog. ";
     }
     return s;
 }
@@ -51,23 +55,34 @@ double l2_norm(const std::vector<float> & v) {
     return std::sqrt(sum);
 }
 
-} // namespace
+// Reserving a context of S costs O(S^2) in attention scores alone. Short-context
+// encoders can afford their whole window; a 32k-context decoder cannot — its
+// full reservation runs to tens of gigabytes — so the clamp case only runs
+// where the clamped-to value is actually affordable.
+constexpr int kAffordableContext = 2048;
 
-int main() {
-    const char * model_path = std::getenv("NANOEMBED_TEST_MODEL");
+struct ModelUnderTest {
+    const char * label;
+    const char * model_env;
+};
+
+void run_model(const ModelUnderTest & m) {
+    const char * model_path = std::getenv(m.model_env);
     if (!model_path) {
-        std::fprintf(stderr, "[limits_test] skip: NANOEMBED_TEST_MODEL not set\n");
-        return 0;
+        std::fprintf(stderr, "[limits_test] skip %s: %s not set\n", m.label, m.model_env);
+        return;
     }
 
     nanoembed_model * model = nanoembed_load_model(model_path);
     if (!model) {
-        std::fprintf(stderr, "load_model failed: %s\n", nanoembed_last_error());
-        return 1;
+        std::fprintf(stderr, "load_model failed (%s): %s\n", m.label, nanoembed_last_error());
+        ++g_failures;
+        return;
     }
 
-    const int H = nanoembed_n_embed(model);
-    const std::string text = long_text();
+    const int         H          = nanoembed_n_embed(model);
+    const int         model_ctx  = nanoembed_model_max_seq_len(model);
+    const std::string text       = long_text();
 
     // ---- 1. Over-length input at the model's own limit -------------------
     std::vector<float> at_limit(static_cast<size_t>(H));
@@ -86,7 +101,7 @@ int main() {
     }
 
     // ---- 2. max_seq_len beyond the model's context is clamped ------------
-    {
+    if (model_ctx > 0 && model_ctx <= kAffordableContext) {
         nanoembed_context_params p = nanoembed_context_default_params();
         p.max_seq_len = 100000;
         nanoembed_context * ctx = nanoembed_new_context(model, p);
@@ -109,6 +124,10 @@ int main() {
             check(same, "oversized max_seq_len matches the clamped result");
             nanoembed_free_context(ctx);
         }
+    } else {
+        std::fprintf(stderr,
+            "[limits_test] %s: skipping the clamp case, context %d would reserve "
+            "O(n^2) activations\n", m.label, model_ctx);
     }
 
     // ---- 3. Streaming is not silently ignored ----------------------------
@@ -120,8 +139,22 @@ int main() {
         if (ctx) nanoembed_free_context(ctx);
     }
 
+    std::fprintf(stderr, "[limits_test] %s: n_embed=%d model_ctx=%d\n",
+                 m.label, H, model_ctx);
     nanoembed_free_model(model);
+}
 
+const ModelUnderTest kModels[] = {
+    {"bert",   "NANOEMBED_TEST_MODEL"},
+    {"gemma3", "NANOEMBED_TEST_MODEL_GEMMA3"},
+};
+
+} // namespace
+
+int main() {
+    for (const ModelUnderTest & m : kModels) {
+        run_model(m);
+    }
     std::printf("limits_test: %s\n", g_failures == 0 ? "ok" : "FAIL");
     return g_failures == 0 ? 0 : 1;
 }
