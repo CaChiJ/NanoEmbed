@@ -10,10 +10,12 @@
 #include "ggml.h"
 #include "gguf.h"
 
+#include "arch/model_arch.h"
 #include "embedder.h"
 #include "gguf_scanner.h"
 
 #include <cinttypes>
+#include <memory>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -88,6 +90,40 @@ void print_tensors(const gguf_context * ctx) {
                     ggml_type_name(gguf_get_tensor_type(ctx, i)),
                     gguf_get_tensor_size(ctx, i));
     }
+}
+
+const char * pool_name(nanoembed::PoolType p) {
+    switch (p) {
+        case nanoembed::PoolType::Cls:  return "cls";
+        case nanoembed::PoolType::Last: return "last";
+        default:                        return "mean";
+    }
+}
+
+// Family-agnostic view: whatever create_model_arch() could make sense of.
+// Works for any supported architecture and needs no tokenizer, so it reports
+// a model whose tokenizer family is still unimplemented.
+void print_arch(const nanoembed::ModelArch & arch) {
+    const nanoembed::ArchParams & a = arch.params();
+    std::printf("\n# architecture\n");
+    std::printf("  name=%s layers=%d hidden=%d ffn=%d vocab=%d max_seq_len=%d\n",
+                a.name.c_str(), a.n_layer, a.n_embed, a.n_ff, a.n_vocab, a.max_seq_len);
+    std::printf("  heads=%d kv_heads=%d head_dim=%d%s\n",
+                a.n_head, a.n_head_kv, a.head_dim,
+                a.n_head_kv < a.n_head ? "  (grouped/multi-query)" : "");
+    std::printf("  norm_eps=%g attention=%s",
+                static_cast<double>(a.norm_eps), a.causal ? "causal" : "bidirectional");
+    if (a.rope_freq_base > 0.0f) {
+        std::printf(" rope_freq_base=%g", static_cast<double>(a.rope_freq_base));
+    } else {
+        std::printf(" positions=learned");
+    }
+    std::printf("\n  default pooling=%s\n", pool_name(arch.default_pooling()));
+
+    const nanoembed::InputRequirements r = arch.inputs();
+    std::printf("  graph inputs: token_ids%s%s\n",
+                r.needs_pos_ids  ? " pos_ids"  : "",
+                r.needs_type_ids ? " type_ids" : "");
 }
 
 void print_manifest(const nanoembed::ModelManifest & m) {
@@ -193,13 +229,22 @@ int main(int argc, char ** argv) {
     print_summary(ctx, path);
     print_metadata(ctx);
 
-    // Best-effort BERT manifest scan. Run this in addition to the raw dump
-    // so users get both the structured view and (with --tensors) the raw view.
+    // Best-effort structured views, in addition to the raw dump. The first is
+    // family-agnostic; the second adds BERT's per-tensor detail and is simply
+    // absent for other architectures.
+    try {
+        const std::unique_ptr<nanoembed::ModelArch> arch =
+            nanoembed::create_model_arch(path);
+        print_arch(*arch);
+    } catch (const nanoembed::ScanError & e) {
+        std::printf("\n# architecture: scan failed — %s\n", e.what());
+    }
+
     try {
         nanoembed::ScanResult scan = nanoembed::scan_gguf(path);
         print_manifest(scan.manifest());
-    } catch (const nanoembed::ScanError & e) {
-        std::printf("\n# manifest: scan failed — %s\n", e.what());
+    } catch (const nanoembed::ScanError &) {
+        // Not a BERT file; the architecture section above already reported it.
     }
 
     if (show_tensors) {

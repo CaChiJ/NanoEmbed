@@ -3,10 +3,10 @@
 // Everything that differs between GGUF model families lives behind this:
 // which metadata keys hold the hyperparameters, which tensors must exist, and
 // what graph to build from them. `bge-small` (arch "bert") and
-// `jina-embeddings-v5-text-nano` (arch "eurobert") share almost nothing —
-// learned vs rotary position encoding, LayerNorm vs RMSNorm, GELU MLP vs
-// SwiGLU, biased vs unbiased projections — so the seam has to sit above the
-// individual forward builders, not inside them.
+// `harrier-oss-v1-270m` (arch "gemma3") share almost nothing — learned vs
+// rotary position encoding, LayerNorm vs RMSNorm, GELU MLP vs gated GeGLU,
+// biased vs unbiased projections, bidirectional vs causal attention — so the
+// seam has to sit above the individual forward builders, not inside them.
 //
 // Adding a family means implementing ModelArch and adding one line to
 // create_model_arch(). No existing family's code is touched.
@@ -24,24 +24,40 @@ struct ggml_tensor;
 namespace nanoembed {
 
 // The hyperparameters every supported encoder has, read from whichever
-// metadata prefix the family uses ("bert.*", "eurobert.*", ...).
+// metadata prefix the family uses ("bert.*", "gemma3.*", ...).
 struct ArchParams {
     std::string name;              // general.architecture
     int   n_layer     = 0;
     int   n_embed     = 0;
-    int   n_head      = 0;
+    int   n_head      = 0;         // query heads
     int   n_ff        = 0;
     int   n_vocab     = 0;
     int   max_seq_len = 0;         // model's own context length
     float norm_eps    = 1e-12f;
+
+    // Head geometry. BERT ties these together (head_dim = n_embed / n_head,
+    // one KV head per query head), but that is a coincidence of its design,
+    // not a rule: gemma3 270M is n_embed=640 with 4 query heads of width 256
+    // and a single shared KV head. Every family sets these explicitly.
+    int head_dim  = 0;             // width of one attention head
+    int n_head_kv = 0;             // KV heads; < n_head means grouped/multi-query
+
+    // Rotary position encoding. 0 means the family does not use RoPE and
+    // carries learned position embeddings instead (BERT).
+    float rope_freq_base = 0.0f;
+
+    // Whether a token may attend to later tokens. Decoder-derived embedding
+    // models (gemma3) are causal; encoders (BERT) are not.
+    bool causal = false;
 };
 
 enum class PoolType { Mean, Cls, Last };
 
 // Graph-time inputs. Which of these an architecture consumes varies: BERT
-// needs segment IDs, eurobert (rotary, no segments) does not. The embedder
-// creates every tensor an arch declares it wants and fills it after
-// allocation.
+// needs segment IDs, gemma3 does not. `pos_ids` is the plain 0..S-1 ramp and
+// serves both uses — BERT indexes its learned table with it, gemma3 feeds it
+// to RoPE. The embedder creates every tensor an arch declares it wants and
+// fills it after allocation.
 struct GraphInputs {
     ggml_tensor * token_ids = nullptr;   // I32 [S, B]
     ggml_tensor * pos_ids   = nullptr;   // I32 [S, B], null if unused

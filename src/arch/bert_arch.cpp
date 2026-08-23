@@ -22,6 +22,15 @@ BertModelArch::BertModelArch(const std::string & gguf_path) {
     params_.n_vocab     = a.n_vocab;
     params_.max_seq_len = a.max_seq_len;
     params_.norm_eps    = a.layer_norm_eps;
+
+    // BERT ties head geometry to the hidden size and uses one KV head per
+    // query head; the scanner has already rejected files where n_embed is not
+    // divisible by n_head. Learned position embeddings, not RoPE, and the
+    // encoder attends in both directions.
+    params_.head_dim       = a.n_embed / a.n_head;
+    params_.n_head_kv      = a.n_head;
+    params_.rope_freq_base = 0.0f;
+    params_.causal         = false;
 }
 
 void BertModelArch::bind_weights(ggml_context * model_ctx) {

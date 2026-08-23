@@ -48,6 +48,7 @@ add_library(nanoembed_core STATIC
     src/gguf_scanner.cpp
     src/arch/registry.cpp
     src/arch/bert_arch.cpp
+    src/arch/gemma3_arch.cpp
     src/tokenizer/registry.cpp
     src/tokenizer/wordpiece.cpp
     src/forward/embed_layer.cpp
@@ -164,37 +165,56 @@ if(BUILD_TESTING)
         set_tests_properties(bench_selftest PROPERTIES TIMEOUT 120)
     endif()
 
-    # Wire the local model + fixtures into env-gated tests. CI opts into a
-    # hard failure so an unavailable model cannot turn skips into a green run.
-    set(NANOEMBED_TEST_MODEL "${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf"
-        CACHE FILEPATH "GGUF model used by the accuracy tests")
+    # Wire the local models + fixtures into env-gated tests. Two families are
+    # exercised, each with its own cache variable so a model kept outside the
+    # tree can be pointed at without editing this file.
+    set(NANOEMBED_TEST_MODEL
+        "${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf"
+        CACHE FILEPATH "BERT GGUF (bge-small-en-v1.5) used by the accuracy tests")
+    set(NANOEMBED_TEST_MODEL_GEMMA3
+        "${CMAKE_CURRENT_SOURCE_DIR}/models/harrier-270m.gguf"
+        CACHE FILEPATH "gemma3 GGUF (harrier-oss-v1-270m) used by the accuracy tests")
     option(NANOEMBED_REQUIRE_MODEL
-        "Fail configuration if the accuracy-test model is missing" OFF)
+        "Fail configuration if an accuracy-test model is missing" OFF)
 
-    if(EXISTS ${NANOEMBED_TEST_MODEL})
-        set(_NANOEMBED_MODEL "${NANOEMBED_TEST_MODEL}")
-        set(_NANOEMBED_FIXTURES "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
-        set_tests_properties(scanner PROPERTIES
-            ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
-        set_tests_properties(tokenizer PROPERTIES
-            ENVIRONMENT
-            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_TOKENIZER_FIXTURE=${_NANOEMBED_FIXTURES}/tokenizer/bge-small-eval.tsv")
-        set_tests_properties(forward PROPERTIES
-            ENVIRONMENT
-            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_ACTIVATION_FIXTURES=${_NANOEMBED_FIXTURES}/activations")
-        set_tests_properties(golden PROPERTIES
-            ENVIRONMENT
-            "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL};NANOEMBED_GOLDEN_FIXTURE=${_NANOEMBED_FIXTURES}/golden/st-bge-small.bin")
-        set_tests_properties(seq_len PROPERTIES
-            ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
-        set_tests_properties(limits PROPERTIES
-            ENVIRONMENT "NANOEMBED_TEST_MODEL=${_NANOEMBED_MODEL}")
-    elseif(NANOEMBED_REQUIRE_MODEL)
-        message(FATAL_ERROR
-            "NANOEMBED_REQUIRE_MODEL=ON but no model at ${NANOEMBED_TEST_MODEL}. "
-            "The accuracy tests would silently skip.")
-    else()
-        message(STATUS
-            "No model at ${NANOEMBED_TEST_MODEL} — accuracy tests will skip.")
-    endif()
+    set(_NE_FIXTURES "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+
+    # A model that is present contributes its env var; one that is absent makes
+    # the tests needing it skip, which is exactly what NANOEMBED_REQUIRE_MODEL
+    # turns into a configure-time failure so CI cannot go green on skips.
+    set(_NE_MODELS "")
+    foreach(_var NANOEMBED_TEST_MODEL NANOEMBED_TEST_MODEL_GEMMA3)
+        if(EXISTS "${${_var}}")
+            list(APPEND _NE_MODELS "${_var}=${${_var}}")
+        elseif(NANOEMBED_REQUIRE_MODEL)
+            message(FATAL_ERROR
+                "NANOEMBED_REQUIRE_MODEL=ON but no model at ${${_var}} "
+                "(set via ${_var}). The accuracy tests would silently skip.")
+        else()
+            message(STATUS
+                "No model at ${${_var}} — tests needing ${_var} will skip.")
+        endif()
+    endforeach()
+
+    # Model-only tests.
+    foreach(_t scanner seq_len limits)
+        set_tests_properties(${_t} PROPERTIES ENVIRONMENT "${_NE_MODELS}")
+    endforeach()
+
+    # Tests that also need a fixture. Built by appending to the model list so
+    # an absent model leaves no stray empty entry behind.
+    set(_NE_ENV ${_NE_MODELS})
+    list(APPEND _NE_ENV
+        "NANOEMBED_TOKENIZER_FIXTURE=${_NE_FIXTURES}/tokenizer/bge-small-eval.tsv")
+    set_tests_properties(tokenizer PROPERTIES ENVIRONMENT "${_NE_ENV}")
+
+    set(_NE_ENV ${_NE_MODELS})
+    list(APPEND _NE_ENV
+        "NANOEMBED_ACTIVATION_FIXTURES=${_NE_FIXTURES}/activations")
+    set_tests_properties(forward PROPERTIES ENVIRONMENT "${_NE_ENV}")
+
+    set(_NE_ENV ${_NE_MODELS})
+    list(APPEND _NE_ENV
+        "NANOEMBED_GOLDEN_FIXTURE=${_NE_FIXTURES}/golden/st-bge-small.bin")
+    set_tests_properties(golden PROPERTIES ENVIRONMENT "${_NE_ENV}")
 endif()
