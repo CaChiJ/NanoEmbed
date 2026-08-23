@@ -85,6 +85,7 @@ ScanResult scan_gguf(const std::string & path) {
     m.arch.n_ff           = read_u32_as_int(gguf_owner.get(), "bert.feed_forward_length");
     m.arch.max_seq_len    = read_u32_as_int(gguf_owner.get(), "bert.context_length");
     m.arch.layer_norm_eps = read_f32_or   (gguf_owner.get(), "bert.attention.layer_norm_epsilon", 1e-12f);
+    m.arch.pooling_type   = read_u32_or   (gguf_owner.get(), "bert.pooling_type", 1);
 
     if (m.arch.n_layer <= 0 || m.arch.n_embed <= 0 ||
         m.arch.n_head <= 0  || m.arch.n_ff    <= 0 ||

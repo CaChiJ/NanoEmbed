@@ -28,9 +28,11 @@ public:
         return InputRequirements{/*needs_pos_ids=*/true, /*needs_type_ids=*/true};
     }
 
-    // bge-small-en-v1.5 is trained with CLS pooling (sentence-transformers'
-    // default for this model); mean stays available through the config.
-    PoolType default_pooling() const noexcept override { return PoolType::Cls; }
+    // Read from bert.pooling_type rather than assumed. BERT embedding models
+    // disagree: bge-small is CLS, all-MiniLM and the e5 family are mean, and
+    // the file states which. Hardcoding one of them was harmless only while
+    // the public default was MEAN and callers had to opt in.
+    PoolType default_pooling() const noexcept override { return default_pooling_; }
 
     void bind_weights(ggml_context * model_ctx) override;
 
@@ -39,6 +41,7 @@ public:
 
 private:
     ArchParams                          params_;
+    PoolType                            default_pooling_ = PoolType::Mean;
     ModelManifest                       manifest_;
     forward::EmbedWeights               embed_w_{};
     std::vector<forward::LayerWeights>  layer_w_;

@@ -51,6 +51,12 @@ struct BertArch {
     int   n_vocab        = 0;     // tokenizer vocab size
     int   max_seq_len    = 0;     // bert.context_length
     float layer_norm_eps = 1e-12f;
+
+    // bert.pooling_type, in llama.cpp's numbering (1=mean, 2=cls, 3=last).
+    // Defaults to mean when the file does not say: that is both the more
+    // common BERT convention and what the public API returned before pooling
+    // began following the model.
+    int   pooling_type   = 1;
 };
 
 struct ModelManifest {

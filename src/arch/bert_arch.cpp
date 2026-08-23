@@ -31,6 +31,12 @@ BertModelArch::BertModelArch(const std::string & gguf_path) {
     params_.n_head_kv      = a.n_head;
     params_.rope_freq_base = 0.0f;
     params_.causal         = false;
+
+    switch (a.pooling_type) {
+        case 2:  default_pooling_ = PoolType::Cls;  break;
+        case 3:  default_pooling_ = PoolType::Last; break;
+        default: default_pooling_ = PoolType::Mean; break;
+    }
 }
 
 void BertModelArch::bind_weights(ggml_context * model_ctx) {

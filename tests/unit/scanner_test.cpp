@@ -80,6 +80,11 @@ bool test_bge_small_happy_path() {
     EXPECT_EQ_INT(m.arch.n_vocab,     30522);
     EXPECT_EQ_INT(m.arch.max_seq_len, 512);
 
+    // Read from the file, not assumed. bge-small states 2 (CLS), but BERT
+    // embedding models disagree — all-MiniLM and the e5 family are mean — and
+    // since pooling now defaults to the model's own, hardcoding one here would
+    // hand those models the wrong pooling with nothing to signal it.
+    EXPECT_EQ_INT(m.arch.pooling_type, 2);
 
     // 12 layer slots, all 16 tensors per slot populated.
     EXPECT_EQ_INT(m.layers.size(), 12);
