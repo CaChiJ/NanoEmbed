@@ -235,6 +235,7 @@ if(BUILD_TESTING)
 
     set(_NE_ENV ${_NE_MODELS})
     list(APPEND _NE_ENV
-        "NANOEMBED_GOLDEN_FIXTURE=${_NE_FIXTURES}/golden/st-bge-small.bin")
+        "NANOEMBED_GOLDEN_FIXTURE=${_NE_FIXTURES}/golden/st-bge-small.bin"
+        "NANOEMBED_GOLDEN_FIXTURE_GEMMA3=${_NE_FIXTURES}/golden/st-harrier-270m.bin")
     set_tests_properties(golden PROPERTIES ENVIRONMENT "${_NE_ENV}")
 endif()

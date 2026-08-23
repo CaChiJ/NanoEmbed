@@ -1,13 +1,21 @@
 // End-to-end golden parity vs sentence-transformers.
 //
 // Loads the NEGD fixture (text + reference embedding) produced by
-// tools/dump_golden.py and asserts cosine similarity ≥ 0.9999 per sample
-// and ≥ 0.99999 mean.
+// tools/dump_golden.py and asserts cosine similarity per sample and on the
+// mean. This is the whole pipeline at once — tokenizer, graph, pooling,
+// normalization — so it is the test that says the model is actually correct
+// rather than merely self-consistent.
 //
-// bge-small-en-v1.5 uses CLS pooling + L2 normalize by default in
-// sentence-transformers; we mirror that here.
+// Runs for every configured family:
 //
-// Skipped if NANOEMBED_TEST_MODEL or NANOEMBED_GOLDEN_FIXTURE is unset.
+//   bge-small-en-v1.5    CLS pooling         NANOEMBED_TEST_MODEL
+//   harrier-oss-v1-270m  last-token pooling  NANOEMBED_TEST_MODEL_GEMMA3
+//
+// Pooling is left at MODEL_DEFAULT rather than named here: the fixture follows
+// each model's own 1_Pooling config, so naming one mode would compare the
+// wrong thing for the other model.
+//
+// Each model is skipped when its env vars are unset.
 
 #include "nanoembed/nanoembed.h"
 
@@ -78,11 +86,25 @@ float cosine(const float * a, const float * b, int n) {
 
 } // namespace
 
-int main() {
-    const char * model_path  = std::getenv("NANOEMBED_TEST_MODEL");
-    const char * golden_path = std::getenv("NANOEMBED_GOLDEN_FIXTURE");
+struct ModelUnderTest {
+    const char * label;
+    const char * model_env;
+    const char * fixture_env;
+};
+
+// Both sides run the same weights at the same precision, so the residual is
+// implementation noise, not quantization loss. Quantized files are compared
+// against our own F32 output separately, where a much looser bar applies.
+constexpr float PER_SAMPLE_TOL = 0.9999f;
+constexpr float MEAN_TOL       = 0.99999f;
+
+// Returns 0 on success or skip, 1 on failure.
+int run_model(const ModelUnderTest & m) {
+    const char * model_path  = std::getenv(m.model_env);
+    const char * golden_path = std::getenv(m.fixture_env);
     if (!model_path || !golden_path) {
-        std::fprintf(stderr, "[golden_test] skip: env not set\n");
+        std::fprintf(stderr, "[golden_test] skip %s: %s/%s not set\n",
+                     m.label, m.model_env, m.fixture_env);
         return 0;
     }
 
@@ -90,56 +112,51 @@ int main() {
     try {
         samples = load_negd(golden_path);
     } catch (const std::exception & e) {
-        std::fprintf(stderr, "[golden_test] %s\n", e.what());
+        std::fprintf(stderr, "[golden_test] %s: %s\n", m.label, e.what());
         return 1;
     }
     if (samples.empty()) {
-        std::fprintf(stderr, "[golden_test] empty fixture\n");
+        std::fprintf(stderr, "[golden_test] %s: empty fixture\n", m.label);
         return 1;
     }
 
     nanoembed_model * model = nanoembed_load_model(model_path);
     if (!model) {
-        std::fprintf(stderr, "load_model failed: %s\n", nanoembed_last_error());
+        std::fprintf(stderr, "load_model failed (%s): %s\n", m.label, nanoembed_last_error());
         return 1;
     }
 
-    // The fixture comes from sentence-transformers, which uses whatever the
-    // model's own 1_Pooling config says — CLS for bge-small, last-token for
-    // harrier. Naming one here would make this test model-specific for no
-    // reason, and would silently compare the wrong pooling for the other.
     nanoembed_context_params params = nanoembed_context_default_params();
     params.pooling   = NANOEMBED_POOL_MODEL_DEFAULT;
     params.normalize = 1;
 
     nanoembed_context * ctx = nanoembed_new_context(model, params);
     if (!ctx) {
-        std::fprintf(stderr, "new_context failed: %s\n", nanoembed_last_error());
+        std::fprintf(stderr, "new_context failed (%s): %s\n", m.label, nanoembed_last_error());
         nanoembed_free_model(model);
         return 1;
     }
 
     const int H = nanoembed_n_embed(model);
     if (H <= 0 || static_cast<int>(samples[0].embedding.size()) != H) {
-        std::fprintf(stderr, "[golden_test] dim mismatch: model=%d fixture=%zu\n",
-                     H, samples[0].embedding.size());
+        std::fprintf(stderr, "[golden_test] %s dim mismatch: model=%d fixture=%zu\n",
+                     m.label, H, samples[0].embedding.size());
         nanoembed_free_context(ctx);
         nanoembed_free_model(model);
         return 1;
     }
 
     std::vector<float> got(static_cast<size_t>(H));
-    int   n_fail  = 0;
-    float min_cos = 1.0f;
+    int    n_fail  = 0;
+    float  min_cos = 1.0f;
     double sum_cos = 0.0;
-    constexpr float PER_SAMPLE_TOL = 0.9999f;
-    constexpr float MEAN_TOL       = 0.99999f;
 
     for (size_t i = 0; i < samples.size(); ++i) {
         const auto & s = samples[i];
         const int rc = nanoembed_embed(ctx, s.text.c_str(), got.data());
         if (rc != NANOEMBED_OK) {
-            std::fprintf(stderr, "embed failed sample[%zu]: %s\n", i, nanoembed_last_error());
+            std::fprintf(stderr, "embed failed (%s) sample[%zu]: %s\n",
+                         m.label, i, nanoembed_last_error());
             nanoembed_free_context(ctx);
             nanoembed_free_model(model);
             return 1;
@@ -151,27 +168,36 @@ int main() {
             ++n_fail;
             if (n_fail <= 3) {
                 std::fprintf(stderr,
-                    "FAIL sample[%zu] cosine=%.6f (tol=%.4f) text=\"%.80s\"\n",
-                    i, static_cast<double>(c), static_cast<double>(PER_SAMPLE_TOL),
-                    s.text.c_str());
+                    "FAIL %s sample[%zu] cosine=%.6f (tol=%.4f) text=\"%.80s\"\n",
+                    m.label, i, static_cast<double>(c),
+                    static_cast<double>(PER_SAMPLE_TOL), s.text.c_str());
             }
         }
     }
 
-    const size_t n_total = samples.size();
+    const size_t n_total  = samples.size();
     const float  mean_cos = static_cast<float>(sum_cos / static_cast<double>(n_total));
-    std::printf("[golden_test] %zu/%zu samples vs sentence-transformers: "
-                "min cosine=%.6f mean cosine=%.6f (per-sample tol %.4f, mean tol %.5f)\n",
-                n_total - static_cast<size_t>(n_fail), n_total,
-                static_cast<double>(min_cos),
-                static_cast<double>(mean_cos),
-                static_cast<double>(PER_SAMPLE_TOL),
-                static_cast<double>(MEAN_TOL));
+    std::printf("[golden_test] %s: %zu/%zu samples vs sentence-transformers, "
+                "min cosine=%.6f mean cosine=%.6f\n",
+                m.label, n_total - static_cast<size_t>(n_fail), n_total,
+                static_cast<double>(min_cos), static_cast<double>(mean_cos));
 
     nanoembed_free_context(ctx);
     nanoembed_free_model(model);
 
-    const bool ok = (n_fail == 0) && (mean_cos >= MEAN_TOL);
-    std::printf("golden_test: %s\n", ok ? "ok" : "FAIL");
-    return ok ? 0 : 1;
+    return (n_fail == 0 && mean_cos >= MEAN_TOL) ? 0 : 1;
+}
+
+const ModelUnderTest kModels[] = {
+    {"bert",   "NANOEMBED_TEST_MODEL",        "NANOEMBED_GOLDEN_FIXTURE"},
+    {"gemma3", "NANOEMBED_TEST_MODEL_GEMMA3", "NANOEMBED_GOLDEN_FIXTURE_GEMMA3"},
+};
+
+int main() {
+    int rc = 0;
+    for (const ModelUnderTest & m : kModels) {
+        if (run_model(m) != 0) rc = 1;
+    }
+    std::printf("golden_test: %s\n", rc == 0 ? "ok" : "FAIL");
+    return rc;
 }

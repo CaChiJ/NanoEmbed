@@ -23,13 +23,22 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="BAAI/bge-small-en-v1.5")
-    parser.add_argument("--corpus", type=pathlib.Path,
-                        default=pathlib.Path("tests/corpus/eval.txt"))
+    parser.add_argument("--corpus", type=pathlib.Path, nargs="+",
+                        default=[pathlib.Path("tests/corpus/eval.txt")],
+                        help="one or more corpus files, concatenated in order")
     parser.add_argument("--out", type=pathlib.Path,
                         default=pathlib.Path("tests/fixtures/golden/st-bge-small.bin"))
     parser.add_argument("--no-normalize", action="store_true",
                         help="disable L2 normalization (off by default; "
                              "sentence-transformers normalizes by default for BGE)")
+    # float32 even for a bf16 checkpoint, for the same reason
+    # dump_hf_activations.py pins it: our GGUF is F32, so a bf16 reference
+    # measures the reference's rounding rather than our implementation. bf16
+    # carries ~8 mantissa bits, and over 18 blocks that lands near cosine
+    # 0.9997 against an F32 computation of the same weights — close enough to
+    # a real bug to be worth ruling out permanently.
+    parser.add_argument("--dtype", default="float32",
+                        choices=["float32", "bfloat16", "float16"])
     args = parser.parse_args()
 
     try:
@@ -39,10 +48,12 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    model = SentenceTransformer(args.model)
+    model = SentenceTransformer(args.model, model_kwargs={"dtype": args.dtype})
 
-    with args.corpus.open(encoding="utf-8") as f:
-        texts = [line.rstrip("\n") for line in f if line.strip()]
+    texts = []
+    for corpus in args.corpus:
+        with corpus.open(encoding="utf-8") as f:
+            texts += [line.rstrip("\n") for line in f if line.strip()]
 
     embeddings = model.encode(
         texts,
