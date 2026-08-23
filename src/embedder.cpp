@@ -40,22 +40,42 @@ forward::PoolType to_forward_pool(PoolType p) {
 // 1.52 MiB and doubling it showed up as a 1.5 MiB rise in peak RSS.
 constexpr size_t kMaxGraphTensors = 4096;
 
-// "auto" means performance cores on hybrid Macs. ggml synchronizes its CPU
-// workers at per-node barriers, so adding slower efficiency cores can reduce
-// throughput substantially.
-int resolve_n_threads(int requested) {
-    if (requested > 0) return requested;
+// Upper bound on the auto-selected thread count.
+//
+// ggml synchronizes its CPU workers at a barrier per graph node, and these
+// graphs have many small nodes, so past a point each added thread costs more
+// in barrier waiting than it contributes. Measured on an 8-core M-series Mac
+// (6 performance cores), ms per embed:
+//
+//                       1       2       4       6       8
+//   bge, 12 tokens     9.4     6.0     4.9    10.9   688.2
+//   bge, 460 tokens  1033.6   976.1   888.9  1597.6  3917.7
+//   gemma3, 12 tokens 236.1   179.7   272.4   394.3  4893.9
+//
+// Four is the best or near-best column in every row, including the one with
+// plenty of work to divide, and the cliff past the performance-core count is
+// severe — a worker scheduled onto an efficiency core makes every barrier wait
+// for it. Batched execution (M5) changes the work-per-node profile completely,
+// so this should be re-measured then rather than assumed to still hold.
+constexpr int kMaxAutoThreads = 4;
 
+// Count of cores worth scheduling on. On a hybrid CPU that means the
+// performance cores only, for the barrier reason above.
+int usable_cores() {
 #if defined(__APPLE__)
-    int n = 0;
+    int    n   = 0;
     size_t len = sizeof(n);
     if (sysctlbyname("hw.perflevel0.logicalcpu", &n, &len, nullptr, 0) == 0 && n > 0) {
         return n;
     }
 #endif
-
     const unsigned hw = std::thread::hardware_concurrency();
-    return hw == 0 ? 4 : static_cast<int>(hw);
+    return hw == 0 ? 1 : static_cast<int>(hw);
+}
+
+int resolve_n_threads(int requested) {
+    if (requested > 0) return requested;
+    return std::min(usable_cores(), kMaxAutoThreads);
 }
 
 // Everything the caller needs from a freshly built graph. The input tensors
