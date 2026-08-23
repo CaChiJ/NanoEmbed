@@ -44,6 +44,7 @@ add_subdirectory(third_party/ggml EXCLUDE_FROM_ALL)
 add_library(nanoembed_core STATIC
     src/api/c_api.cpp
     src/embedder.cpp
+    src/gguf_util.cpp
     src/gguf_scanner.cpp
     src/arch/registry.cpp
     src/arch/bert_arch.cpp
