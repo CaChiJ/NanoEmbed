@@ -195,7 +195,8 @@ nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
         auto * c   = holder.get();
         c->model   = model;
         c->cfg     = from_params(params, pooling);
-        model->embedder.reserve(c->scratch, params.max_seq_len);
+        model->embedder.reserve(c->scratch, params.max_seq_len,
+                                c->cfg.pooling, c->cfg.normalize);
         clear_error();
         return holder.release();
     } catch (const std::exception & e) {

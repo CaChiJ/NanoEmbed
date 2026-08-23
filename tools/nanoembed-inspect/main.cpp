@@ -168,7 +168,7 @@ void print_graph_budget(const char * path) {
     try {
         const nanoembed::Embedder e(path);
         nanoembed::ComputeScratch scratch;
-        e.reserve(scratch, 512);
+        e.reserve(scratch, 512, e.default_pooling(), /*normalize=*/true);
         const double mib = static_cast<double>(e.graph_buffer_size(scratch)) / (1024.0 * 1024.0);
         std::printf("  architecture: %s (model context length %d)\n",
                     e.architecture().c_str(), e.max_seq_len());

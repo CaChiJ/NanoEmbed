@@ -214,15 +214,17 @@ size_t Embedder::graph_buffer_size(const ComputeScratch & scratch) const noexcep
     return ggml_gallocr_get_buffer_size(scratch.impl_->galloc, 0);
 }
 
-void Embedder::reserve(ComputeScratch & scratch, int max_seq_len) const {
+void Embedder::reserve(ComputeScratch & scratch,
+                       int              max_seq_len,
+                       PoolType         pooling,
+                       bool             normalize) const {
     ComputeScratch::Impl & sc = *scratch.impl_;
     const int want = std::min(std::max(max_seq_len, 1), impl_->arch->params().max_seq_len);
     if (want <= sc.reserved_seq_len) return;
 
     ggml_context * gctx = sc.new_meta_ctx();
     try {
-        const GraphIO io = impl_->build_graph(gctx, want, impl_->arch->default_pooling(),
-                                              /*normalize=*/true);
+        const GraphIO io = impl_->build_graph(gctx, want, pooling, normalize);
         if (!ggml_gallocr_reserve(sc.galloc, io.graph)) {
             throw std::runtime_error(
                 "failed to reserve the graph buffer for max_seq_len=" +
@@ -250,7 +252,7 @@ void Embedder::embed(ComputeScratch &       scratch,
 
     ComputeScratch::Impl & sc = *scratch.impl_;
     if (S > sc.reserved_seq_len) {
-        reserve(scratch, static_cast<int>(S));
+        reserve(scratch, static_cast<int>(S), cfg.pooling, cfg.normalize);
     }
 
     ggml_backend_cpu_set_n_threads(sc.backend, n_threads);

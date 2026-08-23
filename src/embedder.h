@@ -66,7 +66,16 @@ public:
     // Idempotent and monotonic. Called when a context declares its cap, since
     // reserving a long-context model's full window up front is prohibitive
     // (attention is O(S^2)).
-    void reserve(ComputeScratch & scratch, int max_seq_len) const;
+    //
+    // `pooling` and `normalize` must be the ones the context will actually
+    // embed with. Reserving against a different graph shape silently defers
+    // the allocation to the first embed() — where a larger graph makes the
+    // allocator resize behind the caller's back, which is exactly the failure
+    // this reservation exists to move forward.
+    void reserve(ComputeScratch & scratch,
+                 int              max_seq_len,
+                 PoolType         pooling,
+                 bool             normalize) const;
 
     // Sequence length this context's activation buffer is sized for. May be
     // below max_seq_len(): the reservation follows what contexts asked for,
