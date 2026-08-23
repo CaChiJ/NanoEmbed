@@ -75,12 +75,16 @@ general.architecture = "bert"
 
 [`create_model_arch()`](../../../src/arch/registry.cpp)은 이 문자열을 먼저 읽는다. 이 단계에서는 특정 모델의 텐서 이름을 아직 가정하지 않는다.
 
-이 순서가 필요한 이유를 eurobert 파일로 생각해 볼 수 있다. eurobert에는 BERT의 `position_embd.weight`나 bias가 있는 Q·K·V 텐서가 없다. 구조 이름을 보기 전에 BERT 검사기를 실행하면 “position tensor가 없다”는 오류가 나온다. 실제 문제는 파일이 손상된 것이 아니라 아직 eurobert를 지원하지 않는 것이다.
+이 순서가 필요한 이유는 `gemma3` 파일로 바로 확인할 수 있다. `gemma3`에는 BERT의
+`position_embd.weight`도, bias가 있는 Q·K·V 텐서도 없다. 구조 이름을 보기 전에
+BERT 검사기를 돌리면 “position tensor가 없다”는 오류가 나오는데, 실제 문제는
+파일이 손상된 것이 아니라 다른 계열이라는 것이다.
 
-먼저 구조 이름을 읽으면 다음처럼 정확한 오류를 만들 수 있다.
+먼저 구조 이름을 읽으면 각 계열을 자기 검사기로 보낼 수 있고, 지원하지 않는
+계열에는 정확한 오류를 만들 수 있다.
 
 ```text
-architecture 'eurobert' is not implemented yet
+architecture 'eurobert' (jina-embeddings-v5-text-nano) is recognized but not implemented
 ```
 
 현재 레지스트리의 동작은 다음과 같다.
@@ -88,6 +92,7 @@ architecture 'eurobert' is not implemented yet
 | `general.architecture` | 결과 |
 |---|---|
 | `bert` | `BertModelArch` 생성 |
+| `gemma3` | `Gemma3ModelArch` 생성 |
 | `eurobert` | 종류를 명시한 미구현 오류 |
 | 그 밖의 값 | 지원하지 않는 구조 오류 |
 
@@ -167,7 +172,10 @@ blk.0.layer_output_norm.weight
 
 `TensorRef`는 실제 가중치를 소유하지 않는다. GGUF 안의 텐서 번호, 자료형, 각 축의 크기, 바이트 수와 파일 위치를 기록한 설명이다.
 
-`ModelManifest`는 BERT 전용 검사 결과다. 모든 모델이 공유하는 공개 계약이 아니다. eurobert처럼 텐서 구성이 다른 모델은 자기 구조에 맞는 검증을 구현한다.
+`ModelManifest`는 BERT 전용 검사 결과다. 모든 모델이 공유하는 공개 계약이 아니다.
+`gemma3`처럼 텐서 구성이 다른 모델은 `Gemma3Manifest`와 `scan_gemma3()`로 자기
+구조에 맞는 검증을 따로 구현한다. 두 검사기가 공유하는 것은 계열과 무관한 부분,
+즉 `gguf_util.h`의 KV 읽기·텐서 조회·차원 검증뿐이다.
 
 `BertModelArch`는 검사 결과에서 공통 하이퍼파라미터를 `ArchParams`로 복사하고 BERT 검사 결과인 manifest를 내부에 보관한다.
 
@@ -258,10 +266,11 @@ nanoembed_context
 | 파일을 열 수 없음 | 구조 이름 확인 또는 GGUF 열기 | 파일 경로 |
 | `general.architecture` 없음 | 모델 레지스트리 | 필수 문자열 키가 없음 |
 | `eurobert` 파일 | 모델 레지스트리 | 인식했지만 아직 미구현 |
-| BERT 메타데이터 누락 | BERT 검사기 | 누락된 키 이름 |
+| 메타데이터 누락 | 해당 계열 검사기 | 누락된 키 이름 |
 | hidden 차원과 헤드 수 불일치 | BERT 검사기 | 나누어지지 않음 |
-| 필수 텐서 누락 | BERT 검사기 | 텐서 이름 |
-| 텐서 차원 크기 불일치 | BERT 검사기 | 예상값과 실제값 |
+| 쿼리/KV 헤드 수 불일치 | gemma3 검사기 | 배수가 아님 |
+| 필수 텐서 누락 | 해당 계열 검사기 | 텐서 이름 |
+| 텐서 차원 크기 불일치 | 해당 계열 검사기 | 예상값과 실제값 |
 | 토크나이저 종류 미지원 | 토크나이저 레지스트리 | GGUF에 기록된 종류 |
 | 특수 토큰 ID 누락 | WordPiece 생성 | 누락된 토크나이저 키 |
 

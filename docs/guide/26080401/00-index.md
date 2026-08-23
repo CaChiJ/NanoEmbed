@@ -33,8 +33,11 @@ nanoembed_embed(ctx, "hello world", out);
 | 기능 | 상태 |
 |---|---|
 | BERT 구조의 `bge-small-en-v1.5` | 지원 |
+| Gemma 3 구조의 `harrier-oss-v1-270m` | 지원 |
 | WordPiece 토크나이저 | 지원 |
+| SentencePiece 계열 BPE 토크나이저 | 지원 |
 | 단일 문장 임베딩 | 지원 |
+| Mean / CLS / Last 풀링 | 지원. 기본값은 모델이 학습된 방식 |
 | 여러 문장 API | 지원하지만 내부에서는 한 문장씩 실행 |
 | 컨텍스트별 그래프 버퍼 재사용 | 지원 |
 | `eurobert` 구조와 GPT-2 BPE | 종류만 식별, 실행은 아직 미지원 |
@@ -42,6 +45,11 @@ nanoembed_embed(ctx, "hello world", out);
 | 실제 레이어 단위 배치 | M5 예정 |
 
 현재 구현은 모델 가중치를 모두 메모리에 올린다. 한 번의 추론에서 생기는 중간 결과는 `nanoembed_context`마다 별도 버퍼에 저장하고 다음 호출에서 재사용한다.
+
+이 가이드의 본문은 BERT 경로를 따라간다. 두 번째 계열인 `gemma3`는 위치 인코딩,
+정규화, FFN, 어텐션이 모두 다르므로, 각 장에서 대응하는 파일을 함께 짚어 둔다.
+구조가 어떻게 다르고 왜 그렇게 갈라졌는지는 `src/arch/gemma3_arch.h`의 머리말과
+[마일스톤 해설서](../../milestones-explained.ko.md)의 7장에 있다.
 
 `PLAN.md`에는 완료된 구조와 미래 구조가 함께 나온다. “예정”으로 표시된 클래스나 디렉터리는 아직 소스에 없을 수 있다. 현재 코드 위치를 찾을 때는 [01장의 디렉터리 지도](01-overview.md#현재-디렉터리-구조)를 기준으로 한다.
 

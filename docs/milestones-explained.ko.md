@@ -38,14 +38,16 @@
 | M2 | GGUF가 올바른 BERT인지 로딩 전에 검증한다 | 완료 |
 | M3 | 메모리 제한을 무시한 정확한 BERT 임베더와 기준값을 만든다 | 완료 |
 | M3.5 | 고정 256 MiB 계산 버퍼를 제거한다 | 완료 |
-| M3.6 | 모델을 교체할 수 있게 만들고 EuroBERT를 추가한다 | 구조만 완료 |
+| M3.6 | 모델을 교체할 수 있게 만들고 두 번째 모델을 추가한다 | 완료 (벤치 baseline 제외) |
 | M4 | 한 번에 한 레이어만 메모리에 두는 스트리밍을 만든다 | 미구현 |
 | M5 | 한 번 읽은 레이어를 여러 입력이 공유하는 실제 배치를 만든다 | 미구현 |
 | M6 | 배치 활성값을 int8/int4로 압축한다 | 미구현·후순위 |
 | M7 | 설치 가능한 라이브러리와 C++ 래퍼를 제공한다 | 미구현 |
 | M8 | Node.js에서 비동기로 호출하게 한다 | 미구현 |
 
-현재 위치는 **BERT F16 기준 구현과 계산 버퍼 개선까지 완료, EuroBERT 지원을 만드는 M3.6 도중**이다. 핵심 기능인 레이어 스트리밍은 아직 없다.
+현재 위치는 **두 모델 계열(BERT, Gemma 3)이 모두 정확하게 동작하는 M3.6 완료 직후**다.
+두 번째 모델은 원래 후보였던 EuroBERT 대신 `microsoft/harrier-oss-v1-270m`(GGUF 태그
+`gemma3`)으로 바꿨다. 이유는 7장에서 설명한다. 핵심 기능인 레이어 스트리밍은 아직 없다.
 
 ---
 
@@ -375,18 +377,56 @@ M3.6은 원래 M1~M8 사이에 없던 선행 단계다. 작은 BERT만으로는 
 
 **상태.** 미구현이며 HF token fixture도 없다.
 
-### 7.8 M3.6 완료 조건
+### 7.8 M3.6 완료 조건과 결과
 
-다음이 모두 있어야 완료다.
+대상 모델을 `microsoft/harrier-oss-v1-270m`(`gemma3`)으로 바꿨다. EuroBERT를 쓰지
+않은 이유는 두 가지다. jina 쪽은 **cc-by-nc-4.0(비상업)** 이라 fixture와 baseline이
+저장소에 들어가면 되돌리기 어렵고, Harrier가 요구하는 메커니즘(GQA, causal 마스킹,
+QK-norm, head_dim 분리)은 요즘 decoder-only 모델의 표준이라 다음 모델로 그대로
+이어진다. `gemma3`가 llama.cpp의 1급 아키텍처라 대조할 참조 구현이 있다는 점도 컸다.
 
-- EuroBERT forward와 byte-level BPE
-- 공개 LAST pooling
-- HF tokenizer ID 완전 일치
-- sentence-transformers golden cosine 통과
-- Q3_K_M 동작과 F16 대비 품질 기록
-- `bench/baseline/M3.6.json`
+| 조건 | 결과 |
+|---|---|
+| 새 모델 forward | 완료 (RoPE, RMSNorm, GeGLU, MQA, QK-norm, causal) |
+| 새 토크나이저 | 완료 (SentencePiece 계열 BPE) |
+| 공개 LAST pooling | 완료. 기본값을 "모델이 학습된 풀링"으로 바꿨다 |
+| HF tokenizer ID 완전 일치 | 132/132 |
+| 레이어별 활성값 대조 | 상대오차 1e-6~2e-5, 임베딩 단계는 정확히 일치 |
+| sentence-transformers golden | 132/132, 코사인 1.000000 |
+| 양자화 품질 기록 | 완료 (아래 표) |
+| `bench/baseline/M3.6.json` | **미완**. Linux 전용 도구라 해당 머신에서 별도 측정 |
 
-현재는 **교체 가능한 구조만 완성**된 상태다.
+양자화 손실은 F32 기준값과 따로 잰다. 구현이 맞는지와 양자화 오차가 얼마인지는
+서로 다른 검사 항목이라 하나의 임계값으로 묶으면 원인 구분이 불가능해진다.
+아래는 같은 sentence-transformers F32 기준값에 대해 132문장을 잰 결과다.
+F32 경로가 그 기준값과 1.000000으로 일치하므로, 남은 차이는 전부 양자화 오차다.
+
+| 파일 | 크기 | 최소 코사인 | 평균 코사인 |
+|---|---:|---:|---:|
+| F32 | 1088 MB | 1.000000 | 1.000000 |
+| q8_0 | 301 MB | 0.999117 | 0.999754 |
+| q5_k | 263 MB | 0.981933 | 0.995445 |
+| q4_k | 251 MB | 0.946921 | 0.984729 |
+
+두 가지를 읽어야 한다.
+
+첫째, **평균은 최악의 경우를 가린다.** q4_k의 평균은 0.9847로 그럴듯하지만 최소는
+0.9469다. 검색 품질은 평균이 아니라 순위가 뒤집히는 문장에서 결정되므로, 이런
+지표는 평균만 보고 판단하면 안 된다.
+
+둘째, **더 세게 양자화해도 파일이 별로 줄지 않는다.** q8_0에서 q4_k로 가면 품질은
+확실히 나빠지는데 크기는 17%만 줄어든다. 토큰 임베딩 표가 세 변형 모두에서 q8_0로
+유지되기 때문이다(178 MB 고정). 줄어드는 것은 블록뿐이고, 그건 파일의 37%다.
+같은 이유로 M4의 메모리 문제도 양자화로는 풀리지 않는다.
+
+이 단계에서 **추측했으면 틀렸을 것**이 셋 있었고, 전부 실물 파일과 참조 구현을
+직접 열어 확인했다. 자세한 내용은 `src/arch/gemma3_arch.h`의 머리말에 적어 두었다.
+
+1. Gemma의 RMSNorm은 `x * (1 + w)`인데, 변환기가 그 `+1`을 가중치에 이미 접어
+   넣었다. 한 번 더 더하면 전 구간이 틀어진다.
+2. 반대로 임베딩의 `sqrt(n_embed)` 스케일은 접혀 있지 않아 그래프가 적용해야 한다.
+3. GGUF는 `add_eos_token=false`라고 적어놨지만 HuggingFace는 `<eos>`를 붙인다.
+   마지막 토큰으로 풀링하는 모델에서 이걸 놓치면 아무 신호 없이 다른 벡터가 나온다.
 
 ---
 
@@ -566,35 +606,38 @@ CLI child process, Node FFI, WebAssembly, Node-API addon이 있다. CLI는 proce
 현재 가능한 것:
 
 - macOS/Linux build와 test
-- BERT GGUF 검사
-- `bge-small-en-v1.5` F16 load
-- WordPiece tokenization
-- mean/CLS 단일 embedding
+- 두 계열의 GGUF 검사와 load — `bert`(bge-small F16), `gemma3`(harrier-270m F32/양자화)
+- WordPiece와 SentencePiece 계열 BPE tokenization, HF와 ID 완전 일치
+- mean/CLS/last 단일 embedding. 기본값은 모델이 학습된 pooling
+- 다국어 입력 (한국어·일본어·중국어·키릴·아랍어·이모지)
 - C batch API. 단, 내부는 N회 단일 실행
 - 최대 길이 제한과 truncate
-- sentence-transformers 정확도 검사
+- 두 모델 모두에 대한 layer별 activation 대조와 sentence-transformers 정확도 검사
 - Linux M3/M3.5 memory/performance 비교
 
 아직 불가능한 것:
 
-- EuroBERT/Jina v5 Nano와 GPT-2 BPE
-- layer streaming과 제품 수준 Q8/Q4
+- layer streaming과 제품 수준 Q8/Q4 (수치만 기록했고 streaming 경로 미검증)
 - 실제 layer-wise batch와 activation compression
+- padding이 있는 batch에서의 last-token pooling. 현재 pooling은 B=1 전제다
+- EuroBERT/Jina v5 Nano와 GPT-2 BPE (식별만)
 - 설치 가능한 shared package와 공개 C++ wrapper
 - Node.js 호출
 
 ## 15. 권장 다음 순서
 
-1. M3.6 byte-level BPE fixture와 tokenizer를 완성한다.
-2. EuroBERT 한 블록을 HF activation과 맞춘다.
-3. 전체 graph와 LAST pooling을 golden에 맞춘다.
-4. Q3_K_M과 F16의 정확도를 기록한다.
-5. M3.6 Linux baseline을 만든다.
-6. 현재 gallocr 재할당 진단의 원인을 확인한다.
-7. M4 persistent/transient memory와 backend buffer 전략을 prototype으로 검증한다.
-8. LayerLoader와 StreamingRunner를 구현한다.
+1. Linux 머신에서 `bench/baseline/M3.6.json`을 만든다. 두 모델 모두 측정한다.
+2. 현재 gallocr 재할당 진단의 원인을 확인한다.
+3. M4의 memory 전략을 prototype으로 검증한다. 여기서 확인해야 할 핵심은
+   `mmap` + `madvise`로 token embedding table의 상주 page를 실제로 제어할 수
+   있는지다. harrier는 parameter의 63%가 이 table이고 layer가 아니라서
+   "읽고 버리기"로는 줄일 수 없다.
+4. LayerLoader와 StreamingRunner를 구현한다.
+5. 양자화 파일을 streaming 경로에서 다시 검증한다.
 
-핵심은 새 모델 수학과 streaming을 동시에 디버깅하지 않는 것이다. 먼저 EuroBERT 인메모리 oracle을 만들고, M4에서는 결과를 유지한 채 weight lifetime만 바꾼다.
+핵심은 새 모델 수학과 streaming을 동시에 디버깅하지 않는 것이다. M3.6이 인메모리
+oracle을 확정했으므로, M4는 결과를 그대로 둔 채 weight lifetime만 바꾼다. 결과가
+달라지면 원인은 streaming 쪽이라고 단정할 수 있다.
 
 ## 16. 용어 정리
 

@@ -116,11 +116,16 @@ BERT
   position_ids 필요
   type_ids 필요
 
-eurobert 계획
+gemma3
   token_ids 필요
-  position_ids 텐서 불필요: RoPE를 그래프에서 계산
+  position_ids 필요: RoPE가 위치 램프를 입력으로 받는다
   type_ids 불필요
 ```
+
+두 계열이 `position_ids`를 같이 쓰는 것은 우연이 아니다. 값이 둘 다 `0..S-1`
+램프이고, BERT는 그것으로 학습된 위치 표를 조회하며 `gemma3`는 그것을 RoPE에
+넘긴다. 덕분에 두 번째 계열을 추가하면서 입력 배선을 건드릴 필요가 없었다.
+causal 마스크도 마찬가지로 그래프 안에서 만들기 때문에 새 입력 텐서가 없다.
 
 현재 BERT 입력은 모두 I32 `[S, 1]` 텐서다.
 
