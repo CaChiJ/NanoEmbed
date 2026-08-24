@@ -280,9 +280,9 @@ nanoembed_load_model
 |---|---:|---|
 | `n_threads` | 0 | 자동 선택. macOS 하이브리드 CPU는 성능 코어 수를 우선 사용 |
 | `max_batch` | 64 | 유효성 검사에 사용. 실제 배치는 M5 예정 |
-| `max_seq_len` | 512 | 더 긴 입력은 자르고 모델 자체 상한도 넘지 않음 |
+| `max_seq_len` | 512 | 2 이상. 더 긴 입력은 자르고 모델 자체 상한도 넘지 않음 |
 | `use_streaming` | 0 | 1은 아직 지원하지 않으므로 오류 |
-| `pooling` | Mean | 필요하면 CLS로 변경 가능 |
+| `pooling` | Model default | 필요하면 Mean/CLS/LAST로 명시적 변경 가능 |
 | `normalize` | 1 | 결과에 L2 정규화 적용 |
 
 내부 C++ 예외는 C API 경계에서 잡아 상태 코드와 `nanoembed_last_error()` 문자열로 바꾼다. 예외가 C ABI 밖으로 나가지 않는다.
@@ -393,6 +393,9 @@ jina는 cc-by-nc-4.0(비상업)이라 fixture와 baseline이 저장소에 박히
 - SentencePiece 계열 BPE 토크나이저
 - 공개 API의 LAST 풀링과 "모델이 학습된 풀링" 기본값
 - 두 계열 모두를 도는 토크나이저·활성값·golden·길이 경계 테스트
+- 동일 모델의 서로 다른 두 context를 병렬 실행하는 동시성 테스트
+- 최대 길이 예약 뒤 첫 추론에서 graph buffer가 커지지 않는 불변식 테스트
+- Harrier Q8_0을 F32 oracle과 비교하는 자동 회귀 게이트
 - 다국어 코퍼스 (`tests/corpus/eval_multilingual.txt`)
 
 검증 결과. 같은 정밀도(F32)로 비교했을 때 레이어별 상대오차는 1e-6~2e-5이고,
@@ -402,7 +405,8 @@ jina는 cc-by-nc-4.0(비상업)이라 fixture와 baseline이 저장소에 박히
 양자화 손실은 F32 기준값 대비 따로 측정한다. 구현 정합성과 양자화 오차는
 서로 다른 검사 항목이므로 하나의 임계값으로 묶지 않는다.
 
-남은 것은 `bench/baseline/M3.6.json`이다. 벤치 도구는 Linux 전용이고 기존
+M3.6 벤치 선택에는 BERT 단문·장문과 Harrier F32가 모두 포함된다. 남은 것은
+`bench/baseline/M3.6.json`이다. 벤치 도구는 Linux 전용이고 기존
 baseline은 다른 머신에서 측정됐으므로, 같은 머신에 접근할 수 있을 때 별도로
 기록한다.
 

@@ -77,7 +77,9 @@
 
 **선택과 이유.** git submodule과 CMake `add_subdirectory`를 선택했다. 직접 커널을 만들면 범위가 지나치게 커지고, 시스템 ggml은 머신별 버전 차이로 재현성이 낮다. ggml 자체 테스트와 예제는 꺼서 NanoEmbed 빌드를 작게 유지한다.
 
-**상태.** 완료됐다. 현재 F16/F32는 ggml 커널을 사용한다. Q8/Q4 제품 경로 검증은 M4에서 한다.
+**상태.** 완료됐다. 현재 F16/F32와 Harrier Q8_0 인메모리 경로는 ggml 커널로
+자동 검증한다. Q4 계열은 수치를 기록했으며, 실제 스트리밍 제품 경로는 M4에서
+정밀도별로 다시 검증한다.
 
 ### 3.3 공개 C ABI 동결
 
@@ -248,7 +250,9 @@ M3의 목적은 최종 메모리 구조가 아니라 **수학적으로 맞는 �
 
 **구현.** tokenizer fixture는 ID 완전 일치, activation fixture는 embedding과 12개 encoder block의 출력, golden fixture는 최종 벡터 cosine을 검사한다. 도구는 `dump_tokenizer_fixture.py`, `dump_hf_activations.py`, `dump_golden.py`다. M3 기준은 sentence-transformers 대비 최소 cosine 0.9999, 평균 0.99999 이상이다.
 
-**상태.** BERT fixture와 테스트는 완료됐다. M4의 llama.cpp quantized oracle과 M3.6 Jina fixture는 아직 없다.
+**상태.** BERT와 Harrier의 tokenizer·activation·golden fixture가 모두 CI에 연결돼
+있다. Harrier Q8_0도 같은 F32 golden에 대해 별도의 허용 범위로 자동 검사한다.
+스트리밍 경로의 양자화 oracle은 M4에서 다시 검증해야 한다.
 
 ### 5.7 벤치마크와 baseline
 
@@ -295,27 +299,49 @@ context 생성 때 `max_seq_len` graph를 만들어 `ggml_gallocr_reserve`를 �
 
 ### 6.5 현재 상태와 주의점
 
-마일스톤은 완료됐고 M3.5 baseline이 있다. 다만 현재 로컬 CLI smoke test에서는 예약 graph와 실제 graph의 node 수가 달라 gallocr가 buffer를 자동 재할당한다는 진단이 한 번 나온다. 기능과 7개 테스트는 통과하지만 “모든 입력이 예약 buffer만 사용한다”는 강한 불변식을 주장하려면 이 원인과 Linux baseline을 다시 확인해야 한다.
+마일스톤은 완료됐고 M3.5 baseline이 있다.
+
+`reserve`가 context 설정이 아니라 기본값으로 예약하던 문제는 고쳤다.
+[`reserve_invariant_test.cpp`](../tests/integration/reserve_invariant_test.cpp)가 두 모델에서
+최대 길이 예약 뒤 첫 호출 전후 buffer 크기가 같은지 검사한다.
+
+다만 **로컬 CLI smoke test에서 한 번 나왔던 gallocr 자동 재할당 진단은 여전히 원인
+미상이다.** 위 수정이 그 원인이었을 것으로 추정했으나, 실측 결과 예약 buffer 크기는
+pooling과 normalization 조합 전체에서 바이트 단위로 동일했다(bge-small 16521216,
+harrier 15208448). 어텐션 활성값이 예약을 지배하고 pooling·normalization이 덧붙이는
+연산은 그 안에 흡수되기 때문이다. 따라서 그 수정은 재할당 진단의 원인이 될 수 없고,
+이 항목은 열린 채로 둔다. "모든 입력이 예약 buffer만 사용한다"는 강한 불변식을
+주장하려면 진단을 재현해 원인을 찾아야 한다.
 
 ---
 
-## 7. M3.6 — 모델 교체 구조와 EuroBERT 지원
+## 7. M3.6 — 모델 교체 구조와 Harrier 지원
 
-M3.6은 원래 M1~M8 사이에 없던 선행 단계다. 작은 BERT만으로는 M4 스트리밍 절감 효과를 충분히 보여 주기 어려워 212M parameter급 Jina v5 Nano를 두 번째 대상으로 추가하면서 생겼다.
+M3.6은 원래 M1~M8 사이에 없던 선행 단계다. 작은 BERT만으로는 M4 스트리밍 절감
+효과를 충분히 보여 주기 어려워 더 큰 두 번째 계열을 추가하면서 생겼다. 최초 후보였던
+Jina v5 Nano 대신 라이선스와 후속 확장성을 검토해 `microsoft/harrier-oss-v1-270m`
+(`gemma3`)을 최종 대상으로 선택했다.
 
 ### 7.1 아키텍처 교체 경계
 
 **무엇인가.** 모델마다 metadata key, 필수 tensor, position encoding, normalization과 FFN이 다르다. 이를 `ModelArch` 뒤에 숨겨 공통 실행기가 구체적인 모델 종류를 몰라도 되게 한다.
 
-**왜 필요한가와 목표.** BERT는 learned position embedding, LayerNorm, GELU와 bias projection을 쓰지만 EuroBERT는 RoPE, RMSNorm, SwiGLU와 bias 없는 projection을 쓴다. BERT manifest에 optional 필드를 계속 더하면 거대한 조건문이 된다. 새 모델을 추가할 때 기존 BERT 코드를 수정하지 않는 것이 목표다.
+**왜 필요한가와 목표.** BERT는 learned position embedding, LayerNorm, GELU와 bias
+projection을 쓰지만 Harrier는 RoPE, RMSNorm, GeGLU, GQA와 causal attention을 쓴다.
+BERT manifest에 optional 필드를 계속 더하면 거대한 조건문이 된다. 새 모델을 추가할
+때 기존 BERT 코드를 수정하지 않는 것이 목표다.
 
 **가능한 방법.** forward 각 단계에 `if (arch...)`를 넣거나, 모든 모델을 담는 거대 manifest를 만들거나, metadata/weight binding/graph build 전체를 architecture 객체로 분리할 수 있다.
 
 **선택과 이유.** 마지막 방식을 택했다. 공통점이 적은 모델을 세부 연산 수준에서 억지로 추상화하지 않고 graph 전체라는 높은 경계에서 나눈다. 두 번째 구현이 실제로 생길 때 추상화한다는 원칙에도 맞는다.
 
-**구현.** [`src/arch/model_arch.h`](../src/arch/model_arch.h)는 공통 parameter, 필요한 graph input, 기본 pooling, weight binding과 encoder graph build 계약을 정의한다. [`src/arch/registry.cpp`](../src/arch/registry.cpp)는 `general.architecture`를 읽어 `bert`를 `BertModelArch`로 연결한다. `eurobert` 태그는 인식하지만 아직 명시적인 미구현 오류를 낸다.
+**구현.** [`src/arch/model_arch.h`](../src/arch/model_arch.h)는 공통 parameter, 필요한
+graph input, 기본 pooling, weight binding과 encoder graph build 계약을 정의한다.
+[`src/arch/registry.cpp`](../src/arch/registry.cpp)는 `general.architecture`를 읽어
+`bert`와 `gemma3`를 각각의 구현으로 연결한다. `eurobert` 태그는 인식하지만 명시적인
+미구현 오류를 낸다.
 
-**상태.** 교체 구조와 BERT 이동은 완료됐고 EuroBERT 구현체는 없다.
+**상태.** 교체 구조와 BERT·Gemma 3 두 구현이 완료됐다. EuroBERT 구현체는 범위 밖이다.
 
 ### 7.2 tokenizer를 architecture와 독립적으로 교체
 
@@ -325,29 +351,39 @@ M3.6은 원래 M1~M8 사이에 없던 선행 단계다. 작은 BERT만으로는 
 
 **가능한 방법과 선택.** 모델 클래스가 tokenizer를 직접 만들게 할 수도 있지만, GGUF의 독립 metadata를 그대로 반영해 별도 `Tokenizer` interface와 registry를 선택했다.
 
-**구현.** [`src/tokenizer/tokenizer.h`](../src/tokenizer/tokenizer.h)는 `encode`, 최대 길이와 vocab 계약을 정의한다. [`registry.cpp`](../src/tokenizer/registry.cpp)는 `bert`를 WordPiece로 연결한다. `gpt2` byte-level BPE는 태그만 인식하고 미구현 오류를 낸다.
+**구현.** [`src/tokenizer/tokenizer.h`](../src/tokenizer/tokenizer.h)는 `encode`, 최대 길이와
+vocab 계약을 정의한다. [`registry.cpp`](../src/tokenizer/registry.cpp)는 `bert`를
+WordPiece, `llama`를 SentencePiece 계열 BPE로 연결한다. `gpt2` byte-level BPE는
+태그만 인식하고 미구현 오류를 낸다.
 
-**상태.** 구조는 완료됐고 BPE는 남아 있다.
+**상태.** Harrier에 필요한 BPE까지 완료됐다.
 
 ### 7.3 LAST pooling
 
-**무엇이며 왜 필요한가.** token별 hidden state를 문장 벡터 하나로 줄여야 한다. BERT는 CLS/mean을 주로 쓰지만 Jina v5 Nano는 마지막 유효 token을 선택한다.
+**무엇이며 왜 필요한가.** token별 hidden state를 문장 벡터 하나로 줄여야 한다.
+BERT는 CLS를, Harrier는 마지막 유효 token을 선택한다.
 
 **가능한 방법과 선택.** 모델 graph 안에 pooling을 중복 구현하거나 공통 builder에 종류를 추가할 수 있다. 수학을 공유할 수 있으므로 공통 builder에 `Last`를 추가하고 모델이 기본 종류를 고르게 했다.
 
 **구현.** [`build_last_pool`](../src/forward/pool.cpp)은 `[H,S,B]`의 마지막 S 위치를 view로 선택한다. 단일 입력은 padding이 없어 맞지만 실제 배치는 문장별 마지막 유효 위치가 다르므로 M5에서 mask-aware로 바꿔야 한다.
 
-**상태.** 내부 계산은 있지만 공개 C ABI의 `NANOEMBED_POOL_LAST`는 아직 없다.
+**상태.** 공개 C ABI의 `NANOEMBED_POOL_LAST`와 `NANOEMBED_POOL_MODEL_DEFAULT`까지
+완료됐다. 기본값은 모델이 학습된 pooling이며 호출자가 Mean/CLS/LAST로 덮어쓸 수 있다.
 
 ### 7.4 긴 context의 예약 정책
 
-**무엇인가.** EuroBERT는 최대 길이 8192다. attention score 메모리는 길이 제곱에 비례하므로 모델 최대치를 무조건 예약하면 수 GB가 필요할 수 있다.
+**무엇인가.** Harrier는 최대 길이 32768을 선언한다. attention score 메모리는 길이
+제곱에 비례하므로 모델 최대치를 무조건 예약하면 현실적으로 감당할 수 없는 공간이
+필요할 수 있다.
 
 **가능한 방법.** 모델 최대를 항상 예약, 첫 요청에서 동적 예약, API의 `max_seq_len` 기준으로 context 생성 때 예약할 수 있다.
 
 **선택과 이유.** 세 번째 방식이다. 첫 요청 중간 OOM보다 context 생성에서 실패시키고, 사용자가 실제 필요한 최대 길이 비용을 명시하게 한다. 기본 cap은 512이며 모델 최대를 넘으면 clamp한다.
 
-**구현과 상태.** `nanoembed_new_context`가 context별 `ComputeScratch`를 만들고 cap 기준으로 `Embedder::reserve`한다. tokenizer도 같은 effective limit을 쓴다. limit 회귀 테스트가 추가돼 통과한다.
+**구현과 상태.** `nanoembed_new_context`가 context별 `ComputeScratch`를 만들고 cap 기준으로
+`Embedder::reserve`한다. tokenizer도 같은 effective limit을 쓴다. 두 지원 토크나이저가
+앞뒤 특수 token을 붙이므로 공개 `max_seq_len`은 2 이상이어야 하며, 1은 context 생성
+때 거부한다. 길이 2와 초과 truncate 회귀 테스트가 이 계약을 고정한다.
 
 ### 7.5 Hugging Face 모델 source
 
@@ -355,27 +391,29 @@ M3.6은 원래 M1~M8 사이에 없던 선행 단계다. 작은 BERT만으로는 
 
 **가능한 방법과 선택.** bench가 자동 다운로드할 수도 있지만 네트워크와 upstream 변경이 측정에 섞인다. `hf:<repo>:<filename>`을 로컬 HF cache에서만 찾고, 없으면 다운로드 명령만 안내하도록 했다.
 
-**구현과 상태.** [`bench/model_source.py`](../bench/model_source.py)와 [`scenarios.yaml`](../bench/scenarios.yaml)의 Jina Q3_K_M 시나리오에 구현됐다. EuroBERT가 실행되지 않아 M3.6 baseline은 없다.
+**구현과 상태.** [`bench/model_source.py`](../bench/model_source.py)는 명시적 Hugging Face
+source를 해석할 수 있고, CI와 README는 Harrier F32/Q8_0의 정확한 저장소와 파일명을
+고정한다. M3.6 시나리오는 BERT 단문·장문과 Harrier F32를 모두 선택한다. baseline이
+없는 이유는 모델 미구현이 아니라 `/proc` 기반 벤치가 Linux 전용이기 때문이다.
 
-### 7.6 남은 EuroBERT forward
+### 7.6 Harrier forward
 
-**해야 하는 일.** EuroBERT metadata/tensor 검증, bias 없는 Q/K/V/O, `ggml_rope_ext` 기반 RoPE, `ggml_rms_norm`, gate/up/down과 `ggml_silu` 기반 SwiGLU, LAST 기본값을 구현해야 한다.
+Harrier 경로는 전용 GGUF manifest와 `Gemma3ModelArch`로 구현했다. RoPE, RMSNorm,
+QK-norm, query 4개가 하나의 KV head를 공유하는 GQA, causal mask, GeGLU와 분리된
+`head_dim`을 ggml primitive로 조합한다. 스캐너가 관련 metadata의 자료형·범위와 모든
+필수 tensor shape를 실행 전에 검증한다. 레이어별 activation fixture가 처음 오차가
+나는 블록을 찾고 최종 golden이 전체 경로를 검사한다.
 
-**가능한 방법과 계획.** 커널을 직접 만들거나 ggml primitive를 조합할 수 있다. 검증된 ggml 연산을 조합할 계획이다. NanoEmbed가 커널을 다시 만들 필요가 없고 quantized dtype도 같은 dispatch를 활용할 수 있기 때문이다.
+### 7.7 SentencePiece 계열 BPE
 
-**상태.** 미구현이며 `src/arch/eurobert_arch.*` 파일도 없다.
+Harrier의 `llama` tokenizer는 GGUF vocab, merge 순위, byte fallback과 BOS/EOS template를
+읽는 독립 구현이다. 특히 GGUF의 `add_eos_token=false`보다 변환기가 기록한
+`suffix_token_id`를 우선한다. 마지막 token을 pooling하는 모델이라 EOS가 빠지면 완전히
+다른 벡터가 되기 때문이다. HF fixture 132문장과 token ID가 완전히 일치한다.
 
-### 7.7 남은 byte-level BPE
-
-**무엇인가.** UTF-8을 byte 기호로 바꾼 뒤 merge rank 순서로 token을 합친다. WordPiece와 vocab 표현, pre-tokenization과 merge 알고리즘이 모두 다르다.
-
-**왜 필요한가.** forward가 맞아도 token ID가 HF와 다르면 embedding은 틀린다. M3.6에서 가장 큰 구현 비용으로 예상된다.
-
-**가능한 방법.** HF tokenizer dependency, llama.cpp tokenizer 재사용, byte mapping/pre-tokenizer/BPE merge 인트리 구현이 있다.
-
-**계획과 이유.** 현재 계획은 runtime dependency를 작게 유지하는 독립 구현이다. 다만 Jina 전용 pre-tokenizer와 약 28만 merge를 정확히 재현해야 하므로 구현 전에 llama.cpp 코드 재사용 가능성과 결합 비용을 다시 비교할 가치가 있다.
-
-**상태.** 미구현이며 HF token fixture도 없다.
+남은 제한은 입력 문자열 안의 added-token literal(예: 문자 그대로의 `<eos>`)을 HF처럼
+정규화 전에 분리하지 않는다는 점이다. 일반 텍스트와 모델이 자동으로 붙이는 특수
+token에는 영향이 없고, 향후 범용 tokenizer 지원에서 별도로 다룬다.
 
 ### 7.8 M3.6 완료 조건과 결과
 
@@ -387,13 +425,16 @@ QK-norm, head_dim 분리)은 요즘 decoder-only 모델의 표준이라 다음 �
 
 | 조건 | 결과 |
 |---|---|
-| 새 모델 forward | 완료 (RoPE, RMSNorm, GeGLU, MQA, QK-norm, causal) |
+| 새 모델 forward | 완료 (RoPE, RMSNorm, GeGLU, GQA, QK-norm, causal) |
 | 새 토크나이저 | 완료 (SentencePiece 계열 BPE) |
 | 공개 LAST pooling | 완료. 기본값을 "모델이 학습된 풀링"으로 바꿨다 |
 | HF tokenizer ID 완전 일치 | 132/132 |
 | 레이어별 활성값 대조 | 상대오차 1e-6~2e-5, 임베딩 단계는 정확히 일치 |
 | sentence-transformers golden | 132/132, 코사인 1.000000 |
-| 양자화 품질 기록 | 완료 (아래 표) |
+| Q8_0 자동 회귀 | 완료. 문장별 0.9985, 평균 0.9995 이상 |
+| context 동시성 | 완료. 공유 모델 + 서로 다른 context 2개 병렬 실행 |
+| 예약 buffer 불변식 | 완료. 최대 길이 첫 실행 전후 크기 동일 |
+| M3.6 벤치 시나리오 | BERT 단문·장문 + Harrier F32 선택 |
 | `bench/baseline/M3.6.json` | **미완**. Linux 전용 도구라 해당 머신에서 별도 측정 |
 
 양자화 손실은 F32 기준값과 따로 잰다. 구현이 맞는지와 양자화 오차가 얼마인지는
@@ -458,9 +499,12 @@ F32 경로가 그 기준값과 1.000000으로 일치하므로, 남은 차이는 
 
 **계획된 선택과 이유.** 세 번째 방식이다. 앞의 두 방식은 계산 순간 메모리를 다시 크게 만든다.
 
-**검증 계획.** llama.cpp embedding을 두 번째 oracle로 삼아 Q8_0 max absolute difference와 cosine을 보고, F16 대비 품질 저하를 따로 기록한다.
+**검증 계획.** 인메모리 Harrier Q8_0은 sentence-transformers F32 oracle 대비 cosine
+게이트가 이미 있다. M4에서는 llama.cpp embedding도 두 번째 oracle로 삼아 스트리밍
+Q8_0/Q4의 max absolute difference와 cosine을 보고, F32 대비 품질 저하를 따로 기록한다.
 
-**상태.** 제품 경로는 미검증이다. ggml이 타입을 지원한다는 사실만으로 전체 graph가 맞다고 간주하지 않는다.
+**상태.** 인메모리 Q8_0 제품 graph는 자동 검증된다. Q4와 아직 없는 스트리밍
+경로는 미검증이며, ggml이 타입을 지원한다는 사실만으로 맞다고 간주하지 않는다.
 
 ### 8.3 안정성과 bench
 
@@ -626,14 +670,14 @@ CLI child process, Node FFI, WebAssembly, Node-API addon이 있다. CLI는 proce
 
 ## 15. 권장 다음 순서
 
-1. Linux 머신에서 `bench/baseline/M3.6.json`을 만든다. 두 모델 모두 측정한다.
-2. 현재 gallocr 재할당 진단의 원인을 확인한다.
-3. M4의 memory 전략을 prototype으로 검증한다. 여기서 확인해야 할 핵심은
+1. Linux 머신에서 `bench/baseline/M3.6.json`을 만든다. BERT 단문·장문과 Harrier
+   F32 세 시나리오를 같은 머신에서 측정한다.
+2. M4의 memory 전략을 prototype으로 검증한다. 여기서 확인해야 할 핵심은
    `mmap` + `madvise`로 token embedding table의 상주 page를 실제로 제어할 수
    있는지다. harrier는 parameter의 63%가 이 table이고 layer가 아니라서
    "읽고 버리기"로는 줄일 수 없다.
-4. LayerLoader와 StreamingRunner를 구현한다.
-5. 양자화 파일을 streaming 경로에서 다시 검증한다.
+3. LayerLoader와 StreamingRunner를 구현한다.
+4. 양자화 파일을 streaming 경로에서 다시 검증한다.
 
 핵심은 새 모델 수학과 streaming을 동시에 디버깅하지 않는 것이다. M3.6이 인메모리
 oracle을 확정했으므로, M4는 결과를 그대로 둔 채 weight lifetime만 바꾼다. 결과가
