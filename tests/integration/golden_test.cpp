@@ -90,13 +90,9 @@ struct ModelUnderTest {
     const char * label;
     const char * model_env;
     const char * fixture_env;
+    float        per_sample_tol;
+    float        mean_tol;
 };
-
-// Both sides run the same weights at the same precision, so the residual is
-// implementation noise, not quantization loss. Quantized files are compared
-// against our own F32 output separately, where a much looser bar applies.
-constexpr float PER_SAMPLE_TOL = 0.9999f;
-constexpr float MEAN_TOL       = 0.99999f;
 
 // Returns 0 on success or skip, 1 on failure.
 int run_model(const ModelUnderTest & m) {
@@ -164,13 +160,13 @@ int run_model(const ModelUnderTest & m) {
         const float c = cosine(got.data(), s.embedding.data(), H);
         if (c < min_cos) min_cos = c;
         sum_cos += c;
-        if (c < PER_SAMPLE_TOL) {
+        if (c < m.per_sample_tol) {
             ++n_fail;
             if (n_fail <= 3) {
                 std::fprintf(stderr,
                     "FAIL %s sample[%zu] cosine=%.6f (tol=%.4f) text=\"%.80s\"\n",
                     m.label, i, static_cast<double>(c),
-                    static_cast<double>(PER_SAMPLE_TOL), s.text.c_str());
+                    static_cast<double>(m.per_sample_tol), s.text.c_str());
             }
         }
     }
@@ -185,12 +181,21 @@ int run_model(const ModelUnderTest & m) {
     nanoembed_free_context(ctx);
     nanoembed_free_model(model);
 
-    return (n_fail == 0 && mean_cos >= MEAN_TOL) ? 0 : 1;
+    return (n_fail == 0 && mean_cos >= m.mean_tol) ? 0 : 1;
 }
 
 const ModelUnderTest kModels[] = {
-    {"bert",   "NANOEMBED_TEST_MODEL",        "NANOEMBED_GOLDEN_FIXTURE"},
-    {"gemma3", "NANOEMBED_TEST_MODEL_GEMMA3", "NANOEMBED_GOLDEN_FIXTURE_GEMMA3"},
+    // Same-precision paths: only implementation noise is allowed.
+    {"bert",       "NANOEMBED_TEST_MODEL",           "NANOEMBED_GOLDEN_FIXTURE",
+                   0.9999f, 0.99999f},
+    {"gemma3-f32", "NANOEMBED_TEST_MODEL_GEMMA3",    "NANOEMBED_GOLDEN_FIXTURE_GEMMA3",
+                   0.9999f, 0.99999f},
+
+    // The measured q8_0 result is min=0.999117, mean=0.999754 against the same
+    // F32 sentence-transformers oracle. These gates leave platform margin while
+    // still catching a material quantized-kernel or model-selection regression.
+    {"gemma3-q8",  "NANOEMBED_TEST_MODEL_GEMMA3_Q8", "NANOEMBED_GOLDEN_FIXTURE_GEMMA3",
+                   0.9985f, 0.9995f},
 };
 
 int main() {

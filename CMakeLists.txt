@@ -109,6 +109,8 @@ endif()
 include(CTest)
 
 if(BUILD_TESTING)
+    find_package(Threads REQUIRED)
+
     # ABI link test: pure-C consumer that links the public ABI and exercises
     # the full surface. Catches accidental ABI breakage from M1 onward.
     add_executable(nanoembed_abi_link_test tests/abi/abi_link_test.c)
@@ -168,6 +170,31 @@ if(BUILD_TESTING)
     target_compile_options(nanoembed_limits_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
     add_test(NAME limits COMMAND nanoembed_limits_test)
 
+    # The C ABI promises distinct contexts can run concurrently on one shared
+    # model. This is the regression guard for context-local mutable scratch.
+    add_executable(nanoembed_context_concurrency_test
+        tests/integration/context_concurrency_test.cpp)
+    target_link_libraries(nanoembed_context_concurrency_test
+        PRIVATE nanoembed_core Threads::Threads)
+    target_compile_options(nanoembed_context_concurrency_test
+        PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME context_concurrency COMMAND nanoembed_context_concurrency_test)
+    set_tests_properties(context_concurrency PROPERTIES TIMEOUT 600)
+
+    # A context must not resize its gallocr buffer on the first embed. Guards
+    # the sequence-length axis; see the test's header for why pooling and
+    # normalization do not currently move the buffer size.
+    add_executable(nanoembed_reserve_invariant_test
+        tests/integration/reserve_invariant_test.cpp)
+    target_include_directories(nanoembed_reserve_invariant_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(nanoembed_reserve_invariant_test
+        PRIVATE nanoembed_core ggml::ggml)
+    target_compile_options(nanoembed_reserve_invariant_test
+        PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME reserve_invariant COMMAND nanoembed_reserve_invariant_test)
+    set_tests_properties(reserve_invariant PROPERTIES TIMEOUT 600)
+
     # Bench harness selftest. Unlike every other test here it needs no GGUF, so
     # it is the one bench-side check CI can actually run. It asserts that the
     # fork+exec'd worker's baseline is unaffected by memory the parent dirtied
@@ -179,15 +206,18 @@ if(BUILD_TESTING)
         set_tests_properties(bench_selftest PROPERTIES TIMEOUT 120)
     endif()
 
-    # Wire the local models + fixtures into env-gated tests. Two families are
-    # exercised, each with its own cache variable so a model kept outside the
-    # tree can be pointed at without editing this file.
+    # Wire the local models + fixtures into env-gated tests. Two families and
+    # the Harrier Q8_0 regression variant are exercised. Each file has its own
+    # cache variable so it can live outside the tree.
     set(NANOEMBED_TEST_MODEL
         "${CMAKE_CURRENT_SOURCE_DIR}/models/bge-small-en-v1.5-f16.gguf"
         CACHE FILEPATH "BERT GGUF (bge-small-en-v1.5) used by the accuracy tests")
     set(NANOEMBED_TEST_MODEL_GEMMA3
         "${CMAKE_CURRENT_SOURCE_DIR}/models/harrier-270m.gguf"
         CACHE FILEPATH "gemma3 GGUF (harrier-oss-v1-270m) used by the accuracy tests")
+    set(NANOEMBED_TEST_MODEL_GEMMA3_Q8
+        "${CMAKE_CURRENT_SOURCE_DIR}/models/harrier-270m-q8_0.gguf"
+        CACHE FILEPATH "Q8_0 gemma3 GGUF used by the quantized golden test")
     option(NANOEMBED_REQUIRE_MODEL
         "Fail configuration if an accuracy-test model is missing" OFF)
 
@@ -197,7 +227,10 @@ if(BUILD_TESTING)
     # the tests needing it skip, which is exactly what NANOEMBED_REQUIRE_MODEL
     # turns into a configure-time failure so CI cannot go green on skips.
     set(_NE_MODELS "")
-    foreach(_var NANOEMBED_TEST_MODEL NANOEMBED_TEST_MODEL_GEMMA3)
+    foreach(_var
+            NANOEMBED_TEST_MODEL
+            NANOEMBED_TEST_MODEL_GEMMA3
+            NANOEMBED_TEST_MODEL_GEMMA3_Q8)
         if(EXISTS "${${_var}}")
             list(APPEND _NE_MODELS "${_var}=${${_var}}")
         elseif(NANOEMBED_REQUIRE_MODEL)
@@ -211,7 +244,7 @@ if(BUILD_TESTING)
     endforeach()
 
     # Model-only tests.
-    foreach(_t scanner seq_len limits)
+    foreach(_t scanner seq_len limits context_concurrency reserve_invariant)
         set_tests_properties(${_t} PROPERTIES ENVIRONMENT "${_NE_MODELS}")
     endforeach()
 

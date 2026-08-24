@@ -61,11 +61,13 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-모델 파일이 없으면 그 모델이 필요한 테스트는 건너뛴다. 전체 정확도 테스트를 실행하려면 두 파일을 모두 둔다.
+모델 파일이 없으면 그 모델이 필요한 테스트는 건너뛴다. 전체 정확도·양자화 회귀
+테스트를 실행하려면 세 파일을 모두 둔다.
 
 ```text
 models/bge-small-en-v1.5-f16.gguf
 models/harrier-270m.gguf
+models/harrier-270m-q8_0.gguf
 ```
 
 ```sh
@@ -73,10 +75,13 @@ curl -fL -o models/bge-small-en-v1.5-f16.gguf \
   https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-f16.gguf
 curl -fL -o models/harrier-270m.gguf \
   https://huggingface.co/cstr/harrier-270m-GGUF/resolve/main/harrier-270m.gguf
+curl -fL -o models/harrier-270m-q8_0.gguf \
+  https://huggingface.co/cstr/harrier-270m-GGUF/resolve/main/harrier-270m-q8_0.gguf
 ```
 
-경로를 바꾸려면 `NANOEMBED_TEST_MODEL`과 `NANOEMBED_TEST_MODEL_GEMMA3` 캐시 변수를
-CMake에 넘긴다.
+경로를 바꾸려면 `NANOEMBED_TEST_MODEL`, `NANOEMBED_TEST_MODEL_GEMMA3`,
+`NANOEMBED_TEST_MODEL_GEMMA3_Q8` 캐시 변수를 CMake에 넘긴다. Q8_0은 같은 F32
+기준값에 대해 문장별 0.9985, 평균 0.9995 이상의 별도 회귀 게이트를 적용한다.
 
 CI에서는 모델을 내려받은 뒤 `NANOEMBED_REQUIRE_MODEL=ON`으로 설정한다. 모델이 없어서 테스트가 조용히 건너뛰는 일을 막기 위한 설정이다.
 
