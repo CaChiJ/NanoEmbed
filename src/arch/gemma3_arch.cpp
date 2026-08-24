@@ -6,6 +6,7 @@
 #include "gguf.h"
 
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -75,6 +76,12 @@ Gemma3Manifest scan_gemma3(const std::string & gguf_path) {
         a.n_ff <= 0 || a.max_seq_len <= 0 || a.head_dim <= 0) {
         fail("gemma3 hyperparameters out of range (got non-positive value)");
     }
+    if (!(a.norm_eps > 0.0f) || !std::isfinite(a.norm_eps)) {
+        fail("gemma3.attention.layer_norm_rms_epsilon must be finite and positive");
+    }
+    if (!(a.rope_freq_base > 0.0f) || !std::isfinite(a.rope_freq_base)) {
+        fail("gemma3.rope.freq_base must be finite and positive");
+    }
     if (a.n_head % a.n_head_kv != 0) {
         fail("query head count (" + std::to_string(a.n_head) +
              ") is not a multiple of KV head count (" + std::to_string(a.n_head_kv) + ")");
@@ -86,7 +93,11 @@ Gemma3Manifest scan_gemma3(const std::string & gguf_path) {
         if (gguf_get_kv_type(gguf.get(), tk) != GGUF_TYPE_ARRAY) {
             fail("tokenizer.ggml.tokens is not an array");
         }
-        a.n_vocab = static_cast<int>(gguf_get_arr_n(gguf.get(), tk));
+        const size_t n_vocab = gguf_get_arr_n(gguf.get(), tk);
+        if (n_vocab > static_cast<size_t>(std::numeric_limits<int>::max())) {
+            fail("tokenizer vocabulary is too large");
+        }
+        a.n_vocab = static_cast<int>(n_vocab);
         if (a.n_vocab <= 0) fail("vocab size is non-positive");
     }
 
@@ -97,8 +108,8 @@ Gemma3Manifest scan_gemma3(const std::string & gguf_path) {
     const float qk_scalar =
         read_f32_or(gguf.get(), "gemma3.attention.key_length_scale",
                     static_cast<float>(a.head_dim));
-    if (!(qk_scalar > 0.0f)) {
-        fail("gemma3.attention.key_length_scale must be positive");
+    if (!(qk_scalar > 0.0f) || !std::isfinite(qk_scalar)) {
+        fail("gemma3.attention.key_length_scale must be finite and positive");
     }
     m.attn_scale = 1.0f / std::sqrt(qk_scalar);
 

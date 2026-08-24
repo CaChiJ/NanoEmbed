@@ -33,9 +33,9 @@ BertModelArch::BertModelArch(const std::string & gguf_path) {
     params_.causal         = false;
 
     switch (a.pooling_type) {
+        case 1:  default_pooling_ = PoolType::Mean; break;
         case 2:  default_pooling_ = PoolType::Cls;  break;
         case 3:  default_pooling_ = PoolType::Last; break;
-        default: default_pooling_ = PoolType::Mean; break;
     }
 }
 

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <queue>
 #include <string>
 #include <vector>
@@ -57,15 +58,25 @@ int optional_id(gguf_context * ctx, const char * key) {
     const int64_t k = gguf_find_key(ctx, key);
     if (k < 0) return -1;
     switch (gguf_get_kv_type(ctx, k)) {
-        case GGUF_TYPE_UINT32: return static_cast<int>(gguf_get_val_u32(ctx, k));
+        case GGUF_TYPE_UINT32: {
+            const uint32_t value = gguf_get_val_u32(ctx, k);
+            if (value > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+                throw TokenizerError(std::string(key) + " is out of int range");
+            }
+            return static_cast<int>(value);
+        }
         case GGUF_TYPE_INT32:  return gguf_get_val_i32(ctx, k);
-        default:               return -1;
+        default:
+            throw TokenizerError(std::string(key) + " has the wrong type");
     }
 }
 
 bool optional_flag(gguf_context * ctx, const char * key, bool fallback) {
     const int64_t k = gguf_find_key(ctx, key);
-    if (k < 0 || gguf_get_kv_type(ctx, k) != GGUF_TYPE_BOOL) return fallback;
+    if (k < 0) return fallback;
+    if (gguf_get_kv_type(ctx, k) != GGUF_TYPE_BOOL) {
+        throw TokenizerError(std::string(key) + " has the wrong type");
+    }
     return gguf_get_val_bool(ctx, k);
 }
 
@@ -95,7 +106,9 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
     // ---- Vocab ----
     const int64_t tk = require_str_array(ctx, "tokenizer.ggml.tokens");
     const size_t  n  = gguf_get_arr_n(ctx, tk);
-    if (n == 0) throw TokenizerError("tokenizer.ggml.tokens is empty");
+    if (n == 0 || n > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw TokenizerError("tokenizer.ggml.tokens has an unsupported size");
+    }
 
     // Full string -> id map, needed only to resolve merges below. It is a
     // local so it is released before from_gguf returns.
@@ -117,6 +130,9 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
     // ---- Merges ----
     const int64_t mk = require_str_array(ctx, "tokenizer.ggml.merges");
     const size_t  nm = gguf_get_arr_n(ctx, mk);
+    if (nm > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw TokenizerError("tokenizer.ggml.merges is too large");
+    }
     t.merges_.reserve(nm * 2);
     for (size_t i = 0; i < nm; ++i) {
         const std::string rule = gguf_get_arr_str(ctx, mk, i);
@@ -147,6 +163,16 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
     t.pad_id_ = optional_id(ctx, "tokenizer.ggml.padding_token_id");
     t.unk_id_ = optional_id(ctx, "tokenizer.ggml.unknown_token_id");
 
+    auto validate_optional_id = [&](int id, const char * key) {
+        if (id < -1 || id >= t.vocab_size_) {
+            throw TokenizerError(std::string(key) + " is outside the tokenizer vocabulary");
+        }
+    };
+    validate_optional_id(t.bos_id_, "tokenizer.ggml.bos_token_id");
+    validate_optional_id(t.eos_id_, "tokenizer.ggml.eos_token_id");
+    validate_optional_id(t.pad_id_, "tokenizer.ggml.padding_token_id");
+    validate_optional_id(t.unk_id_, "tokenizer.ggml.unknown_token_id");
+
     if (optional_flag(ctx, "tokenizer.ggml.add_bos_token", true) && t.bos_id_ >= 0) {
         t.prefix_id_ = t.bos_id_;
     }
@@ -162,6 +188,7 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
     // producing a completely different embedding, with nothing in the output
     // to suggest a tokenizer bug.
     const int suffix = optional_id(ctx, "tokenizer.ggml.suffix_token_id");
+    validate_optional_id(suffix, "tokenizer.ggml.suffix_token_id");
     if (suffix >= 0) {
         t.suffix_id_ = suffix;
     } else if (optional_flag(ctx, "tokenizer.ggml.add_eos_token", false) && t.eos_id_ >= 0) {
@@ -284,9 +311,9 @@ std::vector<int> SpmBpeTokenizer::encode(const std::string & text,
     const int limit = max_seq_len_override > 0 ? max_seq_len_override : max_seq_len_;
 
     const int reserved = (prefix_id_ >= 0 ? 1 : 0) + (suffix_id_ >= 0 ? 1 : 0);
-    // A limit smaller than the wrapper itself still emits both markers: the
-    // model pools the last token, so dropping EOS would be a worse answer than
-    // returning one token too many.
+    if (limit < reserved) {
+        throw TokenizerError("BPE max sequence length is smaller than its special-token wrapper");
+    }
     const int budget = std::max(limit - reserved, 0);
 
     // Normalize: every ASCII space becomes the SentencePiece marker. Done as a

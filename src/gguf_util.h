@@ -65,9 +65,9 @@ int64_t     require_kv(gguf_context * ctx, const char * key);
 int         read_u32_as_int(gguf_context * ctx, const char * key);
 std::string read_str(gguf_context * ctx, const char * key);
 
-// Optional readers: return `fallback` when the key is absent or carries a
-// type other than the expected one. Used for metadata a family can live
-// without (an epsilon with a documented default, a flag that defaults off).
+// Optional readers: return `fallback` only when the key is absent. A present
+// key with the wrong type is a malformed model and fails fast; silently using
+// a mathematical default there can produce plausible but incorrect vectors.
 int   read_u32_or(gguf_context * ctx, const char * key, int fallback);
 float read_f32_or(gguf_context * ctx, const char * key, float fallback);
 bool  read_bool_or(gguf_context * ctx, const char * key, bool fallback);

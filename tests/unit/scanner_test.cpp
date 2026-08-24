@@ -201,6 +201,35 @@ bool test_bert_missing_hyperparameters() {
     return g_failures == 0;
 }
 
+bool test_bert_rejects_invalid_pooling() {
+    auto populate = [](gguf_context * g) {
+        gguf_set_val_str(g, "general.architecture", "bert");
+        gguf_set_val_u32(g, "bert.block_count", 1);
+        gguf_set_val_u32(g, "bert.embedding_length", 4);
+        gguf_set_val_u32(g, "bert.attention.head_count", 1);
+        gguf_set_val_u32(g, "bert.feed_forward_length", 8);
+        gguf_set_val_u32(g, "bert.context_length", 8);
+        gguf_set_val_u32(g, "bert.pooling_type", 99);
+    };
+    std::string path = write_temp_gguf(populate);
+    EXPECT_TRUE(!path.empty());
+    if (path.empty()) return false;
+
+    bool threw = false;
+    std::string msg;
+    try {
+        nanoembed::scan_gguf(path);
+    } catch (const nanoembed::ScanError & e) {
+        threw = true;
+        msg = e.what();
+    }
+    std::remove(path.c_str());
+
+    EXPECT_TRUE(threw);
+    EXPECT_TRUE(msg.find("pooling_type") != std::string::npos);
+    return g_failures == 0;
+}
+
 bool test_harrier_happy_path() {
     const char * path = std::getenv("NANOEMBED_TEST_MODEL_GEMMA3");
     if (path == nullptr) {
@@ -312,6 +341,41 @@ bool test_gemma3_scanner_rejects_bert() {
     return g_failures == 0;
 }
 
+bool test_gemma3_rejects_wrong_optional_type() {
+    auto populate = [](gguf_context * g) {
+        gguf_set_val_str(g, "general.architecture", "gemma3");
+        gguf_set_val_u32(g, "gemma3.block_count", 1);
+        gguf_set_val_u32(g, "gemma3.embedding_length", 4);
+        gguf_set_val_u32(g, "gemma3.attention.head_count", 1);
+        gguf_set_val_u32(g, "gemma3.attention.head_count_kv", 1);
+        gguf_set_val_u32(g, "gemma3.feed_forward_length", 8);
+        gguf_set_val_u32(g, "gemma3.context_length", 8);
+        gguf_set_val_u32(g, "gemma3.attention.key_length", 4);
+        gguf_set_val_u32(g, "gemma3.attention.value_length", 4);
+        // The key is optional, but a present bool cannot safely be interpreted
+        // as the documented f32 frequency base.
+        gguf_set_val_bool(g, "gemma3.rope.freq_base", true);
+    };
+    std::string path = write_temp_gguf(populate);
+    EXPECT_TRUE(!path.empty());
+    if (path.empty()) return false;
+
+    bool threw = false;
+    std::string msg;
+    try {
+        nanoembed::scan_gemma3(path);
+    } catch (const nanoembed::ScanError & e) {
+        threw = true;
+        msg = e.what();
+    }
+    std::remove(path.c_str());
+
+    EXPECT_TRUE(threw);
+    EXPECT_TRUE(msg.find("gemma3.rope.freq_base") != std::string::npos);
+    EXPECT_TRUE(msg.find("wrong type") != std::string::npos);
+    return g_failures == 0;
+}
+
 } // namespace
 
 int main() {
@@ -320,9 +384,11 @@ int main() {
     g_failures = 0; if (!test_missing_file())                    rc = 1;
     g_failures = 0; if (!test_non_bert_architecture())           rc = 1;
     g_failures = 0; if (!test_bert_missing_hyperparameters())    rc = 1;
+    g_failures = 0; if (!test_bert_rejects_invalid_pooling())     rc = 1;
     g_failures = 0; if (!test_harrier_happy_path())              rc = 1;
     g_failures = 0; if (!test_gemma3_missing_hyperparameters())  rc = 1;
     g_failures = 0; if (!test_gemma3_scanner_rejects_bert())     rc = 1;
+    g_failures = 0; if (!test_gemma3_rejects_wrong_optional_type()) rc = 1;
 
     std::printf("scanner_test: %s\n", rc == 0 ? "ok" : "FAIL");
     return rc;

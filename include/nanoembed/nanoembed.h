@@ -62,7 +62,7 @@ typedef enum {
     NANOEMBED_ERR_INVALID_ARG = -1,
     NANOEMBED_ERR_FILE        = -2, /* file not found / unreadable */
     NANOEMBED_ERR_FORMAT      = -3, /* not a valid GGUF file */
-    NANOEMBED_ERR_ARCH        = -4, /* unsupported architecture (non-BERT in v0) */
+    NANOEMBED_ERR_ARCH        = -4, /* unsupported model architecture */
     NANOEMBED_ERR_TENSOR      = -5, /* expected tensor missing or shape mismatch */
     NANOEMBED_ERR_TOKENIZE    = -6,
     NANOEMBED_ERR_OOM         = -7,
@@ -93,7 +93,7 @@ typedef struct nanoembed_context nanoembed_context;
 typedef struct {
     int                  n_threads;     /* 0 = auto (performance cores)       */
     int                  max_batch;     /* > 0; over-batch is auto-subdivided */
-    int                  max_seq_len;   /* > 0; longer inputs are truncated,  */
+    int                  max_seq_len;   /* >= 2; longer inputs are truncated, */
                                         /* and clamped to the model's context */
     int                  use_streaming; /* 0/1 — rejected until M4            */
     nanoembed_pool_type  pooling;

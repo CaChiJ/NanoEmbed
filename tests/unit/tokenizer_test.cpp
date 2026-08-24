@@ -257,6 +257,60 @@ bool test_truncation(const ModelUnderTest & m) {
     // assertions are vacuous.
     EXPECT_TRUE(tok->encode(long_text, 4096).size() > 128);
 
+    // Both supported families wrap content in two required special tokens.
+    // Returning those two under a declared cap of one would violate the
+    // tokenizer contract and make the graph allocator grow past its context.
+    bool rejected_too_small = false;
+    try {
+        (void) tok->encode(long_text, 1);
+    } catch (const nanoembed::TokenizerError &) {
+        rejected_too_small = true;
+    }
+    EXPECT_TRUE(rejected_too_small);
+
+    return g_failures == 0;
+}
+
+bool test_wordpiece_rejects_out_of_vocab_special_id() {
+    gguf_context * g = gguf_init_empty();
+    const char * tokens[] = {"[PAD]", "[UNK]", "[CLS]", "[SEP]"};
+    gguf_set_arr_str(g, "tokenizer.ggml.tokens", tokens, 4);
+    gguf_set_val_u32(g, "tokenizer.ggml.cls_token_id", 99);
+    gguf_set_val_u32(g, "tokenizer.ggml.seperator_token_id", 3);
+    gguf_set_val_u32(g, "tokenizer.ggml.padding_token_id", 0);
+    gguf_set_val_u32(g, "tokenizer.ggml.unknown_token_id", 1);
+
+    bool threw = false;
+    try {
+        (void) nanoembed::WordPieceTokenizer::from_gguf(g);
+    } catch (const nanoembed::TokenizerError & e) {
+        threw = std::string(e.what()).find("outside the tokenizer vocabulary") !=
+                std::string::npos;
+    }
+    gguf_free(g);
+    EXPECT_TRUE(threw);
+    return g_failures == 0;
+}
+
+bool test_bpe_rejects_wrong_optional_type() {
+    gguf_context * g = gguf_init_empty();
+    const char * tokens[] = {"<s>", "</s>", "<unk>", "a", "b", "ab"};
+    const char * merges[] = {"a b"};
+    gguf_set_arr_str(g, "tokenizer.ggml.tokens", tokens, 6);
+    gguf_set_arr_str(g, "tokenizer.ggml.merges", merges, 1);
+    gguf_set_val_bool(g, "tokenizer.ggml.bos_token_id", true);
+    gguf_set_val_u32(g, "tokenizer.ggml.unknown_token_id", 2);
+
+    bool threw = false;
+    try {
+        (void) nanoembed::SpmBpeTokenizer::from_gguf(g);
+    } catch (const nanoembed::TokenizerError & e) {
+        const std::string msg = e.what();
+        threw = msg.find("bos_token_id") != std::string::npos &&
+                msg.find("wrong type") != std::string::npos;
+    }
+    gguf_free(g);
+    EXPECT_TRUE(threw);
     return g_failures == 0;
 }
 
@@ -269,6 +323,10 @@ const ModelUnderTest kModels[] = {
 
 int main() {
     int rc = 0;
+    g_failures = 0;
+    if (!test_wordpiece_rejects_out_of_vocab_special_id()) rc = 1;
+    g_failures = 0;
+    if (!test_bpe_rejects_wrong_optional_type()) rc = 1;
     for (const ModelUnderTest & m : kModels) {
         g_failures = 0; if (!test_metadata(m))  rc = 1;
         g_failures = 0; if (!test_hf_parity(m)) rc = 1;

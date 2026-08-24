@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
 
 namespace nanoembed {
 
@@ -39,7 +40,11 @@ unsigned u32_from_kv(gguf_context * ctx, const char * key) {
     if (gguf_get_kv_type(ctx, k) != GGUF_TYPE_UINT32) {
         throw TokenizerError(std::string("wrong type for ") + key);
     }
-    return gguf_get_val_u32(ctx, k);
+    const uint32_t value = gguf_get_val_u32(ctx, k);
+    if (value > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        throw TokenizerError(std::string("token id is out of int range: ") + key);
+    }
+    return value;
 }
 
 // llama.cpp's BERT GGUF converter stores vocab in SentencePiece-style notation:
@@ -94,6 +99,9 @@ WordPieceTokenizer WordPieceTokenizer::from_gguf(gguf_context * ctx) {
     }
 
     const size_t n = gguf_get_arr_n(ctx, tk);
+    if (n == 0 || n > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw TokenizerError("tokenizer.ggml.tokens has an unsupported size");
+    }
     t.vocab_.reserve(n);
     t.ix_.reserve(n);
     for (size_t i = 0; i < n; ++i) {
@@ -101,6 +109,16 @@ WordPieceTokenizer WordPieceTokenizer::from_gguf(gguf_context * ctx) {
         t.vocab_.emplace_back(piece);
         t.ix_.emplace(std::move(piece), static_cast<int>(i));
     }
+
+    auto validate_special = [&](int id, const char * key) {
+        if (id < 0 || id >= static_cast<int>(n)) {
+            throw TokenizerError(std::string(key) + " is outside the tokenizer vocabulary");
+        }
+    };
+    validate_special(t.cfg_.cls_id, "tokenizer.ggml.cls_token_id");
+    validate_special(t.cfg_.sep_id, "tokenizer.ggml.seperator_token_id");
+    validate_special(t.cfg_.pad_id, "tokenizer.ggml.padding_token_id");
+    validate_special(t.cfg_.unk_id, "tokenizer.ggml.unknown_token_id");
 
     return t;
 }
@@ -203,10 +221,7 @@ std::vector<int> WordPieceTokenizer::encode(const std::string & text,
 
     std::vector<int> ids;
     if (limit < 2) {
-        // Pathological config — we still emit [CLS][SEP].
-        ids.push_back(cfg_.cls_id);
-        ids.push_back(cfg_.sep_id);
-        return ids;
+        throw TokenizerError("WordPiece max sequence length must be at least 2");
     }
 
     ids.reserve(static_cast<size_t>(limit));

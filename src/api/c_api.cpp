@@ -101,7 +101,7 @@ nanoembed_context_params nanoembed_context_default_params(void) {
     p.max_batch     = 64;
     // A deliberate cap, not the model's context length. Activation memory is
     // O(max_seq_len^2) in attention, so defaulting to a long-context model's
-    // full window (eurobert declares 8192) would reserve gigabytes for inputs
+    // full window (harrier declares 32768) would reserve gigabytes for inputs
     // that are never that long. Callers who want more ask for it explicitly.
     p.max_seq_len   = 512;
     p.use_streaming = 0;
@@ -173,8 +173,8 @@ nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
         set_error("model is null");
         return nullptr;
     }
-    if (params.max_batch <= 0 || params.max_seq_len <= 0) {
-        set_error("max_batch and max_seq_len must be positive");
+    if (params.max_batch <= 0 || params.max_seq_len < 2) {
+        set_error("max_batch must be positive and max_seq_len must be at least 2");
         return nullptr;
     }
     // Fail loudly rather than silently embedding non-streamed: streaming is

@@ -6,7 +6,8 @@
 //      (it used to overflow the graph memory pool and kill the process),
 //   2. a max_seq_len above the model's context is clamped rather than
 //      indexing the positional embedding table out of bounds,
-//   3. use_streaming is rejected until M4 implements it.
+//   3. a cap too small for the tokenizer's wrapper is rejected up front,
+//   4. use_streaming is rejected until M4 implements it.
 //
 // Runs for every configured family; each is skipped when its model env var is
 // unset.
@@ -83,6 +84,26 @@ void run_model(const ModelUnderTest & m) {
     const int         H          = nanoembed_n_embed(model);
     const int         model_ctx  = nanoembed_model_max_seq_len(model);
     const std::string text       = long_text();
+
+    // ---- 0. The configured cap must be large enough for wrapper tokens -----
+    {
+        nanoembed_context_params p = nanoembed_context_default_params();
+        p.max_seq_len = 1;
+        nanoembed_context * ctx = nanoembed_new_context(model, p);
+        check(ctx == nullptr, "max_seq_len=1 is rejected");
+        if (ctx) nanoembed_free_context(ctx);
+
+        p.max_seq_len = 2;
+        ctx = nanoembed_new_context(model, p);
+        check(ctx != nullptr, "max_seq_len=2 is accepted");
+        if (ctx) {
+            std::vector<float> got(static_cast<size_t>(H));
+            const int rc = nanoembed_embed(ctx, "hello", got.data());
+            check(rc == NANOEMBED_OK, "embed at the minimum sequence length returns OK");
+            check(all_finite(got), "minimum-length embedding is finite");
+            nanoembed_free_context(ctx);
+        }
+    }
 
     // ---- 1. Over-length input at the model's own limit -------------------
     std::vector<float> at_limit(static_cast<size_t>(H));

@@ -3,6 +3,8 @@
 #include "ggml.h"
 #include "gguf.h"
 
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -92,6 +94,12 @@ ScanResult scan_gguf(const std::string & path) {
         m.arch.max_seq_len <= 0) {
         fail("BERT hyperparameters out of range (got non-positive value)");
     }
+    if (!(m.arch.layer_norm_eps > 0.0f) || !std::isfinite(m.arch.layer_norm_eps)) {
+        fail("bert.attention.layer_norm_epsilon must be finite and positive");
+    }
+    if (m.arch.pooling_type < 1 || m.arch.pooling_type > 3) {
+        fail("bert.pooling_type must be mean(1), cls(2), or last(3)");
+    }
     if (m.arch.n_embed % m.arch.n_head != 0) {
         fail("hidden size is not divisible by head count");
     }
@@ -102,7 +110,11 @@ ScanResult scan_gguf(const std::string & path) {
         if (gguf_get_kv_type(gguf_owner.get(), tk) != GGUF_TYPE_ARRAY) {
             fail("tokenizer.ggml.tokens is not an array");
         }
-        m.arch.n_vocab = static_cast<int>(gguf_get_arr_n(gguf_owner.get(), tk));
+        const size_t n_vocab = gguf_get_arr_n(gguf_owner.get(), tk);
+        if (n_vocab > static_cast<size_t>(std::numeric_limits<int>::max())) {
+            fail("tokenizer vocabulary is too large");
+        }
+        m.arch.n_vocab = static_cast<int>(n_vocab);
         if (m.arch.n_vocab <= 0) fail("vocab size is non-positive");
     }
 

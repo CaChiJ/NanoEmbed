@@ -3,6 +3,7 @@
 #include "ggml.h"
 #include "gguf.h"
 
+#include <limits>
 #include <sstream>
 
 namespace nanoembed::gguf_util {
@@ -27,7 +28,11 @@ int read_u32_as_int(gguf_context * ctx, const char * key) {
     if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_UINT32) {
         fail(std::string("metadata key has wrong type (expected u32): ") + key);
     }
-    return static_cast<int>(gguf_get_val_u32(ctx, i));
+    const uint32_t value = gguf_get_val_u32(ctx, i);
+    if (value > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        fail(std::string("metadata key is out of int range: ") + key);
+    }
+    return static_cast<int>(value);
 }
 
 std::string read_str(gguf_context * ctx, const char * key) {
@@ -41,21 +46,31 @@ std::string read_str(gguf_context * ctx, const char * key) {
 int read_u32_or(gguf_context * ctx, const char * key, int fallback) {
     int64_t i = gguf_find_key(ctx, key);
     if (i < 0) return fallback;
-    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_UINT32) return fallback;
-    return static_cast<int>(gguf_get_val_u32(ctx, i));
+    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_UINT32) {
+        fail(std::string("metadata key has wrong type (expected u32): ") + key);
+    }
+    const uint32_t value = gguf_get_val_u32(ctx, i);
+    if (value > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        fail(std::string("metadata key is out of int range: ") + key);
+    }
+    return static_cast<int>(value);
 }
 
 float read_f32_or(gguf_context * ctx, const char * key, float fallback) {
     int64_t i = gguf_find_key(ctx, key);
     if (i < 0) return fallback;
-    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_FLOAT32) return fallback;
+    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_FLOAT32) {
+        fail(std::string("metadata key has wrong type (expected f32): ") + key);
+    }
     return gguf_get_val_f32(ctx, i);
 }
 
 bool read_bool_or(gguf_context * ctx, const char * key, bool fallback) {
     int64_t i = gguf_find_key(ctx, key);
     if (i < 0) return fallback;
-    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_BOOL) return fallback;
+    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_BOOL) {
+        fail(std::string("metadata key has wrong type (expected bool): ") + key);
+    }
     return gguf_get_val_bool(ctx, i);
 }
 
