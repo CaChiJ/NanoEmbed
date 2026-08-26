@@ -76,6 +76,11 @@ struct Gemma3Manifest {
 // weight data is read later through the Embedder's own GGUF handle.
 Gemma3Manifest scan_gemma3(const std::string & gguf_path);
 
+// Same validation against caller-owned metadata-only contexts.  Used by the
+// mapped preparation seam so validation and tensor borrows share one file
+// identity and one metadata context.
+Gemma3Manifest scan_gemma3(gguf_context * gguf, ggml_context * meta);
+
 // Weight pointers resolved against the context that owns the tensor data.
 // The four RMSNorm gains sit here rather than inside the sub-builders: the
 // sandwich (normalize before *and* after each sub-layer) is this family's
@@ -92,6 +97,7 @@ struct Gemma3LayerWeights {
 class Gemma3ModelArch : public ModelArch {
 public:
     explicit Gemma3ModelArch(const std::string & gguf_path);
+    explicit Gemma3ModelArch(Gemma3Manifest manifest);
 
     const ArchParams & params() const noexcept override { return manifest_.params; }
 
@@ -101,6 +107,7 @@ public:
     InputRequirements inputs() const noexcept override {
         return InputRequirements{/*needs_pos_ids=*/true, /*needs_type_ids=*/false};
     }
+    InputRequirements embedding_inputs() const noexcept override { return {}; }
 
     PoolType default_pooling() const noexcept override { return manifest_.pooling; }
 
@@ -108,6 +115,14 @@ public:
 
     ggml_tensor * build_graph(ggml_context *      gctx,
                               const GraphInputs & in) const override;
+
+    ggml_tensor * build_embedding_phase(ggml_context *      gctx,
+                                        const GraphInputs & in) const override;
+    ggml_tensor * build_final_phase(ggml_context * gctx,
+                                    ggml_tensor *  x) const override;
+
+    StreamingLayerPlan  streaming_units(int layer) const override;
+    StreamingCommonPlan streaming_common_plan() const override;
 
     // build_graph is the composition of these three. They are public so the
     // per-layer parity test can drive the real wiring — feeding HuggingFace's
@@ -125,6 +140,10 @@ public:
     float attn_scale()  const noexcept { return manifest_.attn_scale; }
 
 private:
+    // Shared by build_block and by the streaming units, so the two cannot
+    // drift on scale, epsilon or head geometry.
+    forward::GqaAttentionParams gqa_params() const noexcept;
+
     Gemma3Manifest                  manifest_;
     ggml_tensor *                   tok_embed_   = nullptr;
     ggml_tensor *                   output_norm_ = nullptr;

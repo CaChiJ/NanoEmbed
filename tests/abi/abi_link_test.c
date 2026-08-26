@@ -16,7 +16,19 @@
 
 #include "nanoembed/nanoembed.h"
 
+#include <stddef.h>
 #include <stdio.h>
+
+/* M4 changes behavior behind this frozen layout; it must not grow a mode
+ * result field or reorder the pre-existing selector. */
+_Static_assert(sizeof(nanoembed_context_params) == 24,
+               "nanoembed_context_params ABI size changed");
+_Static_assert(offsetof(nanoembed_context_params, n_threads) == 0, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, max_batch) == 4, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, max_seq_len) == 8, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, use_streaming) == 12, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, pooling) == 16, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, normalize) == 20, "ABI offset");
 #include <string.h>
 
 static int g_check_count = 0;

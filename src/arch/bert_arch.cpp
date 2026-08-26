@@ -3,16 +3,18 @@
 #include "ggml.h"
 
 #include <stdexcept>
+#include <utility>
 
 namespace nanoembed {
 
-BertModelArch::BertModelArch(const std::string & gguf_path) {
+BertModelArch::BertModelArch(const std::string & gguf_path)
+    : BertModelArch(scan_gguf(gguf_path).manifest()) {}
+
+BertModelArch::BertModelArch(ModelManifest manifest)
+    : manifest_(std::move(manifest)) {
     // The scanner validates the architecture tag, hyperparameters and every
     // required tensor shape, so anything that reaches bind_weights is known
     // to be a well-formed BERT.
-    ScanResult scan = scan_gguf(gguf_path);
-    manifest_ = scan.manifest();
-
     const auto & a = manifest_.arch;
     params_.name        = "bert";
     params_.n_layer     = a.n_layer;
@@ -73,15 +75,111 @@ void BertModelArch::bind_weights(ggml_context * model_ctx) {
 
 ggml_tensor * BertModelArch::build_graph(ggml_context *      gctx,
                                          const GraphInputs & in) const {
-    ggml_tensor * x = forward::build_embed_layer(
-        gctx, in.token_ids, in.pos_ids, in.type_ids, embed_w_, params_.norm_eps);
+    ggml_tensor * x = build_embedding_phase(gctx, in);
 
     for (int li = 0; li < params_.n_layer; ++li) {
         x = forward::build_encoder_block(
             gctx, x, /*kq_mask=*/nullptr, params_.n_head,
             layer_w_[static_cast<size_t>(li)], params_.norm_eps);
     }
+    return build_final_phase(gctx, x);
+}
+
+ggml_tensor * BertModelArch::build_embedding_phase(
+    ggml_context * gctx, const GraphInputs & in) const {
+    return forward::build_embed_layer(
+        gctx, in.token_ids, in.pos_ids, in.type_ids, embed_w_, params_.norm_eps);
+}
+
+ggml_tensor * BertModelArch::build_final_phase(ggml_context *, ggml_tensor * x) const {
     return x;
+}
+
+StreamingCommonPlan BertModelArch::streaming_common_plan() const {
+    StreamingCommonPlan plan;
+    plan.token_embedding = "token_embd.weight";
+    plan.common = {
+        "position_embd.weight", "token_types.weight",
+        "token_embd_norm.weight", "token_embd_norm.bias",
+    };
+    return plan;
+}
+
+StreamingLayerPlan BertModelArch::streaming_units(int layer) const {
+    if (layer < 0 || layer >= params_.n_layer) {
+        throw std::out_of_range("BERT streaming layer index out of range");
+    }
+    const std::string p = "blk." + std::to_string(layer) + ".";
+    const size_t li = static_cast<size_t>(layer);
+    const float eps = params_.norm_eps;
+    const int n_head = params_.n_head;
+
+    StreamingLayerPlan plan;
+    // Same slot in and out: every layer reads the residual stream and writes it
+    // back, so layer N's output is layer N+1's input with nothing to rename.
+    plan.input_slot  = "x";
+    plan.output_slot = "x";
+
+    auto unit = [&](const char * name, std::vector<std::string> weights,
+                    std::vector<std::string> inputs, std::vector<std::string> outputs,
+                    StreamingStage stage,
+                    std::function<void(ggml_context *, SlotTable &)> build) {
+        StreamingUnit u;
+        u.name    = name;
+        u.weights = std::move(weights);
+        u.inputs  = std::move(inputs);
+        u.outputs = std::move(outputs);
+        u.stage   = stage;
+        u.build   = std::move(build);
+        plan.units.push_back(std::move(u));
+    };
+
+    // BERT is post-LN: each sub-layer adds the residual and normalizes at its
+    // end, so the normalization gains belong to the unit that closes the
+    // sub-layer rather than to one of their own.
+    //
+    // No unit declares a graph input: BERT's learned positions are consumed
+    // once by the embedding phase, not by every block.
+    unit("attn_qkv",
+         {p + "attn_q.weight", p + "attn_q.bias",
+          p + "attn_k.weight", p + "attn_k.bias",
+          p + "attn_v.weight", p + "attn_v.bias"},
+         {"x"}, {"q", "k", "v"}, StreamingStage::Attention,
+         [this, li](ggml_context * ctx, SlotTable & s) {
+             const auto proj = forward::build_attention_projections(
+                 ctx, s.in(0), layer_w_[li].attn);
+             s.out(0, proj.q);
+             s.out(1, proj.k);
+             s.out(2, proj.v);
+         });
+
+    unit("attn_out",
+         {p + "attn_output.weight", p + "attn_output.bias",
+          p + "attn_output_norm.weight", p + "attn_output_norm.bias"},
+         {"q", "k", "v", "x"}, {"xa"}, StreamingStage::Attention,
+         [this, li, n_head, eps](ggml_context * ctx, SlotTable & s) {
+             forward::AttentionProjections proj{s.in(0), s.in(1), s.in(2)};
+             s.out(0, forward::build_attention_output(
+                          ctx, proj, s.in(3), /*kq_mask=*/nullptr, n_head,
+                          layer_w_[li].attn, eps));
+         });
+
+    unit("ffn_up", {p + "ffn_up.weight", p + "ffn_up.bias"},
+         {"xa"}, {"fh"}, StreamingStage::Ffn,
+         [this, li](ggml_context * ctx, SlotTable & s) {
+             s.out(0, forward::build_ffn_up(ctx, s.in(0), layer_w_[li].ffn));
+         });
+
+    unit("ffn_down",
+         {p + "ffn_down.weight", p + "ffn_down.bias",
+          p + "layer_output_norm.weight", p + "layer_output_norm.bias"},
+         {"fh", "xa"}, {"x"}, StreamingStage::Ffn,
+         [this, li, eps](ggml_context * ctx, SlotTable & s) {
+             s.out(0, forward::build_ffn_down(
+                          ctx, s.in(0), s.in(1), layer_w_[li].ffn, eps));
+         });
+
+    return plan;
 }
 
 } // namespace nanoembed

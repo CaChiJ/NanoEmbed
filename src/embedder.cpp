@@ -242,6 +242,7 @@ void Embedder::embed(ComputeScratch &       scratch,
                      const std::string &    text,
                      const EmbedderConfig & cfg,
                      float *                out) {
+    ComputeScratch::Impl & sc = *scratch.impl_;
     const int n_embed   = impl_->arch->params().n_embed;
     const int n_threads = resolve_n_threads(cfg.n_threads);
 
@@ -250,7 +251,6 @@ void Embedder::embed(ComputeScratch &       scratch,
     const std::vector<int> ids = impl_->tokenizer->encode(text, limit);
     const int64_t S = static_cast<int64_t>(ids.size());
 
-    ComputeScratch::Impl & sc = *scratch.impl_;
     if (S > sc.reserved_seq_len) {
         reserve(scratch, static_cast<int>(S), cfg.pooling, cfg.normalize);
     }
@@ -267,7 +267,6 @@ void Embedder::embed(ComputeScratch &       scratch,
         if (!ggml_gallocr_alloc_graph(sc.galloc, io.graph)) {
             throw std::runtime_error("failed to allocate the graph buffer");
         }
-
         // Only now do the input tensors have storage.
         ggml_backend_tensor_set(io.in.token_ids, ids.data(), 0,
                                 ids.size() * sizeof(int32_t));

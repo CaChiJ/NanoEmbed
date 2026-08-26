@@ -1,15 +1,20 @@
 // NanoEmbed C ABI implementations.
 //
-// M3+: real implementations (M1 stubs replaced). nanoembed_load_model
-// builds an Embedder under the opaque handle; embed delegates to it.
+// M4: nanoembed_load_model creates only a metadata descriptor. The first
+// successful context atomically selects and owns either the eager Embedder or
+// Linux mapped streaming runner; embed delegates to that locked mode.
 
 #include "nanoembed/nanoembed.h"
 
+#include "arch/model_arch.h"
 #include "embedder.h"
+#include "streaming_execution.h"
 
 #include <cstring>
 #include <exception>
 #include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <string>
 
 // ---- Error handling ---------------------------------------------------------
@@ -73,22 +78,49 @@ nanoembed::EmbedderConfig from_params(const nanoembed_context_params & p,
     return c;
 }
 
+void require_descriptor_match(const nanoembed::ModelArch & descriptor,
+                              int n_embed,
+                              int n_layer,
+                              int max_seq_len,
+                              nanoembed::PoolType pooling,
+                              const std::string & architecture) {
+    const nanoembed::ArchParams & expected = descriptor.params();
+    if (n_embed != expected.n_embed || n_layer != expected.n_layer ||
+        max_seq_len != expected.max_seq_len ||
+        pooling != descriptor.default_pooling() ||
+        architecture != expected.name) {
+        throw std::runtime_error(
+            "model metadata changed between model load and context creation");
+    }
+}
+
 } // namespace
 
 // ---- Opaque handles ---------------------------------------------------------
 
 struct nanoembed_model {
-    explicit nanoembed_model(const std::string & path) : embedder(path) {}
-    nanoembed::Embedder embedder;
+    enum class ExecutionMode { Unlocked, Eager, Streaming };
+
+    explicit nanoembed_model(std::string model_path)
+        : path(std::move(model_path)), descriptor(nanoembed::create_model_arch(path)) {}
+
+    std::string                         path;
+    std::unique_ptr<nanoembed::ModelArch> descriptor;
+    std::mutex                          mode_mutex;
+    ExecutionMode                      mode = ExecutionMode::Unlocked;
+    std::unique_ptr<nanoembed::Embedder> eager;
+    std::unique_ptr<nanoembed::InternalStreamingModel> streaming;
 };
 
 struct nanoembed_context {
-    nanoembed_model *         model = nullptr;
-    nanoembed::EmbedderConfig cfg;
+    nanoembed_model *                   model = nullptr;
+    nanoembed_model::ExecutionMode      mode = nanoembed_model::ExecutionMode::Unlocked;
+    nanoembed::EmbedderConfig           cfg;
     // Per-context compute buffers. Keeping them here (rather than on the
     // shared model) is what lets two contexts on one model run concurrently,
     // as the header promises.
-    nanoembed::ComputeScratch scratch;
+    std::unique_ptr<nanoembed::ComputeScratch> scratch;
+    std::unique_ptr<nanoembed::InternalStreamingContext> streaming_context;
 };
 
 // ---- Public C API -----------------------------------------------------------
@@ -140,7 +172,7 @@ int nanoembed_n_embed(const nanoembed_model * model) {
         set_error("model is null");
         return NANOEMBED_ERR_INVALID_ARG;
     }
-    return model->embedder.n_embed();
+    return model->descriptor->params().n_embed;
 }
 
 int nanoembed_n_layer(const nanoembed_model * model) {
@@ -148,7 +180,7 @@ int nanoembed_n_layer(const nanoembed_model * model) {
         set_error("model is null");
         return NANOEMBED_ERR_INVALID_ARG;
     }
-    return model->embedder.n_layer();
+    return model->descriptor->params().n_layer;
 }
 
 int nanoembed_model_max_seq_len(const nanoembed_model * model) {
@@ -156,7 +188,7 @@ int nanoembed_model_max_seq_len(const nanoembed_model * model) {
         set_error("model is null");
         return NANOEMBED_ERR_INVALID_ARG;
     }
-    return model->embedder.max_seq_len();
+    return model->descriptor->params().max_seq_len;
 }
 
 nanoembed_pool_type nanoembed_model_default_pooling(const nanoembed_model * model) {
@@ -164,7 +196,7 @@ nanoembed_pool_type nanoembed_model_default_pooling(const nanoembed_model * mode
         set_error("model is null");
         return NANOEMBED_POOL_MEAN;
     }
-    return to_public_pool(model->embedder.default_pooling());
+    return to_public_pool(model->descriptor->default_pooling());
 }
 
 nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
@@ -177,26 +209,76 @@ nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
         set_error("max_batch must be positive and max_seq_len must be at least 2");
         return nullptr;
     }
-    // Fail loudly rather than silently embedding non-streamed: streaming is
-    // the M4 deliverable.
-    if (params.use_streaming != 0) {
-        set_error("use_streaming is not supported yet (lands in M4)");
+    if (params.use_streaming != 0 && params.use_streaming != 1) {
+        set_error("use_streaming must be exactly 0 (eager) or 1 (streaming)");
         return nullptr;
     }
+#if !defined(__linux__)
+    if (params.use_streaming == 1) {
+        set_error("use_streaming=1 is unsupported outside Linux");
+        return nullptr;
+    }
+#endif
     nanoembed::PoolType pooling = nanoembed::PoolType::Mean;
-    if (!to_internal_pool(params.pooling, model->embedder.default_pooling(), pooling)) {
+    if (!to_internal_pool(params.pooling, model->descriptor->default_pooling(), pooling)) {
         set_error("pooling is not a valid nanoembed_pool_type");
         return nullptr;
     }
     try {
-        // Size this context's activation buffer up front so an unaffordable
-        // request fails here rather than on the first embed call.
         std::unique_ptr<nanoembed_context> holder(new nanoembed_context);
         auto * c   = holder.get();
         c->model   = model;
         c->cfg     = from_params(params, pooling);
-        model->embedder.reserve(c->scratch, params.max_seq_len,
-                                c->cfg.pooling, c->cfg.normalize);
+
+        const auto requested_mode = params.use_streaming == 1
+            ? nanoembed_model::ExecutionMode::Streaming
+            : nanoembed_model::ExecutionMode::Eager;
+
+        // The lock covers candidate construction as well as publication. A
+        // failed first context therefore leaves the handle Unlocked and no
+        // other creator can observe partially initialized mode state.
+        std::lock_guard<std::mutex> lock(model->mode_mutex);
+        if (model->mode != nanoembed_model::ExecutionMode::Unlocked &&
+            model->mode != requested_mode) {
+            set_error(requested_mode == nanoembed_model::ExecutionMode::Streaming
+                ? "model execution mode is already locked to eager; streaming context rejected"
+                : "model execution mode is already locked to streaming; eager context rejected");
+            return nullptr;
+        }
+
+        if (requested_mode == nanoembed_model::ExecutionMode::Eager) {
+            c->scratch = std::make_unique<nanoembed::ComputeScratch>();
+            if (model->mode == nanoembed_model::ExecutionMode::Unlocked) {
+                auto candidate = std::make_unique<nanoembed::Embedder>(model->path);
+                require_descriptor_match(
+                    *model->descriptor, candidate->n_embed(), candidate->n_layer(),
+                    candidate->max_seq_len(), candidate->default_pooling(),
+                    candidate->architecture());
+                // Size this context's activation buffer up front so an
+                // unaffordable request fails before mode publication.
+                candidate->reserve(*c->scratch, params.max_seq_len,
+                                   c->cfg.pooling, c->cfg.normalize);
+                model->eager = std::move(candidate);
+                model->mode = requested_mode;
+            } else {
+                model->eager->reserve(*c->scratch, params.max_seq_len,
+                                      c->cfg.pooling, c->cfg.normalize);
+            }
+        } else {
+            c->streaming_context =
+                std::make_unique<nanoembed::InternalStreamingContext>();
+            if (model->mode == nanoembed_model::ExecutionMode::Unlocked) {
+                auto candidate =
+                    std::make_unique<nanoembed::InternalStreamingModel>(model->path);
+                require_descriptor_match(
+                    *model->descriptor, candidate->n_embed(), candidate->n_layer(),
+                    candidate->max_seq_len(), candidate->default_pooling(),
+                    candidate->architecture());
+                model->streaming = std::move(candidate);
+                model->mode = requested_mode;
+            }
+        }
+        c->mode = requested_mode;
         clear_error();
         return holder.release();
     } catch (const std::exception & e) {
@@ -220,7 +302,14 @@ int nanoembed_embed(nanoembed_context * ctx,
         return NANOEMBED_ERR_INVALID_ARG;
     }
     try {
-        ctx->model->embedder.embed(ctx->scratch, std::string(text), ctx->cfg, out);
+        if (ctx->mode == nanoembed_model::ExecutionMode::Eager) {
+            ctx->model->eager->embed(*ctx->scratch, std::string(text), ctx->cfg, out);
+        } else if (ctx->mode == nanoembed_model::ExecutionMode::Streaming) {
+            ctx->model->streaming->embed(
+                *ctx->streaming_context, std::string(text), ctx->cfg, out);
+        } else {
+            throw std::runtime_error("context has no resolved execution mode");
+        }
         clear_error();
         return NANOEMBED_OK;
     } catch (const std::exception & e) {
@@ -245,7 +334,7 @@ int nanoembed_embed_batch(nanoembed_context *  ctx,
         return NANOEMBED_ERR_INVALID_ARG;
     }
     try {
-        const int H = ctx->model->embedder.n_embed();
+        const int H = ctx->model->descriptor->params().n_embed;
         // M3 baseline: loop the single-input path. M5 replaces this with the
         // batched runner — same C ABI, real batching internally.
         for (int i = 0; i < n_texts; ++i) {
@@ -253,8 +342,16 @@ int nanoembed_embed_batch(nanoembed_context *  ctx,
                 set_error("null pointer in texts[]");
                 return NANOEMBED_ERR_INVALID_ARG;
             }
-            ctx->model->embedder.embed(ctx->scratch, std::string(texts[i]), ctx->cfg,
-                                       out + static_cast<size_t>(i) * static_cast<size_t>(H));
+            float * item_out = out + static_cast<size_t>(i) * static_cast<size_t>(H);
+            if (ctx->mode == nanoembed_model::ExecutionMode::Eager) {
+                ctx->model->eager->embed(
+                    *ctx->scratch, std::string(texts[i]), ctx->cfg, item_out);
+            } else if (ctx->mode == nanoembed_model::ExecutionMode::Streaming) {
+                ctx->model->streaming->embed(
+                    *ctx->streaming_context, std::string(texts[i]), ctx->cfg, item_out);
+            } else {
+                throw std::runtime_error("context has no resolved execution mode");
+            }
         }
         clear_error();
         return NANOEMBED_OK;

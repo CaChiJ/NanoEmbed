@@ -7,7 +7,7 @@
 //   2. a max_seq_len above the model's context is clamped rather than
 //      indexing the positional embedding table out of bounds,
 //   3. a cap too small for the tokenizer's wrapper is rejected up front,
-//   4. use_streaming is rejected until M4 implements it.
+//   4. invalid streaming selectors and mixed-mode contexts are rejected.
 //
 // Runs for every configured family; each is skipped when its model env var is
 // unset.
@@ -151,12 +151,21 @@ void run_model(const ModelUnderTest & m) {
             "O(n^2) activations\n", m.label, model_ctx);
     }
 
-    // ---- 3. Streaming is not silently ignored ----------------------------
+    // ---- 3. Streaming selectors are strict and mode locking is enforced --
     {
         nanoembed_context_params p = nanoembed_context_default_params();
-        p.use_streaming = 1;
+        p.use_streaming = 2;
         nanoembed_context * ctx = nanoembed_new_context(model, p);
-        check(ctx == nullptr, "use_streaming is rejected before M4");
+        check(ctx == nullptr, "use_streaming values outside 0/1 are rejected");
+        if (ctx) nanoembed_free_context(ctx);
+
+        p.use_streaming = 1;
+        ctx = nanoembed_new_context(model, p);
+#if defined(__linux__)
+        check(ctx == nullptr, "mixed eager/streaming contexts on one model are rejected");
+#else
+        check(ctx == nullptr, "use_streaming=1 is explicitly unsupported outside Linux");
+#endif
         if (ctx) nanoembed_free_context(ctx);
     }
 

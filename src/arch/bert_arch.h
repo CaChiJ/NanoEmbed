@@ -21,12 +21,14 @@ namespace nanoembed {
 class BertModelArch : public ModelArch {
 public:
     explicit BertModelArch(const std::string & gguf_path);
+    explicit BertModelArch(ModelManifest manifest);
 
     const ArchParams & params() const noexcept override { return params_; }
 
     InputRequirements inputs() const noexcept override {
         return InputRequirements{/*needs_pos_ids=*/true, /*needs_type_ids=*/true};
     }
+    InputRequirements embedding_inputs() const noexcept override { return inputs(); }
 
     // Read from bert.pooling_type rather than assumed. BERT embedding models
     // disagree: bge-small is CLS, all-MiniLM and the e5 family are mean, and
@@ -38,6 +40,13 @@ public:
 
     ggml_tensor * build_graph(ggml_context *      gctx,
                               const GraphInputs & in) const override;
+    ggml_tensor * build_embedding_phase(ggml_context *      gctx,
+                                        const GraphInputs & in) const override;
+    ggml_tensor * build_final_phase(ggml_context * gctx,
+                                    ggml_tensor *  x) const override;
+
+    StreamingLayerPlan  streaming_units(int layer) const override;
+    StreamingCommonPlan streaming_common_plan() const override;
 
 private:
     ArchParams                          params_;

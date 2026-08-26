@@ -51,9 +51,34 @@ struct GqaAttentionParams {
     bool  causal        = false;
 };
 
+// The raw Q/K/V projections, before any reshape. Streaming cuts here so the
+// value crossing the boundary is a freshly allocated contiguous [*, S, B] --
+// ggml_mul_mat blocks its reduction differently for non-contiguous src1, so a
+// cut at a permuted tensor could change rounding.
+struct GqaProjections {
+    ggml_tensor * q;   // [n_head    * head_dim, S, B]
+    ggml_tensor * k;   // [n_head_kv * head_dim, S, B]
+    ggml_tensor * v;   // [n_head_kv * head_dim, S, B]
+};
+
+// Reads w.q, w.k, w.v only.
+GqaProjections build_gqa_projections(ggml_context *              ctx,
+                                     ggml_tensor *               x,      // [H, S, B]
+                                     const GqaAttentionWeights & w);
+
+// Everything after the projections. Reads w.q_norm, w.k_norm and w.o.
 // `pos` is the I32 position ramp, required when rope_freq_base > 0.
 // `kq_mask` is an optional additive padding mask, as in attention.h; the
 // causal mask is generated internally and the two compose.
+ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
+                                       const GqaProjections &      proj,
+                                       ggml_tensor *               pos,
+                                       ggml_tensor *               kq_mask,
+                                       const GqaAttentionWeights & w,
+                                       const GqaAttentionParams &  p);
+
+// The composition of the two. The eager path calls this and is unaffected by
+// the split: the same ggml calls are emitted in the same order.
 ggml_tensor * build_gqa_attention(ggml_context *             ctx,
                                   ggml_tensor *              x,
                                   ggml_tensor *              pos,

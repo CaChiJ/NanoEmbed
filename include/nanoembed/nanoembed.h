@@ -95,7 +95,7 @@ typedef struct {
     int                  max_batch;     /* > 0; over-batch is auto-subdivided */
     int                  max_seq_len;   /* >= 2; longer inputs are truncated, */
                                         /* and clamped to the model's context */
-    int                  use_streaming; /* 0/1 — rejected until M4            */
+    int                  use_streaming; /* 0=eager, 1=Linux mmap streaming    */
     nanoembed_pool_type  pooling;
     int                  normalize;     /* 0/1 — L2 normalize output          */
 } nanoembed_context_params;

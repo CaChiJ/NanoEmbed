@@ -9,31 +9,40 @@
 
 namespace nanoembed::forward {
 
-ggml_tensor * build_gqa_attention(ggml_context *              ctx,
-                                  ggml_tensor *               x,
-                                  ggml_tensor *               pos,
-                                  ggml_tensor *               kq_mask,
-                                  const GqaAttentionWeights & w,
-                                  const GqaAttentionParams &  p) {
-    const int64_t S = x->ne[1];
-    const int64_t B = x->ne[2];
+GqaProjections build_gqa_projections(ggml_context *              ctx,
+                                     ggml_tensor *               x,
+                                     const GqaAttentionWeights & w) {
+    // Projections. No bias anywhere in this family.
+    GqaProjections proj;
+    proj.q = ggml_mul_mat(ctx, w.q, x);   // [n_head    * D, S, B]
+    proj.k = ggml_mul_mat(ctx, w.k, x);   // [n_head_kv * D, S, B]
+    proj.v = ggml_mul_mat(ctx, w.v, x);   // [n_head_kv * D, S, B]
+    return proj;
+}
+
+ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
+                                       const GqaProjections &      proj,
+                                       ggml_tensor *               pos,
+                                       ggml_tensor *               kq_mask,
+                                       const GqaAttentionWeights & w,
+                                       const GqaAttentionParams &  p) {
+    // S and B come from the projections rather than a residual stream the core
+    // half never sees. ggml_mul_mat preserves ne[1..2], so these are the same
+    // values the fused function read off x.
+    const int64_t S = proj.q->ne[1];
+    const int64_t B = proj.q->ne[2];
     const int64_t D = p.head_dim;
 
     if (p.rope_freq_base > 0.0f && pos == nullptr) {
         throw std::invalid_argument("build_gqa_attention: rope requested without positions");
     }
 
-    // Projections. No bias anywhere in this family.
-    ggml_tensor * q = ggml_mul_mat(ctx, w.q, x);   // [n_head    * D, S, B]
-    ggml_tensor * k = ggml_mul_mat(ctx, w.k, x);   // [n_head_kv * D, S, B]
-    ggml_tensor * v = ggml_mul_mat(ctx, w.v, x);   // [n_head_kv * D, S, B]
-
     // Head-major layout: rope's kernel requires the token axis at ne[2], and
     // RMSNorm normalizes along ne[0], which is head_dim here — exactly the
     // axis QK-norm is defined over.
-    q = ggml_reshape_4d(ctx, q, D, p.n_head,    S, B);
-    k = ggml_reshape_4d(ctx, k, D, p.n_head_kv, S, B);
-    v = ggml_reshape_4d(ctx, v, D, p.n_head_kv, S, B);
+    ggml_tensor * q = ggml_reshape_4d(ctx, proj.q, D, p.n_head,    S, B);
+    ggml_tensor * k = ggml_reshape_4d(ctx, proj.k, D, p.n_head_kv, S, B);
+    ggml_tensor * v = ggml_reshape_4d(ctx, proj.v, D, p.n_head_kv, S, B);
 
     if (w.q_norm != nullptr) q = build_rms_norm(ctx, q, w.q_norm, p.norm_eps);
     if (w.k_norm != nullptr) k = build_rms_norm(ctx, k, w.k_norm, p.norm_eps);
@@ -70,6 +79,21 @@ ggml_tensor * build_gqa_attention(ggml_context *              ctx,
     attn = ggml_reshape_3d(ctx, attn, D * p.n_head, S, B);
 
     return ggml_mul_mat(ctx, w.o, attn);                    // [H, S, B]
+}
+
+ggml_tensor * build_gqa_attention(ggml_context *              ctx,
+                                  ggml_tensor *               x,
+                                  ggml_tensor *               pos,
+                                  ggml_tensor *               kq_mask,
+                                  const GqaAttentionWeights & w,
+                                  const GqaAttentionParams &  p) {
+    // Kept here as well as in the core half so the eager path still rejects a
+    // missing position ramp before emitting any node, exactly as it used to.
+    if (p.rope_freq_base > 0.0f && pos == nullptr) {
+        throw std::invalid_argument("build_gqa_attention: rope requested without positions");
+    }
+    return build_gqa_attention_core(
+        ctx, build_gqa_projections(ctx, x, w), pos, kq_mask, w, p);
 }
 
 } // namespace nanoembed::forward

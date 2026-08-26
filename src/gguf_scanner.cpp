@@ -59,21 +59,12 @@ void ScanResult::reset(gguf_context * gguf,
 
 // ---- scan_gguf ---------------------------------------------------------
 
-ScanResult scan_gguf(const std::string & path) {
-    ggml_context * meta_raw = nullptr;
-    gguf_init_params params;
-    params.no_alloc = true;
-    params.ctx      = &meta_raw;
-
-    gguf_context * gguf_raw = gguf_init_from_file(path.c_str(), params);
-    if (gguf_raw == nullptr) {
-        fail("failed to open GGUF file: " + path);
+ModelManifest scan_bert(gguf_context * gguf, ggml_context * meta) {
+    if (gguf == nullptr || meta == nullptr) {
+        fail("BERT scan requires GGUF and ggml metadata contexts");
     }
-    GgufPtr gguf_owner(gguf_raw);
-    GgmlPtr meta_owner(meta_raw);
-
     // Architecture must be BERT in v0.
-    const std::string arch_name = read_str(gguf_owner.get(), "general.architecture");
+    const std::string arch_name = read_str(gguf, "general.architecture");
     if (arch_name != "bert") {
         fail("unsupported architecture (expected 'bert', got '" + arch_name + "')");
     }
@@ -81,13 +72,13 @@ ScanResult scan_gguf(const std::string & path) {
     ModelManifest m;
 
     // Hyperparameters
-    m.arch.n_layer        = read_u32_as_int(gguf_owner.get(), "bert.block_count");
-    m.arch.n_embed        = read_u32_as_int(gguf_owner.get(), "bert.embedding_length");
-    m.arch.n_head         = read_u32_as_int(gguf_owner.get(), "bert.attention.head_count");
-    m.arch.n_ff           = read_u32_as_int(gguf_owner.get(), "bert.feed_forward_length");
-    m.arch.max_seq_len    = read_u32_as_int(gguf_owner.get(), "bert.context_length");
-    m.arch.layer_norm_eps = read_f32_or   (gguf_owner.get(), "bert.attention.layer_norm_epsilon", 1e-12f);
-    m.arch.pooling_type   = read_u32_or   (gguf_owner.get(), "bert.pooling_type", 1);
+    m.arch.n_layer        = read_u32_as_int(gguf, "bert.block_count");
+    m.arch.n_embed        = read_u32_as_int(gguf, "bert.embedding_length");
+    m.arch.n_head         = read_u32_as_int(gguf, "bert.attention.head_count");
+    m.arch.n_ff           = read_u32_as_int(gguf, "bert.feed_forward_length");
+    m.arch.max_seq_len    = read_u32_as_int(gguf, "bert.context_length");
+    m.arch.layer_norm_eps = read_f32_or   (gguf, "bert.attention.layer_norm_epsilon", 1e-12f);
+    m.arch.pooling_type   = read_u32_or   (gguf, "bert.pooling_type", 1);
 
     if (m.arch.n_layer <= 0 || m.arch.n_embed <= 0 ||
         m.arch.n_head <= 0  || m.arch.n_ff    <= 0 ||
@@ -106,11 +97,11 @@ ScanResult scan_gguf(const std::string & path) {
 
     // Vocab size = length of tokenizer.ggml.tokens array
     {
-        const int64_t tk = require_kv(gguf_owner.get(), "tokenizer.ggml.tokens");
-        if (gguf_get_kv_type(gguf_owner.get(), tk) != GGUF_TYPE_ARRAY) {
+        const int64_t tk = require_kv(gguf, "tokenizer.ggml.tokens");
+        if (gguf_get_kv_type(gguf, tk) != GGUF_TYPE_ARRAY) {
             fail("tokenizer.ggml.tokens is not an array");
         }
-        const size_t n_vocab = gguf_get_arr_n(gguf_owner.get(), tk);
+        const size_t n_vocab = gguf_get_arr_n(gguf, tk);
         if (n_vocab > static_cast<size_t>(std::numeric_limits<int>::max())) {
             fail("tokenizer vocabulary is too large");
         }
@@ -124,26 +115,26 @@ ScanResult scan_gguf(const std::string & path) {
     const int64_t S = m.arch.max_seq_len;
 
     // Embedding-stage tensors
-    m.tok_embed_w  = require_tensor(gguf_owner.get(), meta_owner.get(), "token_embd.weight");
+    m.tok_embed_w  = require_tensor(gguf, meta, "token_embd.weight");
     validate_shape_2d(m.tok_embed_w, H, V, "token_embd.weight");
-    m.pos_embed_w  = require_tensor(gguf_owner.get(), meta_owner.get(), "position_embd.weight");
+    m.pos_embed_w  = require_tensor(gguf, meta, "position_embd.weight");
     validate_shape_2d(m.pos_embed_w, H, S, "position_embd.weight");
-    m.type_embed_w = require_tensor(gguf_owner.get(), meta_owner.get(), "token_types.weight");
+    m.type_embed_w = require_tensor(gguf, meta, "token_types.weight");
     // token_types.weight has shape [H, n_types] where n_types is typically 2.
     if (m.type_embed_w.ne[0] != H || m.type_embed_w.ne[1] < 1) {
         fail("token_types.weight has unexpected shape");
     }
-    m.embed_norm_w = require_tensor(gguf_owner.get(), meta_owner.get(), "token_embd_norm.weight");
+    m.embed_norm_w = require_tensor(gguf, meta, "token_embd_norm.weight");
     validate_shape_1d(m.embed_norm_w, H, "token_embd_norm.weight");
-    m.embed_norm_b = require_tensor(gguf_owner.get(), meta_owner.get(), "token_embd_norm.bias");
+    m.embed_norm_b = require_tensor(gguf, meta, "token_embd_norm.bias");
     validate_shape_1d(m.embed_norm_b, H, "token_embd_norm.bias");
 
     // Optional sentence-bert pooler dense layer.
     {
-        const int64_t pw = gguf_find_tensor(gguf_owner.get(), "pooler.dense.weight");
+        const int64_t pw = gguf_find_tensor(gguf, "pooler.dense.weight");
         if (pw >= 0) {
-            m.pooler_w = require_tensor(gguf_owner.get(), meta_owner.get(), "pooler.dense.weight");
-            m.pooler_b = require_tensor(gguf_owner.get(), meta_owner.get(), "pooler.dense.bias");
+            m.pooler_w = require_tensor(gguf, meta, "pooler.dense.weight");
+            m.pooler_b = require_tensor(gguf, meta, "pooler.dense.bias");
         }
     }
 
@@ -169,22 +160,22 @@ ScanResult scan_gguf(const std::string & path) {
         const std::string nfn_w = layer_tensor_name(i, "layer_output_norm.weight");
         const std::string nfn_b = layer_tensor_name(i, "layer_output_norm.bias");
 
-        s.attn_q_w    = require_tensor(gguf_owner.get(), meta_owner.get(), nq_w);
-        s.attn_q_b    = require_tensor(gguf_owner.get(), meta_owner.get(), nq_b);
-        s.attn_k_w    = require_tensor(gguf_owner.get(), meta_owner.get(), nk_w);
-        s.attn_k_b    = require_tensor(gguf_owner.get(), meta_owner.get(), nk_b);
-        s.attn_v_w    = require_tensor(gguf_owner.get(), meta_owner.get(), nv_w);
-        s.attn_v_b    = require_tensor(gguf_owner.get(), meta_owner.get(), nv_b);
-        s.attn_o_w    = require_tensor(gguf_owner.get(), meta_owner.get(), no_w);
-        s.attn_o_b    = require_tensor(gguf_owner.get(), meta_owner.get(), no_b);
-        s.attn_norm_w = require_tensor(gguf_owner.get(), meta_owner.get(), nan_w);
-        s.attn_norm_b = require_tensor(gguf_owner.get(), meta_owner.get(), nan_b);
-        s.ffn_up_w    = require_tensor(gguf_owner.get(), meta_owner.get(), nfu_w);
-        s.ffn_up_b    = require_tensor(gguf_owner.get(), meta_owner.get(), nfu_b);
-        s.ffn_down_w  = require_tensor(gguf_owner.get(), meta_owner.get(), nfd_w);
-        s.ffn_down_b  = require_tensor(gguf_owner.get(), meta_owner.get(), nfd_b);
-        s.ffn_norm_w  = require_tensor(gguf_owner.get(), meta_owner.get(), nfn_w);
-        s.ffn_norm_b  = require_tensor(gguf_owner.get(), meta_owner.get(), nfn_b);
+        s.attn_q_w    = require_tensor(gguf, meta, nq_w);
+        s.attn_q_b    = require_tensor(gguf, meta, nq_b);
+        s.attn_k_w    = require_tensor(gguf, meta, nk_w);
+        s.attn_k_b    = require_tensor(gguf, meta, nk_b);
+        s.attn_v_w    = require_tensor(gguf, meta, nv_w);
+        s.attn_v_b    = require_tensor(gguf, meta, nv_b);
+        s.attn_o_w    = require_tensor(gguf, meta, no_w);
+        s.attn_o_b    = require_tensor(gguf, meta, no_b);
+        s.attn_norm_w = require_tensor(gguf, meta, nan_w);
+        s.attn_norm_b = require_tensor(gguf, meta, nan_b);
+        s.ffn_up_w    = require_tensor(gguf, meta, nfu_w);
+        s.ffn_up_b    = require_tensor(gguf, meta, nfu_b);
+        s.ffn_down_w  = require_tensor(gguf, meta, nfd_w);
+        s.ffn_down_b  = require_tensor(gguf, meta, nfd_b);
+        s.ffn_norm_w  = require_tensor(gguf, meta, nfn_w);
+        s.ffn_norm_b  = require_tensor(gguf, meta, nfn_b);
 
         // Shape spot-checks. Q/K/V/O are square H x H, FFN_up is H x F,
         // FFN_down is F x H, biases are 1D.
@@ -206,8 +197,25 @@ ScanResult scan_gguf(const std::string & path) {
         validate_shape_1d(s.ffn_norm_b, H, nfn_b);
     }
 
+    return m;
+}
+
+ScanResult scan_gguf(const std::string & path) {
+    ggml_context * meta_raw = nullptr;
+    gguf_init_params params;
+    params.no_alloc = true;
+    params.ctx      = &meta_raw;
+
+    gguf_context * gguf_raw = gguf_init_from_file(path.c_str(), params);
+    if (gguf_raw == nullptr) {
+        fail("failed to open GGUF file: " + path);
+    }
+    GgufPtr gguf_owner(gguf_raw);
+    GgmlPtr meta_owner(meta_raw);
+
+    ModelManifest manifest = scan_bert(gguf_owner.get(), meta_owner.get());
     ScanResult result;
-    result.reset(gguf_owner.release(), meta_owner.release(), std::move(m));
+    result.reset(gguf_owner.release(), meta_owner.release(), std::move(manifest));
     return result;
 }
 

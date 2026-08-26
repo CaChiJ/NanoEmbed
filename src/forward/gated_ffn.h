@@ -29,6 +29,22 @@ enum class GateActivation {
     Silu,   // SwiGLU
 };
 
+// Up to and including the gating multiply. Reads w.gate and w.up.
+//
+// gate and up cannot be separated further without a boundary of their own:
+// ggml_geglu_split fuses act(gate) * up into one op, so both [F, S, B] tensors
+// have to be live at that point.
+ggml_tensor * build_gated_ffn_gate_up(ggml_context *          ctx,
+                                      ggml_tensor *           x,     // [H, S, B]
+                                      const GatedFfnWeights & w,
+                                      GateActivation          act);  // -> [F, S, B]
+
+// The down-projection. Reads w.down.
+ggml_tensor * build_gated_ffn_down(ggml_context *          ctx,
+                                   ggml_tensor *           h,        // [F, S, B]
+                                   const GatedFfnWeights & w);       // -> [H, S, B]
+
+// The composition of the two, emitting the same calls in the same order.
 ggml_tensor * build_gated_ffn(ggml_context *          ctx,
                               ggml_tensor *           x,       // [H, S, B]
                               const GatedFfnWeights & w,

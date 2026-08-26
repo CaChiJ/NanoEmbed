@@ -108,4 +108,10 @@ private:
 // Scan a GGUF file into a typed BERT manifest. Throws ScanError on failure.
 ScanResult scan_gguf(const std::string & path);
 
+// Validate BERT metadata and required tensor names/shapes in an already-open
+// metadata-only GGUF context.  The caller retains both contexts.  The mapped
+// weight loader uses this overload so architecture validation and the later
+// tensor-data borrows refer to one opened file identity.
+ModelManifest scan_bert(gguf_context * gguf, ggml_context * meta);
+
 } // namespace nanoembed
