@@ -1,0 +1,15 @@
+# Exact reference environment for tools/dump_golden.py.
+#
+# Captured and verified with CPython 3.14 on 2026-08-24. The generator also
+# checks these versions at runtime and records them in every provenance
+# manifest. Platform-specific wheel/build identity is recorded by the
+# manifest's Python and platform fields.
+huggingface-hub==1.13.0
+numpy==2.4.4
+safetensors==0.7.0
+scikit-learn==1.8.0
+scipy==1.17.1
+sentence-transformers==5.4.1
+tokenizers==0.22.2
+torch==2.11.0
+transformers==5.7.0

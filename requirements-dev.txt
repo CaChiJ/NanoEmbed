@@ -16,5 +16,7 @@ pyyaml>=6.0          # for bench/scenarios.yaml
 # implementation rather than precision.
 torch>=2.2.0
 
-# Golden vectors (tools/dump_golden.py).
+# Golden vectors (tools/dump_golden.py). Use requirements-golden.lock rather
+# than this lower-bound development environment when regenerating committed
+# golden fixtures; the generator rejects version drift.
 sentence-transformers>=2.7.0
