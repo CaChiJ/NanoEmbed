@@ -381,6 +381,7 @@ size_t DiskMergeIndex::fence_bytes() const noexcept {
 
 bool DiskMergeIndex::open_validated(const std::filesystem::path & path,
                                     const detail::Sha256Digest & source_digest,
+                                    int64_t vocab_size,
                                     DiskMergeIndex & result,
                                     std::string & reason) {
     auto impl = std::make_unique<Impl>();
@@ -489,10 +490,18 @@ bool DiskMergeIndex::open_validated(const std::filesystem::path & path,
                 throw TokenizerError("cache page header is invalid");
             }
             for (uint32_t j = 0; j < count; ++j) {
-                const uint64_t key = read_le64(page.data() + kPageHeaderSize + j * kRecordSize);
+                const uint8_t * record = page.data() + kPageHeaderSize + j * kRecordSize;
+                const uint64_t key = read_le64(record);
                 if ((have_previous && key <= previous_key) ||
                     (j == 0 && key != fence.first_key)) {
                     throw TokenizerError("cache records are not strictly ordered");
+                }
+                // Reject the whole file here so it is regenerated, rather than
+                // letting a bad ID surface at some later encode.
+                const int64_t merged = static_cast<int64_t>(
+                    static_cast<int32_t>(read_le32(record + 12)));
+                if (merged < 0 || merged >= vocab_size) {
+                    throw TokenizerError("cache record names a token outside the vocabulary");
                 }
                 previous_key = key;
                 have_previous = true;
@@ -508,6 +517,7 @@ bool DiskMergeIndex::open_validated(const std::filesystem::path & path,
         result.fences_ = std::move(fences);
         result.cache_path_ = path;
         result.record_count_ = record_count;
+        result.vocab_size_ = vocab_size;
         return true;
     } catch (const std::exception & e) {
         reason = e.what();
@@ -639,6 +649,7 @@ void DiskMergeIndex::create_cache(gguf_context * ctx,
 
 DiskMergeIndex DiskMergeIndex::from_gguf(gguf_context * ctx, int64_t tk, int64_t mk) {
     const detail::Sha256Digest source_digest = tokenizer_digest(ctx, tk, mk);
+    const int64_t vocab_size = static_cast<int64_t>(gguf_get_arr_n(ctx, tk));
     const std::filesystem::path root = cache_root();
     std::error_code directory_error;
     std::filesystem::create_directories(root, directory_error);
@@ -651,7 +662,7 @@ DiskMergeIndex DiskMergeIndex::from_gguf(gguf_context * ctx, int64_t tk, int64_t
 
     DiskMergeIndex result;
     std::string reason;
-    if (open_validated(path, source_digest, result, reason)) {
+    if (open_validated(path, source_digest, vocab_size, result, reason)) {
         result.cache_hit_ = true;
         return result;
     }
@@ -665,14 +676,14 @@ DiskMergeIndex DiskMergeIndex::from_gguf(gguf_context * ctx, int64_t tk, int64_t
         // the original creation error rather than hiding a real I/O failure.
         const std::exception_ptr creation_error = std::current_exception();
         reason.clear();
-        if (open_validated(path, source_digest, result, reason)) {
+        if (open_validated(path, source_digest, vocab_size, result, reason)) {
             result.cache_hit_ = true;
             return result;
         }
         std::rethrow_exception(creation_error);
     }
     reason.clear();
-    if (!open_validated(path, source_digest, result, reason)) {
+    if (!open_validated(path, source_digest, vocab_size, result, reason)) {
         throw TokenizerError("generated BPE merge cache failed validation: " + reason);
     }
     result.cache_hit_ = false;
@@ -702,20 +713,21 @@ bool DiskMergeIndex::find(uint64_t key, LookupScratch & scratch, Rule & result) 
         slot->page = UINT64_MAX;
         impl_->read_at(fences_[page_index].offset, slot->bytes.data(), slot->bytes.size(), cache_path_);
 
-        // Validate where the bytes cross from the file into this process, not
-        // on every lookup. open_validated() already checked every page against
-        // the payload digest at load time; this catches a file replaced or
-        // truncated afterwards, which the load-time SHA-256 cannot see. Once
-        // the page is in this slot it is our own memory and re-checking it per
-        // lookup bought nothing -- it cost about 65% of encode time.
+        // Structural checks only. open_validated() verified this page's CRC and
+        // the whole payload's SHA-256 at load; repeating the CRC per page read
+        // measured at 96% of encode time (1,020 of 1,058 us), because crc32()
+        // is a byte-at-a-time table lookup running at 376 MB/s and every encode
+        // pushed 94 pages through it.
         //
-        // The count bounds must stay ahead of the crc32 call: short-circuit
-        // evaluation is what keeps the length passed to crc32 inside the page.
+        // What is given up is detection of a record edited in place after load
+        // that still lands on this page and keeps its header intact. The two
+        // checks below still catch truncation, a short read, and a page
+        // replaced by a different one, which is what a swapped or rebuilt cache
+        // file actually looks like. The bounds check also keeps `loaded` inside
+        // the page for the search below.
         const uint32_t loaded = read_le32(slot->bytes.data());
         if (loaded == 0 || loaded > kRecordsPerPage ||
-            read_le64(slot->bytes.data() + 8) != fences_[page_index].first_key ||
-            read_le32(slot->bytes.data() + 4) !=
-                crc32(slot->bytes.data() + kPageHeaderSize, loaded * kRecordSize)) {
+            read_le64(slot->bytes.data() + 8) != fences_[page_index].first_key) {
             throw TokenizerError("BPE merge cache page became invalid during encode: '" +
                                  cache_path_.string() + "'");
         }
@@ -738,6 +750,15 @@ bool DiskMergeIndex::find(uint64_t key, LookupScratch & scratch, Rule & result) 
     if (read_le64(record) != key) return false;
     result.rank = static_cast<int32_t>(read_le32(record + 8));
     result.merged = static_cast<int32_t>(read_le32(record + 12));
+    // Checked again here, not only at load: the per-page CRC no longer runs on
+    // each read, so a record edited after load reaches this point unnoticed.
+    // Everything else it can corrupt yields a wrong-but-harmless token; an
+    // out-of-range ID instead aborts the process inside ggml_get_rows, which no
+    // caller can catch. Refusing it keeps the worst case an ordinary error.
+    if (result.merged < 0 || static_cast<int64_t>(result.merged) >= vocab_size_) {
+        throw TokenizerError("BPE merge cache names a token outside the vocabulary: '" +
+                             cache_path_.string() + "'");
+    }
     return true;
 }
 

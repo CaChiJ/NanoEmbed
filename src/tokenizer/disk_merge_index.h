@@ -58,6 +58,7 @@ private:
 
     static bool open_validated(const std::filesystem::path & path,
                                const detail::Sha256Digest & source_digest,
+                               int64_t vocab_size,
                                DiskMergeIndex & result,
                                std::string & reason);
     static void create_cache(gguf_context * ctx,
@@ -70,6 +71,11 @@ private:
     std::vector<Fence> fences_;
     std::filesystem::path cache_path_;
     uint64_t record_count_ = 0;
+    // Every merged ID this index can emit becomes a row index into the token
+    // embedding table. ggml asserts that range and aborts the process on a
+    // miss, which is not something a caller can catch, so the bound is checked
+    // here instead.
+    int64_t vocab_size_ = 0;
     bool cache_hit_ = false;
 };
 

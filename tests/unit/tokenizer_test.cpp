@@ -463,16 +463,33 @@ bool test_bpe_disk_cache_lifecycle() {
     EXPECT_TRUE(!payload_rebuilt.merge_cache_hit());
     EXPECT_TRUE(payload_rebuilt.encode("abc") == std::vector<int>({5}));
 
-    // Damage introduced after construction is caught by the per-page CRC on
-    // the next physical page read; encode must not return a plausible wrong ID.
+    // A record edited in place after load is NOT detected, and this asserts
+    // that deliberately. The per-page CRC used to run on every page read and
+    // would have caught it, but it measured 96% of encode time, so encode now
+    // performs structural checks only. Editing the first record's key hides
+    // the "a b" merge, and encode silently returns the unmerged pieces instead
+    // of the merged ID -- a plausible wrong answer, which is the risk this
+    // trade accepts. Load-time SHA-256 still rejects the same damage, so the
+    // window is only between one load and the next.
     flip_file_byte(path, 2 * 4096 + 16);
-    bool runtime_corruption_rejected = false;
+    EXPECT_TRUE(payload_rebuilt.encode("abc") == std::vector<int>({1, 2, 3}));
+    flip_file_byte(path, 2 * 4096 + 16);
+
+    // A merged ID is a row index into the token embedding table, and ggml
+    // aborts the process on an out-of-range row rather than raising anything a
+    // caller could catch. Corrupting the first record's merged field must
+    // therefore surface as an ordinary TokenizerError, not a crash.
+    flip_file_byte(path, 2 * 4096 + 16 + 12);
+    bool out_of_vocab_rejected = false;
     try {
         (void) payload_rebuilt.encode("abc");
     } catch (const nanoembed::TokenizerError &) {
-        runtime_corruption_rejected = true;
+        out_of_vocab_rejected = true;
     }
-    EXPECT_TRUE(runtime_corruption_rejected);
+    EXPECT_TRUE(out_of_vocab_rejected);
+    flip_file_byte(path, 2 * 4096 + 16 + 12);
+
+    flip_file_byte(path, 2 * 4096 + 16);
     auto runtime_rebuilt = nanoembed::SpmBpeTokenizer::from_gguf(g);
     EXPECT_TRUE(!runtime_rebuilt.merge_cache_hit());
     EXPECT_TRUE(runtime_rebuilt.encode("abc") == std::vector<int>({5}));
