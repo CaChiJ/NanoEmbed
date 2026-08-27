@@ -85,3 +85,26 @@ jobs:
           for m in models/bge-small-en-v1.5-f16.gguf models/harrier-270m.gguf; do
             echo "hello world" | build/bin/nanoembed-cli "$m" | grep -q "," || exit 1
           done
+
+  windows-tokenizer:
+    name: windows-tokenizer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # The Windows job intentionally stays synthetic: it exercises SHA-256,
+      # VirtualAlloc arena lifetime, explicit-offset ReadFile, corruption
+      # recovery, and concurrent cache creation without downloading a 1 GiB
+      # model. Ubuntu/macOS above run the real Harrier cold/warm fixture.
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build tokenizer test
+        run: cmake --build build --config Release --target nanoembed_tokenizer_test -j 2
+
+      - name: Test tokenizer disk index
+        run: ctest --test-dir build -C Release --output-on-failure -R "^tokenizer$"
