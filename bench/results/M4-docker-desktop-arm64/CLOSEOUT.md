@@ -415,9 +415,12 @@ NanoEmbed process is using it.
   dedicated PMR arena backed by anonymous OS mappings (`VirtualAlloc` on
   Windows), then the entire arena is returned after the atomic cache write.
 - Header/source/payload validation happens before GGUF tokenizer metadata is
-  discarded. Every page also has a CRC checked during encode, so an in-place
-  post-load corruption or short read raises `TokenizerError` instead of
-  returning a plausible wrong token ID. Invalid cache files are regenerated
+  discarded. Every page carries a CRC that is checked on each physical page
+  read, so a cache file replaced or truncated after load -- which the load-time
+  SHA-256 cannot see -- raises `TokenizerError` instead of returning a plausible
+  wrong token ID. The check is deliberately not repeated for a page already
+  held in the encode scratch cache; see the encode-latency section below.
+  Invalid cache files are regenerated
   through a unique temporary file plus atomic replacement. If generation or
   replacement cannot succeed, model loading fails; there is no high-memory
   hash-map fallback.
@@ -438,11 +441,89 @@ and warm steady-state `Pss_Anon` were identical, so the cache-build peak did
 not remain resident after construction.
 
 The Harrier index was 8,310,784 bytes (about 7.93 MiB), below the 9 MiB limit;
-the 32,320-byte fence is below the 64 KiB permanent-index limit. For the probe
-sentence, encode p50/p95 were 1,160.04/1,334.67 microseconds and averaged 94
-page reads. These latency figures are recorded diagnostics, not a release gate.
-Opening Harrier Q8_0 after Harrier F32 with the same cache directory produced a
-cache hit, confirming cross-quantization tokenizer sharing.
+the 32,320-byte fence is below the 64 KiB permanent-index limit. Opening Harrier
+Q8_0 after Harrier F32 with the same cache directory produced a cache hit,
+confirming cross-quantization tokenizer sharing.
+
+## Encode latency: a 404x regression this trade accepts
+
+The memory reduction is not free, and the cost lands on `encode()`. The earlier
+draft of this addendum recorded the absolute figure without a before/after
+comparison, which understated it. Both sides below were measured in this same
+arm64 container on `models/harrier-270m.gguf`, encoding the probe sentence
+`"The quick brown fox jumps over the lazy dog."` (12 token IDs) 100 times after
+20 warmup iterations.
+
+| tokenizer | encode p50 us | encode p95 us | physical page reads/encode |
+|---|---:|---:|---:|
+| in-memory `unordered_map` (commit `1bf3364`) | 2.458 | 2.625 | n/a |
+| disk index, CRC verified per lookup | 1,160.04 | 1,334.67 | 94 |
+| disk index, CRC verified per page load (shipped) | 993.21 | 1,067.17 | 94 |
+
+**The shipped configuration is about 404x slower than the table it replaced.**
+For a Harrier F32 request of roughly 350 ms that is under 0.3% of wall time, but
+the ratio is the honest number and it grows with input length, since page reads
+scale with the number of merge lookups rather than with the vocabulary.
+
+Two things were measured and only one was kept.
+
+Moving the per-page CRC check from every lookup into the branch that actually
+reads a page recovered 14% (1,160.04 -> 993.21 us). It is kept: `open_validated`
+already hashes the whole payload with SHA-256 at load, so re-running CRC32 over
+a page already sitting in this process's own scratch buffer was verifying our
+own memory. The check still runs on every physical read, which is what catches a
+cache file replaced or truncated after load -- the case load-time SHA-256 cannot
+see, and the one the runtime-corruption test exercises.
+
+Raising the per-encode page cache from 8 slots to 256 was measured at 804.13 us
+p50 with 72 page reads, a further 19%. It was **not** kept: it costs 1 MiB per
+concurrent encode instead of 32 KiB, which erodes the 43.8 MiB this work exists
+to save as soon as several contexts run at once.
+
+### Where the time actually goes
+
+Neither knob addresses the real cost, and an early reading of this data blamed
+the wrong thing. The page reads look like the obvious suspect -- 94 of them per
+encode -- but measuring them directly says otherwise. Decomposing one encode
+against the real index file in this same container:
+
+| component | 94x total us | per call us | share |
+|---|---:|---:|---:|
+| `pread` of one 4 KiB page, warm cache | 37.67 | 0.401 | 3.6% |
+| `crc32` over one page's 4,080 record bytes | 1,020.62 | 10.858 | 96.4% |
+| sum | 1,058.29 | | |
+
+That sum matches the 1,062.29 us `encode_p50` observed in the same run, so
+essentially all of encode is these two, and CRC is 96% of it. Page I/O is
+nearly free: 0.4 us per warm `pread`.
+
+The cause is the CRC implementation, not the index layout. `crc32()` is a
+byte-at-a-time table lookup whose loop carries a dependency on the previous
+`crc` value, and it measured **376 MB/s**. Each encode pushes 94 x 4,080 B =
+384 KB through it.
+
+This also explains the 8-to-256 slot result above: raising the cache did not
+make reads cheaper, it just cut the number of pages loaded from 94 to 72, and
+with them the number of CRC passes.
+
+So the earlier framing -- that only a different index layout could help -- was
+wrong. Clustering keys to reduce page reads would barely move a 3.6% term.
+Three changes would move the 96% term, and none is taken here:
+
+- **Hardware CRC32.** ARM64 `__crc32*` and x86-64 SSE4.2 `_mm_crc32_u64` reach
+  several GB/s. They implement Castagnoli (CRC32C), not the zlib polynomial
+  used here, so this needs a `kFormatVersion` bump -- which costs nothing
+  operationally, since a version mismatch already regenerates the cache.
+- **Slice-by-8/16.** Keeps the current polynomial and file format, typically
+  2-3 GB/s.
+- **Dropping the runtime CRC entirely.** `open_validated` already verifies the
+  whole payload with SHA-256 at load, so the per-read CRC only adds detection
+  of a file replaced after load. Accepting that risk removes the 1,020 us
+  outright and puts encode near 40 us -- 16x the in-memory table rather than
+  404x.
+
+These are recorded as available headroom, not as work this closeout performed.
+The shipped numbers in the table above stand as measured.
 
 ## Full-process RSS/PSS/USS sample distributions
 
