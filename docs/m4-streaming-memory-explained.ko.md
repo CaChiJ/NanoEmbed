@@ -211,20 +211,22 @@ Harrier F32의 한 block 전체는 21,772 KiB다. `layer`는 이를 한 번에 l
 - mmap과 `madvise`는 page 단위로 반올림된다.
 - 10 ms 샘플은 정확히 같은 계산 시점을 포착하지 않는다.
 
-### 3. PSS anon은 목표 밖이어서 그대로다
+### 3. 당시 측정에서 PSS anon은 partitioning만으로 줄지 않았다
 
-75.85 MiB의 PSS anon은 모든 preset에서 baseline, peak, final까지 거의 같다.
+아래 75.85 MiB 수치는 tokenizer 메모리 최적화 전의 B1 측정값이다. 당시에는
+PSS anon이 모든 preset에서 baseline, peak, final까지 거의 같았다.
 partitioning은 GGUF weight lease만 바꾸며, 다음 익명 메모리의 크기는 바꾸지 않는다.
 
 - `ggml_gallocr`의 compute/activation buffer
 - graph 경계를 넘기는 slot buffer
-- Harrier tokenizer의 BPE merge lookup table
-- GGUF를 읽으며 보관하는 tokenizer/metadata heap
+- Harrier tokenizer의 BPE character lookup table과 디스크 merge index fence
+- 그 시점에 GGUF가 계속 보관하던 tokenizer metadata heap
 
-특히 Harrier는 262,144개 vocab과 514,906개 merge rule을 가진다. 현재 tokenizer는
-merge rule을 `std::unordered_map`에 보관한다. 이 큰 자료구조와 GGUF metadata는
-모델을 열 때 이미 만들어지고, layer partition과 무관하게 process 수명 동안 남는다.
-따라서 PSS anon이 줄지 않는 것이 현재 설계의 예상된 결과다.
+특히 Harrier는 262,144개 vocab과 514,906개 merge rule을 가진다. tokenizer는
+현재 merge rule을 4KiB page 기반 로컬 캐시에 보관하고 작은 fence만 RAM에 유지하며,
+tokenizer 생성 뒤 소비한 큰 GGUF metadata 배열도 제거한다. 따라서 위의 절대 PSS anon
+수치는 현재 구현의 steady-state 기대값이 아니다. 다만 layer partition 자체가 activation,
+character lookup, tokenizer fence를 줄이지 않는다는 해석은 그대로 유효하다.
 
 ### 4. 그래서 전체 PSS/RSS의 변화가 작아 보인다
 

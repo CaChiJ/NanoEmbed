@@ -33,6 +33,15 @@ GELU MLP 대 게이트형 GeGLU, 편향 유무, 양방향 대 causal 어텐션, 
 eager로 대체하지 않고 오류를 반환한다. A/B 비교에는 같은 파일을 가리키는 별도 모델
 핸들을 사용해야 한다.
 
+SentencePiece-BPE의 큰 merge table은 프로세스 heap에 유지하지 않는다. 첫 모델 로드가
+토크나이저 내용의 SHA-256으로 식별되는 로컬 read-only index를 자동 생성하고, 이후
+로드는 같은 index를 재사용한다. GGUF와 모델 배포물은 수정되지 않는다. 기본 위치는
+Linux의 `${XDG_CACHE_HOME:-$HOME/.cache}/nanoembed`, macOS의
+`$HOME/Library/Caches/NanoEmbed`, Windows의 `%LOCALAPPDATA%\NanoEmbed\Cache`다.
+`NANOEMBED_CACHE_DIR`로 위치를 바꿀 수 있다. 캐시는 자동으로 삭제하지 않으며, 필요하면
+NanoEmbed가 실행 중이지 않을 때 해당 디렉터리를 사용자가 삭제할 수 있다. 생성·검증에
+실패하면 메모리를 많이 쓰는 hash table로 조용히 대체하지 않고 모델 로드를 실패시킨다.
+
 정확도는 sentence-transformers와의 코사인 유사도로 검증한다. B5 저장 결과에서
 `bge-small`의 최악 코사인은 0.999999156, F32 `harrier-270m`은 0.999999725다.
 후자의 코퍼스에는 한국어·일본어·중국어·키릴·아랍어·이모지가 포함된다.
@@ -137,6 +146,15 @@ NanoEmbed는 다음 두 값을 서로 독립적으로 읽는다.
 `nanoembed-bench`는 Linux에서만 빌드된다. macOS에서는 라이브러리, portable
 통계·파서 테스트와 Python 하네스 통합 테스트만 실행되며, CTest는 Linux 전용
 `bench_selftest` 두 개를 명시적으로 `Skipped`로 표시한다.
+
+BPE index의 cold/warm load와 metadata 제거 직후 메모리만 좁게 확인하려면 같은
+`NANOEMBED_CACHE_DIR`로 아래 probe를 두 번 실행한다. 출력에는 cache hit 여부,
+cache/fence 크기, load 시간, encode p50/p95와 page read 횟수가 포함된다.
+
+```sh
+NANOEMBED_CACHE_DIR=/tmp/nanoembed-cache \
+  ./build/bin/nanoembed-tokenizer-memory-probe models/harrier-270m.gguf
+```
 
 ```sh
 # Linux에서 모델 없이 측정 도구 자체를 검사한다.
