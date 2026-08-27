@@ -696,19 +696,34 @@ bool DiskMergeIndex::find(uint64_t key, LookupScratch & scratch, Rule & result) 
     if (slot == nullptr) {
         slot = &scratch.slots[static_cast<size_t>(scratch.next_slot % scratch.slots.size())];
         ++scratch.next_slot;
+        // Claim the slot only once its bytes have been validated below, so a
+        // rejected page cannot be left advertising itself as cached and then
+        // served unvalidated to a later lookup.
+        slot->page = UINT64_MAX;
         impl_->read_at(fences_[page_index].offset, slot->bytes.data(), slot->bytes.size(), cache_path_);
+
+        // Validate where the bytes cross from the file into this process, not
+        // on every lookup. open_validated() already checked every page against
+        // the payload digest at load time; this catches a file replaced or
+        // truncated afterwards, which the load-time SHA-256 cannot see. Once
+        // the page is in this slot it is our own memory and re-checking it per
+        // lookup bought nothing -- it cost about 65% of encode time.
+        //
+        // The count bounds must stay ahead of the crc32 call: short-circuit
+        // evaluation is what keeps the length passed to crc32 inside the page.
+        const uint32_t loaded = read_le32(slot->bytes.data());
+        if (loaded == 0 || loaded > kRecordsPerPage ||
+            read_le64(slot->bytes.data() + 8) != fences_[page_index].first_key ||
+            read_le32(slot->bytes.data() + 4) !=
+                crc32(slot->bytes.data() + kPageHeaderSize, loaded * kRecordSize)) {
+            throw TokenizerError("BPE merge cache page became invalid during encode: '" +
+                                 cache_path_.string() + "'");
+        }
         slot->page = page_index;
         ++scratch.page_reads;
     }
 
     const uint32_t count = read_le32(slot->bytes.data());
-    if (count == 0 || count > kRecordsPerPage ||
-        read_le64(slot->bytes.data() + 8) != fences_[page_index].first_key ||
-        read_le32(slot->bytes.data() + 4) !=
-            crc32(slot->bytes.data() + kPageHeaderSize, count * kRecordSize)) {
-        throw TokenizerError("BPE merge cache page became invalid during encode: '" +
-                             cache_path_.string() + "'");
-    }
     uint32_t low = 0;
     uint32_t high = count;
     while (low < high) {
