@@ -107,6 +107,16 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         tools/nanoembed-bench/statistics.cpp)
     target_link_libraries(nanoembed-bench PRIVATE nanoembed_core Threads::Threads)
     target_compile_options(nanoembed-bench PRIVATE ${NANOEMBED_WARNING_FLAGS})
+
+    # Narrow diagnostic for tokenizer metadata lifetime. Unlike the benchmark
+    # worker, it deliberately reports construction phases in one process.
+    add_executable(nanoembed-tokenizer-memory-probe
+        tools/nanoembed-tokenizer-memory-probe.cpp)
+    target_include_directories(nanoembed-tokenizer-memory-probe
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(nanoembed-tokenizer-memory-probe PRIVATE nanoembed_core)
+    target_compile_options(nanoembed-tokenizer-memory-probe
+        PRIVATE ${NANOEMBED_WARNING_FLAGS})
 else()
     message(STATUS "nanoembed-bench: skipped (Linux-only)")
 endif()
