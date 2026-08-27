@@ -110,11 +110,6 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
         throw TokenizerError("tokenizer.ggml.tokens has an unsupported size");
     }
 
-    // Full string -> id map, needed only to resolve merges below. It is a
-    // local so it is released before from_gguf returns.
-    std::unordered_map<std::string, int> ix;
-    ix.reserve(n * 2);
-
     t.vocab_size_ = static_cast<int>(n);
     for (size_t i = 0; i < n; ++i) {
         std::string piece = gguf_get_arr_str(ctx, tk, i);
@@ -123,8 +118,6 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
         const int b = parse_byte_token(piece);
         if (b >= 0) t.byte_id_[b] = id;
         if (is_single_codepoint(piece)) t.char_ix_.emplace(piece, id);
-
-        ix.emplace(std::move(piece), id);
     }
 
     // ---- Merges ----
@@ -133,29 +126,7 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
     if (nm > static_cast<size_t>(std::numeric_limits<int>::max())) {
         throw TokenizerError("tokenizer.ggml.merges is too large");
     }
-    t.merges_.reserve(nm * 2);
-    for (size_t i = 0; i < nm; ++i) {
-        const std::string rule = gguf_get_arr_str(ctx, mk, i);
-        // "<left> <right>". No vocab piece contains a space (SentencePiece
-        // encodes spaces as U+2581), so the first space is the separator.
-        const size_t sp = rule.find(' ');
-        if (sp == std::string::npos) continue;
-
-        const auto l = ix.find(rule.substr(0, sp));
-        const auto r = ix.find(rule.substr(sp + 1));
-        if (l == ix.end() || r == ix.end()) continue;
-
-        const auto m = ix.find(rule.substr(0, sp) + rule.substr(sp + 1));
-        if (m == ix.end()) continue;
-
-        t.merges_.emplace(pair_key(l->second, r->second),
-                          MergeRule{static_cast<int>(i), m->second});
-    }
-    if (t.merges_.empty()) {
-        throw TokenizerError(
-            "tokenizer.ggml.merges yielded no usable rules — the file declares "
-            "BPE but carries no merge table this vocab can resolve");
-    }
+    t.merge_index_ = DiskMergeIndex::from_gguf(ctx, tk, mk);
 
     // ---- Special tokens ----
     t.bos_id_ = optional_id(ctx, "tokenizer.ggml.bos_token_id");
@@ -211,8 +182,10 @@ SpmBpeTokenizer SpmBpeTokenizer::from_gguf(gguf_context * ctx) {
 
 // ---- BPE -------------------------------------------------------------------
 
-void SpmBpeTokenizer::bpe(const std::string & s, int budget, std::vector<int> & out) const {
-    if (budget <= 0 || s.empty()) return;
+uint64_t SpmBpeTokenizer::bpe(const std::string & s,
+                              int budget,
+                              std::vector<int> & out) const {
+    if (budget <= 0 || s.empty()) return 0;
 
     // Doubly-linked symbol list. `id < 0` marks a symbol absorbed by a merge.
     struct Symbol {
@@ -238,7 +211,7 @@ void SpmBpeTokenizer::bpe(const std::string & s, int budget, std::vector<int> & 
         }
         i += len;
     }
-    if (syms.empty()) return;
+    if (syms.empty()) return 0;
 
     const int n = static_cast<int>(syms.size());
     for (int i = 0; i < n; ++i) {
@@ -263,16 +236,18 @@ void SpmBpeTokenizer::bpe(const std::string & s, int budget, std::vector<int> & 
         return a.left > b.left;
     };
     std::priority_queue<Candidate, std::vector<Candidate>, decltype(worse)> queue(worse);
+    DiskMergeIndex::LookupScratch page_cache;
 
     const auto offer = [&](int l, int r) {
         if (l < 0 || r < 0) return;
-        const auto it = merges_.find(pair_key(syms[static_cast<size_t>(l)].id,
-                                              syms[static_cast<size_t>(r)].id));
-        if (it == merges_.end()) return;
-        queue.push(Candidate{it->second.rank, l, r,
+        DiskMergeIndex::Rule rule;
+        if (!merge_index_.find(pair_key(syms[static_cast<size_t>(l)].id,
+                                        syms[static_cast<size_t>(r)].id),
+                               page_cache, rule)) return;
+        queue.push(Candidate{rule.rank, l, r,
                              syms[static_cast<size_t>(l)].id,
                              syms[static_cast<size_t>(r)].id,
-                             it->second.merged});
+                             rule.merged});
     };
 
     for (int i = 0; i + 1 < n; ++i) offer(i, i + 1);
@@ -302,12 +277,23 @@ void SpmBpeTokenizer::bpe(const std::string & s, int budget, std::vector<int> & 
         out.push_back(id);
         ++produced;
     }
+    return page_cache.page_reads;
 }
 
 // ---- encode ----------------------------------------------------------------
 
 std::vector<int> SpmBpeTokenizer::encode(const std::string & text,
                                          int                 max_seq_len_override) const {
+    return encode_impl(text, max_seq_len_override).ids;
+}
+
+SpmBpeTokenizer::DiagnosticEncoding SpmBpeTokenizer::encode_with_diagnostics(
+    const std::string & text, int max_seq_len_override) const {
+    return encode_impl(text, max_seq_len_override);
+}
+
+SpmBpeTokenizer::DiagnosticEncoding SpmBpeTokenizer::encode_impl(
+    const std::string & text, int max_seq_len_override) const {
     const int limit = max_seq_len_override > 0 ? max_seq_len_override : max_seq_len_;
 
     const int reserved = (prefix_id_ >= 0 ? 1 : 0) + (suffix_id_ >= 0 ? 1 : 0);
@@ -330,10 +316,10 @@ std::vector<int> SpmBpeTokenizer::encode(const std::string & text,
     ids.reserve(static_cast<size_t>(std::min(budget, 1024)) + 2);
 
     if (prefix_id_ >= 0) ids.push_back(prefix_id_);
-    bpe(normalized, budget, ids);
+    const uint64_t page_reads = bpe(normalized, budget, ids);
     if (suffix_id_ >= 0) ids.push_back(suffix_id_);
 
-    return ids;
+    return DiagnosticEncoding{std::move(ids), page_reads};
 }
 
 } // namespace nanoembed

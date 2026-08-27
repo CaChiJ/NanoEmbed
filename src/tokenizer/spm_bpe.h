@@ -28,10 +28,9 @@
 // Every symbol at every stage is a vocab entry — initial characters resolve to
 // vocab IDs or byte-fallback IDs, and every merge produces a vocab entry — so
 // the merge table is keyed by a pair of IDs and encode() builds no strings.
-// The full string->ID map is only needed to resolve merges at load time and is
-// dropped afterwards; keeping it would cost tens of MB of resident memory for
-// a 262k vocab, which matters for a library whose whole point is fitting in
-// tens of MB.
+// The full string->ID map is only built on a disk-cache miss to resolve merge
+// records, then its OS-backed arena is returned wholesale. Warm loads retain
+// only char_ix_ and the small disk-index fence.
 //
 // Known gap: HuggingFace splits the input on added tokens before normalizing,
 // so a literal "<eos>" in the input text becomes the special token there and
@@ -40,9 +39,11 @@
 
 #pragma once
 
+#include "disk_merge_index.h"
 #include "tokenizer.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -53,6 +54,10 @@ namespace nanoembed {
 
 class SpmBpeTokenizer : public Tokenizer {
 public:
+    struct DiagnosticEncoding {
+        std::vector<int> ids;
+        uint64_t page_reads = 0;
+    };
     // Build from GGUF metadata: vocab, merges, and the special-token IDs.
     // Throws TokenizerError when a required array is missing or when the file
     // offers no way to represent an out-of-vocabulary character.
@@ -78,12 +83,18 @@ public:
     int prefix_id() const noexcept { return prefix_id_; }
     int suffix_id() const noexcept { return suffix_id_; }
 
-private:
-    struct MergeRule {
-        int rank   = 0;   // position in tokenizer.ggml.merges; lower wins
-        int merged = -1;  // vocab ID of the concatenation
-    };
+    // Internal diagnostics used by tests and the memory probe. These do not
+    // cross the public C ABI.
+    const std::filesystem::path & merge_cache_path() const noexcept {
+        return merge_index_.cache_path();
+    }
+    bool merge_cache_hit() const noexcept { return merge_index_.cache_hit(); }
+    size_t merge_fence_bytes() const noexcept { return merge_index_.fence_bytes(); }
+    uint64_t merge_record_count() const noexcept { return merge_index_.record_count(); }
+    DiagnosticEncoding encode_with_diagnostics(
+        const std::string & text, int max_seq_len_override = 0) const;
 
+private:
     // Deliberately no id -> piece table. encode() never needs one: the merge
     // rules are keyed by ID pairs and the seed symbols come from char_ix_.
     // Holding all 262k pieces for a 262k vocab costs several MB resident, and
@@ -94,8 +105,9 @@ private:
     // the symbol list.
     std::unordered_map<std::string, int> char_ix_;
 
-    // (left_id << 32 | right_id) -> rule.
-    std::unordered_map<uint64_t, MergeRule> merges_;
+    // The rank table lives in a validated read-only cache file. Only its
+    // page fences remain resident; encode() supplies its own 8-page cache.
+    DiskMergeIndex merge_index_;
 
     int byte_id_[256] = {};               // "<0xNN>" ids, -1 when absent
     int bos_id_    = -1;
@@ -108,7 +120,9 @@ private:
 
     // Append the BPE result for `normalized` to `out`, stopping once `budget`
     // tokens have been produced.
-    void bpe(const std::string & normalized, int budget, std::vector<int> & out) const;
+    uint64_t bpe(const std::string & normalized, int budget, std::vector<int> & out) const;
+    DiagnosticEncoding encode_impl(const std::string & text,
+                                   int max_seq_len_override) const;
 };
 
 } // namespace nanoembed

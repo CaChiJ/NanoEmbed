@@ -16,25 +16,91 @@
 // Each model is skipped when its env vars are unset.
 
 #include "tokenizer/spm_bpe.h"
+#include "tokenizer/disk_merge_index.h"
+#include "tokenizer/sha256.h"
 #include "tokenizer/tokenizer.h"
 #include "tokenizer/wordpiece.h"
 
 #include "gguf.h"
 
 #include <cstdio>
+#include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
+
+#ifndef _WIN32
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
 int g_failures = 0;
+
+void set_cache_environment(const std::filesystem::path & value) {
+#ifdef _WIN32
+    if (_wputenv_s(L"NANOEMBED_CACHE_DIR", value.c_str()) != 0) {
+        throw std::runtime_error("cannot set NANOEMBED_CACHE_DIR");
+    }
+#else
+    if (setenv("NANOEMBED_CACHE_DIR", value.c_str(), 1) != 0) {
+        throw std::runtime_error("cannot set NANOEMBED_CACHE_DIR");
+    }
+#endif
+}
+
+class TemporaryCacheDirectory {
+public:
+    TemporaryCacheDirectory() {
+        const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+        path_ = std::filesystem::temp_directory_path() /
+                ("nanoembed-bpe-test-" + std::to_string(stamp));
+        if (!std::filesystem::create_directory(path_)) {
+            throw std::runtime_error("cannot create tokenizer test cache directory");
+        }
+#ifdef _WIN32
+        const wchar_t * old = _wgetenv(L"NANOEMBED_CACHE_DIR");
+#else
+        const char * old = std::getenv("NANOEMBED_CACHE_DIR");
+#endif
+        if (old != nullptr) {
+            had_old_ = true;
+            old_ = old;
+        }
+        set_cache_environment(path_);
+    }
+
+    ~TemporaryCacheDirectory() {
+        try {
+            if (had_old_) set_cache_environment(old_);
+#ifdef _WIN32
+            else _wputenv_s(L"NANOEMBED_CACHE_DIR", L"");
+#else
+            else unsetenv("NANOEMBED_CACHE_DIR");
+#endif
+        } catch (...) {
+        }
+        std::error_code ignored;
+        std::filesystem::remove_all(path_, ignored);
+    }
+
+    const std::filesystem::path & path() const { return path_; }
+
+private:
+    std::filesystem::path path_;
+    std::filesystem::path old_;
+    bool had_old_ = false;
+};
 
 #define EXPECT_TRUE(cond)                                                              \
     do {                                                                               \
@@ -314,6 +380,256 @@ bool test_bpe_rejects_wrong_optional_type() {
     return g_failures == 0;
 }
 
+gguf_context * make_synthetic_bpe(std::vector<const char *> tokens,
+                                  std::vector<const char *> merges) {
+    gguf_context * g = gguf_init_empty();
+    gguf_set_arr_str(g, "tokenizer.ggml.tokens", tokens.data(), tokens.size());
+    gguf_set_arr_str(g, "tokenizer.ggml.merges", merges.data(), merges.size());
+    gguf_set_val_u32(g, "tokenizer.ggml.unknown_token_id", 0);
+    return g;
+}
+
+bool test_sha256_vectors() {
+    const auto empty = nanoembed::detail::sha256("", 0);
+    const auto abc = nanoembed::detail::sha256("abc", 3);
+    EXPECT_TRUE(nanoembed::detail::sha256_hex(empty) ==
+                "e3b0c44298fc1c149afbf4c8996fb924"
+                "27ae41e4649b934ca495991b7852b855");
+    EXPECT_TRUE(nanoembed::detail::sha256_hex(abc) ==
+                "ba7816bf8f01cfea414140de5dae2223"
+                "b00361a396177a9cb410ff61f20015ad");
+    return g_failures == 0;
+}
+
+void flip_file_byte(const std::filesystem::path & path, std::streamoff offset) {
+    std::fstream file(path, std::ios::in | std::ios::out | std::ios::binary);
+    if (!file) throw std::runtime_error("cannot open cache for corruption test");
+    file.seekg(offset);
+    char byte = 0;
+    file.read(&byte, 1);
+    if (!file) throw std::runtime_error("cannot read cache byte for corruption test");
+    byte ^= static_cast<char>(0x5a);
+    file.seekp(offset);
+    file.write(&byte, 1);
+    if (!file) throw std::runtime_error("cannot write cache byte for corruption test");
+}
+
+bool test_bpe_disk_cache_lifecycle() {
+    const std::vector<const char *> tokens = {"<unk>", "a", "b", "c", "ab", "abc", "bc"};
+    const std::vector<const char *> merges = {"a b", "ab c", "a b"};
+    gguf_context * g = make_synthetic_bpe(tokens, merges);
+
+    auto cold = nanoembed::SpmBpeTokenizer::from_gguf(g);
+    EXPECT_TRUE(!cold.merge_cache_hit());
+    EXPECT_TRUE(cold.merge_record_count() == 2);
+    EXPECT_TRUE(cold.merge_fence_bytes() <= 64 * 1024);
+    EXPECT_TRUE(cold.encode("abc") == std::vector<int>({5}));
+    const std::filesystem::path path = cold.merge_cache_path();
+    EXPECT_TRUE(std::filesystem::file_size(path) == 3 * 4096);
+    nanoembed::DiskMergeIndex direct = nanoembed::DiskMergeIndex::from_gguf(
+        g, gguf_find_key(g, "tokenizer.ggml.tokens"),
+        gguf_find_key(g, "tokenizer.ggml.merges"));
+    nanoembed::DiskMergeIndex::LookupScratch scratch;
+    nanoembed::DiskMergeIndex::Rule duplicate_rule;
+    EXPECT_TRUE(direct.find((uint64_t{1} << 32) | 2, scratch, duplicate_rule));
+    EXPECT_EQ_INT(duplicate_rule.rank, 0);
+    EXPECT_EQ_INT(duplicate_rule.merged, 4);
+    nanoembed::DiskMergeIndex::Rule missing_rule;
+    EXPECT_TRUE(!direct.find((uint64_t{3} << 32) | 1, scratch, missing_rule));
+
+    auto warm = nanoembed::SpmBpeTokenizer::from_gguf(g);
+    EXPECT_TRUE(warm.merge_cache_hit());
+    EXPECT_TRUE(warm.encode("abc") == std::vector<int>({5}));
+
+    // Both header and payload damage must be noticed before metadata can be
+    // discarded, rebuilt atomically, and then produce the same IDs.
+    flip_file_byte(path, 8);
+    auto header_rebuilt = nanoembed::SpmBpeTokenizer::from_gguf(g);
+    EXPECT_TRUE(!header_rebuilt.merge_cache_hit());
+    EXPECT_TRUE(header_rebuilt.encode("abc") == std::vector<int>({5}));
+
+    flip_file_byte(path, 12);
+    auto endian_rebuilt = nanoembed::SpmBpeTokenizer::from_gguf(g);
+    EXPECT_TRUE(!endian_rebuilt.merge_cache_hit());
+    EXPECT_TRUE(endian_rebuilt.encode("abc") == std::vector<int>({5}));
+
+    flip_file_byte(path, 72);
+    auto digest_rebuilt = nanoembed::SpmBpeTokenizer::from_gguf(g);
+    EXPECT_TRUE(!digest_rebuilt.merge_cache_hit());
+    EXPECT_TRUE(digest_rebuilt.encode("abc") == std::vector<int>({5}));
+
+    flip_file_byte(path, 4096);
+    auto payload_rebuilt = nanoembed::SpmBpeTokenizer::from_gguf(g);
+    EXPECT_TRUE(!payload_rebuilt.merge_cache_hit());
+    EXPECT_TRUE(payload_rebuilt.encode("abc") == std::vector<int>({5}));
+
+    // Damage introduced after construction is caught by the per-page CRC on
+    // the next physical page read; encode must not return a plausible wrong ID.
+    flip_file_byte(path, 2 * 4096 + 16);
+    bool runtime_corruption_rejected = false;
+    try {
+        (void) payload_rebuilt.encode("abc");
+    } catch (const nanoembed::TokenizerError &) {
+        runtime_corruption_rejected = true;
+    }
+    EXPECT_TRUE(runtime_corruption_rejected);
+    auto runtime_rebuilt = nanoembed::SpmBpeTokenizer::from_gguf(g);
+    EXPECT_TRUE(!runtime_rebuilt.merge_cache_hit());
+    EXPECT_TRUE(runtime_rebuilt.encode("abc") == std::vector<int>({5}));
+
+    std::filesystem::resize_file(path, 2 * 4096);
+    bool short_read_rejected = false;
+    try {
+        (void) runtime_rebuilt.encode("abc");
+    } catch (const nanoembed::TokenizerError &) {
+        short_read_rejected = true;
+    }
+    EXPECT_TRUE(short_read_rejected);
+    auto truncation_rebuilt = nanoembed::SpmBpeTokenizer::from_gguf(g);
+    EXPECT_TRUE(!truncation_rebuilt.merge_cache_hit());
+    EXPECT_TRUE(truncation_rebuilt.encode("abc") == std::vector<int>({5}));
+
+    // Changing either source array produces a distinct content-addressed
+    // cache rather than accepting an index for another tokenizer.
+    const std::vector<const char *> other_merges = {"b c"};
+    gguf_context * other = make_synthetic_bpe(tokens, other_merges);
+    auto distinct = nanoembed::SpmBpeTokenizer::from_gguf(other);
+    EXPECT_TRUE(distinct.merge_cache_path() != path);
+
+    const auto valid_root = path.parent_path();
+    const auto invalid_root = valid_root / "not-a-directory";
+    { std::ofstream marker(invalid_root); marker << "file"; }
+    set_cache_environment(invalid_root);
+    bool unwritable_rejected = false;
+    try {
+        (void) nanoembed::SpmBpeTokenizer::from_gguf(g);
+    } catch (const nanoembed::TokenizerError &) {
+        unwritable_rejected = true;
+    }
+    set_cache_environment(valid_root);
+    EXPECT_TRUE(unwritable_rejected);
+    gguf_free(other);
+    gguf_free(g);
+    return g_failures == 0;
+}
+
+bool test_bpe_concurrent_cache_creation() {
+    const std::vector<const char *> tokens = {"<unk>", "a", "b", "ab"};
+    const std::vector<const char *> merges = {"a b"};
+    gguf_context * seed = make_synthetic_bpe(tokens, merges);
+    auto existing = nanoembed::SpmBpeTokenizer::from_gguf(seed);
+    const auto path = existing.merge_cache_path();
+    gguf_free(seed);
+    std::filesystem::remove(path);
+
+    std::atomic<bool> start{false};
+    std::atomic<int> ready{0};
+    std::atomic<int> failures{0};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 4; ++i) {
+        threads.emplace_back([&] {
+            ++ready;
+            while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+            try {
+                gguf_context * g = make_synthetic_bpe(tokens, merges);
+                auto tokenizer = nanoembed::SpmBpeTokenizer::from_gguf(g);
+                if (tokenizer.encode("ab") != std::vector<int>({3})) ++failures;
+                gguf_free(g);
+            } catch (...) {
+                ++failures;
+            }
+        });
+    }
+    while (ready.load() != 4) std::this_thread::yield();
+    start.store(true, std::memory_order_release);
+    for (auto & thread : threads) thread.join();
+    EXPECT_EQ_INT(failures.load(), 0);
+
+    gguf_context * verify_g = make_synthetic_bpe(tokens, merges);
+    auto verify = nanoembed::SpmBpeTokenizer::from_gguf(verify_g);
+    EXPECT_TRUE(verify.merge_cache_hit());
+    EXPECT_TRUE(verify.encode("ab") == std::vector<int>({3}));
+    gguf_free(verify_g);
+
+#ifndef _WIN32
+    // A rename that is safe only between threads can still expose a partial
+    // file between processes. Re-run the same race with distinct PIDs so temp
+    // naming and atomic replacement are covered too.
+    std::filesystem::remove(path);
+    std::vector<pid_t> children;
+    for (int i = 0; i < 4; ++i) {
+        const pid_t pid = fork();
+        if (pid == 0) {
+            try {
+                gguf_context * child_g = make_synthetic_bpe(tokens, merges);
+                auto child_tokenizer = nanoembed::SpmBpeTokenizer::from_gguf(child_g);
+                const bool ok = child_tokenizer.encode("ab") == std::vector<int>({3});
+                gguf_free(child_g);
+                _exit(ok ? 0 : 1);
+            } catch (...) {
+                _exit(1);
+            }
+        }
+        if (pid < 0) {
+            ++failures;
+            break;
+        }
+        children.push_back(pid);
+    }
+    for (const pid_t child : children) {
+        int child_status = 0;
+        if (waitpid(child, &child_status, 0) != child ||
+            !WIFEXITED(child_status) || WEXITSTATUS(child_status) != 0) {
+            ++failures;
+        }
+    }
+    EXPECT_EQ_INT(failures.load(), 0);
+    gguf_context * process_verify_g = make_synthetic_bpe(tokens, merges);
+    auto process_verify = nanoembed::SpmBpeTokenizer::from_gguf(process_verify_g);
+    EXPECT_TRUE(process_verify.merge_cache_hit());
+    EXPECT_TRUE(process_verify.encode("ab") == std::vector<int>({3}));
+    gguf_free(process_verify_g);
+#endif
+    for (const auto & entry : std::filesystem::directory_iterator(path.parent_path())) {
+        const std::string name = entry.path().filename().string();
+        EXPECT_TRUE(name.find(path.filename().string() + ".tmp.") != 0);
+    }
+    return g_failures == 0;
+}
+
+bool test_discard_consumed_tokenizer_metadata() {
+    gguf_context * g = gguf_init_empty();
+    const char * tokens[] = {"<unk>", "a", "b", "ab"};
+    const char * merges[] = {"a b"};
+    const float scores[] = {0.0f, 1.0f, 2.0f, 3.0f};
+    const int32_t token_types[] = {0, 1, 1, 1};
+
+    gguf_set_val_str(g, "tokenizer.ggml.model", "llama");
+    gguf_set_arr_str(g, "tokenizer.ggml.tokens", tokens, 4);
+    gguf_set_arr_str(g, "tokenizer.ggml.merges", merges, 1);
+    gguf_set_arr_data(g, "tokenizer.ggml.scores", GGUF_TYPE_FLOAT32,
+                      scores, 4);
+    gguf_set_arr_data(g, "tokenizer.ggml.token_type", GGUF_TYPE_INT32,
+                      token_types, 4);
+    gguf_set_val_u32(g, "tokenizer.ggml.unknown_token_id", 0);
+
+    auto tok = nanoembed::create_tokenizer(g);
+    const std::vector<int> before = tok->encode("ab");
+
+    nanoembed::discard_consumed_tokenizer_metadata(g);
+
+    EXPECT_TRUE(gguf_find_key(g, "tokenizer.ggml.tokens") < 0);
+    EXPECT_TRUE(gguf_find_key(g, "tokenizer.ggml.merges") < 0);
+    EXPECT_TRUE(gguf_find_key(g, "tokenizer.ggml.scores") < 0);
+    EXPECT_TRUE(gguf_find_key(g, "tokenizer.ggml.token_type") < 0);
+    EXPECT_TRUE(gguf_find_key(g, "tokenizer.ggml.model") >= 0);
+    EXPECT_TRUE(gguf_find_key(g, "tokenizer.ggml.unknown_token_id") >= 0);
+    EXPECT_TRUE(tok->encode("ab") == before);
+
+    gguf_free(g);
+    return g_failures == 0;
+}
+
 const ModelUnderTest kModels[] = {
     {"bert",   "NANOEMBED_TEST_MODEL",        "NANOEMBED_TOKENIZER_FIXTURE"},
     {"gemma3", "NANOEMBED_TEST_MODEL_GEMMA3", "NANOEMBED_TOKENIZER_FIXTURE_GEMMA3"},
@@ -322,11 +638,20 @@ const ModelUnderTest kModels[] = {
 } // namespace
 
 int main() {
+    TemporaryCacheDirectory cache;
     int rc = 0;
+    g_failures = 0;
+    if (!test_sha256_vectors()) rc = 1;
+    g_failures = 0;
+    if (!test_bpe_disk_cache_lifecycle()) rc = 1;
+    g_failures = 0;
+    if (!test_bpe_concurrent_cache_creation()) rc = 1;
     g_failures = 0;
     if (!test_wordpiece_rejects_out_of_vocab_special_id()) rc = 1;
     g_failures = 0;
     if (!test_bpe_rejects_wrong_optional_type()) rc = 1;
+    g_failures = 0;
+    if (!test_discard_consumed_tokenizer_metadata()) rc = 1;
     for (const ModelUnderTest & m : kModels) {
         g_failures = 0; if (!test_metadata(m))  rc = 1;
         g_failures = 0; if (!test_hf_parity(m)) rc = 1;

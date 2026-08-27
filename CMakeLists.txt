@@ -53,6 +53,8 @@ add_library(nanoembed_core STATIC
     src/arch/gemma3_arch.cpp
     src/tokenizer/registry.cpp
     src/tokenizer/wordpiece.cpp
+    src/tokenizer/sha256.cpp
+    src/tokenizer/disk_merge_index.cpp
     src/tokenizer/spm_bpe.cpp
     src/forward/embed_layer.cpp
     src/forward/attention.cpp
@@ -257,7 +259,8 @@ if(BUILD_TESTING)
     add_executable(nanoembed_tokenizer_test tests/unit/tokenizer_test.cpp)
     target_include_directories(nanoembed_tokenizer_test
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_link_libraries(nanoembed_tokenizer_test PRIVATE nanoembed_core ggml::ggml)
+    target_link_libraries(nanoembed_tokenizer_test
+        PRIVATE nanoembed_core ggml::ggml Threads::Threads)
     target_compile_options(nanoembed_tokenizer_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
     add_test(NAME tokenizer COMMAND nanoembed_tokenizer_test)
 
