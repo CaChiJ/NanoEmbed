@@ -363,3 +363,168 @@ trade is visible rather than implied:
 - Not covered by `SHA256SUMS`: these four files were added after the manifest
   was generated for the M4 bundle proper and are evidence for this addendum
   only, not for the M4 closeout above it.
+
+---
+
+# Addendum: tokenizer metadata release and BPE disk index (2026-08-27)
+
+This is a post-M4 memory change, not a rerun of the M4 benchmark matrix. It
+uses the Linux-only `nanoembed-tokenizer-memory-probe` construction instrument
+against Harrier F32 in the current arm64 Docker build environment. Its memory
+and timing values must therefore not be substituted into the preserved M4
+eager/streaming tables above.
+
+## Outcome
+
+Harrier's SentencePiece-BPE merge table no longer remains as an in-process
+`unordered_map`. The tokenizer keeps its existing `char_ix_` character map,
+but writes the resolved merge rules to a content-addressed local index on the
+first load and uses that index on later loads. Large tokenizer source arrays in
+the GGUF context are removed immediately after both architecture and tokenizer
+construction have completed.
+
+The implementation changes no GGUF file, model distribution, or public C ABI.
+The only external setting is `NANOEMBED_CACHE_DIR`; absent that override, the
+cache follows the OS user-cache location. Cache eviction is intentionally not
+automatic in v1: a user may delete the NanoEmbed cache directory while no
+NanoEmbed process is using it.
+
+## Index and lifetime design
+
+- Identity is SHA-256 over separately framed `tokens` and `merges` arrays:
+  array tag, count, and each string's length and bytes. The file is named
+  `bpe-merges-v1-<sha256>.idx`, so F32, Q8_0, and Q4 variants with the same
+  tokenizer share one cache.
+- A fixed 4 KiB header holds the magic/version/little-endian marker, tokenizer
+  digest, payload digest, record/page counts, and section offsets. Each data
+  page is exactly 4 KiB: a 16-byte page header and at most 255 16-byte
+  `{pair_key, rank, merged_id}` records sorted by pair key. Duplicate pairs
+  retain the lowest merge rank, matching the former `unordered_map::emplace`
+  semantics.
+- Only the page fence table is permanent RAM. Harrier has 2,020 pages and a
+  32,320-byte fence. Lookup binary-searches that fence, performs one explicit
+  4 KiB offset read, then binary-searches the page. `mmap` is not used for the
+  index; POSIX uses `pread`, Windows uses explicit-offset `ReadFile` with
+  `OVERLAPPED`.
+- Each encode owns an independent eight-page (32 KiB) cache. The file handle
+  and fence are read-only, with no shared mutable page buffer or mutex, so
+  distinct contexts continue to encode concurrently.
+- On a warm cache hit, construction hashes source metadata and builds only
+  `char_ix_`; it does not construct the temporary full token index or merge
+  record array. On a miss, those temporary `string_view` structures live in a
+  dedicated PMR arena backed by anonymous OS mappings (`VirtualAlloc` on
+  Windows), then the entire arena is returned after the atomic cache write.
+- Header/source/payload validation happens before GGUF tokenizer metadata is
+  discarded. Every page also has a CRC checked during encode, so an in-place
+  post-load corruption or short read raises `TokenizerError` instead of
+  returning a plausible wrong token ID. Invalid cache files are regenerated
+  through a unique temporary file plus atomic replacement. If generation or
+  replacement cannot succeed, model loading fails; there is no high-memory
+  hash-map fallback.
+
+## Construction probe results
+
+The previous `after_metadata_discard` Harrier measurement was
+`Pss_Anon = 51,956 KiB`. The new probe observed the following:
+
+| state | Pss_Anon KiB | merge cache hit | tokenizer load ms |
+|---|---:|---:|---:|
+| cold cache, after metadata discard | 7,064 | 0 | 615.264 |
+| warm cache, after metadata discard | 7,064 | 1 | 240.386 |
+
+The warm result is 44,892 KiB (about 43.8 MiB) below the prior measurement,
+meeting the 20 MiB reduction acceptance floor and the <=32 MiB target. Cold
+and warm steady-state `Pss_Anon` were identical, so the cache-build peak did
+not remain resident after construction.
+
+The Harrier index was 8,310,784 bytes (about 7.93 MiB), below the 9 MiB limit;
+the 32,320-byte fence is below the 64 KiB permanent-index limit. For the probe
+sentence, encode p50/p95 were 1,160.04/1,334.67 microseconds and averaged 94
+page reads. These latency figures are recorded diagnostics, not a release gate.
+Opening Harrier Q8_0 after Harrier F32 with the same cache directory produced a
+cache hit, confirming cross-quantization tokenizer sharing.
+
+## Full-process RSS/PSS/USS sample distributions
+
+The construction probe above isolates tokenizer lifetime. This table uses the
+existing `nanoembed-bench` profile-on instrument instead: Harrier F32,
+`english_short` 10/100 selected samples, warm BPE cache, 10 ms
+`smaps_rollup` cadence, and the same current Linux arm64 Docker build for all
+execution modes and streaming partition presets. Each row is one independent
+run with the same cache/corpus contract. Values are total-process MiB, not
+`Pss_Anon` or a tokenizer component. Profile-on latency is diagnostic and is
+not used here.
+
+`peak sampled` is the maximum of the same samples from which the percentiles
+are calculated. RSS additionally has a kernel `VmHWM` lifetime peak and a
+post-warmup window peak; those are reported separately because PSS/USS have no
+kernel high-water mark.
+
+| execution | metric | peak sampled MiB | p50 MiB | p90 MiB | p95 MiB | p99 MiB |
+|---|---|---:|---:|---:|---:|---:|
+| eager | RSS | 1055.54 | 1055.54 | 1055.54 | 1055.54 | 1055.54 |
+| eager | PSS | 1053.35 | 1053.35 | 1053.35 | 1053.35 | 1053.35 |
+| eager | USS | 1051.83 | 1051.83 | 1051.83 | 1051.83 | 1051.83 |
+| streaming (`layer`) | RSS | 36.46 | 26.39 | 35.29 | 36.35 | 36.43 |
+| streaming (`layer`) | PSS | 34.27 | 24.20 | 33.09 | 34.16 | 34.24 |
+| streaming (`layer`) | USS | 32.75 | 22.68 | 31.57 | 32.64 | 32.72 |
+| streaming (`attn-ffn`) | RSS | 30.77 | 21.09 | 29.36 | 30.66 | 30.74 |
+| streaming (`attn-ffn`) | PSS | 28.58 | 18.90 | 27.17 | 28.47 | 28.55 |
+| streaming (`attn-ffn`) | USS | 27.06 | 17.38 | 25.65 | 26.95 | 27.03 |
+| streaming (`budget:10MiB`) | RSS | 37.02 | 31.07 | 35.44 | 36.94 | 36.99 |
+| streaming (`budget:10MiB`) | PSS | 34.83 | 28.87 | 33.25 | 34.75 | 34.80 |
+| streaming (`budget:10MiB`) | USS | 33.31 | 27.36 | 31.73 | 33.23 | 33.28 |
+| streaming (`unit`) | RSS | 27.45 | 20.43 | 25.88 | 27.37 | 27.41 |
+| streaming (`unit`) | PSS | 25.25 | 18.23 | 23.69 | 25.17 | 25.22 |
+| streaming (`unit`) | USS | 23.73 | 16.71 | 22.17 | 23.66 | 23.70 |
+
+| execution | RSS lifetime peak MiB | RSS post-warmup window peak MiB | effective samples |
+|---|---:|---:|---:|
+| eager | 1078.54 | 1055.40 | 3,381 |
+| streaming (`layer`) | 55.09 | 36.19 | 3,311 |
+| streaming (`attn-ffn`) | 55.12 | 30.61 | 3,421 |
+| streaming (`budget:10MiB`) | 55.03 | 36.97 | 3,738 |
+| streaming (`unit`) | 55.13 | 27.35 | 3,843 |
+
+The eager sample distribution is flat because the fully loaded F32 model
+dominates the process footprint throughout the measurement window. All
+streaming presets have a much smaller steady-state footprint, while their
+p50-to-peak spreads reflect weight-page and execution residency during the
+request sequence. In this single-run sample, `unit` has the lowest sampled
+peak, `attn-ffn` is next, and `budget:10MiB` is slightly above `layer`; this is
+a descriptive observation, not a preset selection or latency conclusion.
+These are new post-index measurements, not replacements for the preserved M4
+matrix: the container/build and corpus selection differ, and the cache-miss
+construction peak remains covered by the separate construction probe above.
+
+## Correctness and coverage
+
+- SHA-256 standard vectors; header version/endian/source-digest damage;
+  payload damage; partial final page; present/absent lookup; duplicate-rank
+  selection; runtime corruption; truncation/short read; and unusable cache
+  root are covered by tokenizer unit tests.
+- Concurrent first creation is exercised with four threads on every platform
+  and four processes on POSIX; no temporary partial file is accepted or left
+  behind.
+- The real tokenizer fixtures remained exact: BERT 100/100 and Harrier
+  132/132 token-ID sequences matched. Linux also passed tokenizer,
+  distinct-context concurrency, mode-selection, streaming integration, mapped
+  weight-store, and Harrier mapped-preparation tests.
+- macOS and Linux builds were run locally. CI now retains the existing real
+  Harrier cold/warm tokenizer runs on Ubuntu and macOS, and adds a Windows
+  synthetic tokenizer job covering build, disk-index behavior, corruption, and
+  concurrency. Windows was not run locally for this addendum.
+
+The narrow measurement tool is `nanoembed-tokenizer-memory-probe`; it reports
+construction snapshots plus cache hit, cache/fence bytes, load time, encode
+p50/p95, and page-read count. Run it twice with the same
+`NANOEMBED_CACHE_DIR` to compare cold and warm construction.
+
+The supporting profile-on artifacts are
+`post-bpe-disk-index-harrier-f32-eager-memory.json` and
+`post-bpe-disk-index-harrier-f32-streaming-memory.json` (`layer`),
+`post-bpe-disk-index-harrier-f32-streaming-attn-ffn-memory.json`,
+`post-bpe-disk-index-harrier-f32-streaming-budget10m-memory.json`, and
+`post-bpe-disk-index-harrier-f32-streaming-unit-memory.json` in this result
+directory. They are post-M4 evidence and are not covered by the original
+`SHA256SUMS` manifest.
