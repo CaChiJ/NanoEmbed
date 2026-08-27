@@ -48,4 +48,23 @@ std::unique_ptr<Tokenizer> create_tokenizer(gguf_context * ctx) {
     throw TokenizerError("unsupported tokenizer family: '" + family + "'");
 }
 
+void discard_consumed_tokenizer_metadata(gguf_context * ctx) noexcept {
+    if (ctx == nullptr) return;
+
+    // These arrays dominate the GGUF metadata heap. Both supported tokenizer
+    // implementations copy/compile everything they need from them during
+    // create_tokenizer(); retaining the GGUF copies afterwards is redundant.
+    // Keep scalar IDs, flags, and tokenizer.ggml.model so diagnostics can
+    // still describe the configured tokenizer family and wrapper.
+    constexpr const char * kConsumedArrays[] = {
+        "tokenizer.ggml.tokens",
+        "tokenizer.ggml.merges",
+        "tokenizer.ggml.scores",
+        "tokenizer.ggml.token_type",
+    };
+    for (const char * key : kConsumedArrays) {
+        (void) gguf_remove_key(ctx, key);
+    }
+}
+
 } // namespace nanoembed

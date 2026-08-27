@@ -45,4 +45,11 @@ public:
 // unknown or its metadata is missing.
 std::unique_ptr<Tokenizer> create_tokenizer(gguf_context * ctx);
 
+// Drop the large source arrays after every consumer has finished constructing
+// itself. The tokenizer owns everything it needs after create_tokenizer()
+// returns, but architecture construction may still need the token count, so
+// callers must invoke this only after both construction steps have succeeded.
+// Small scalar tokenizer metadata is deliberately retained for diagnostics.
+void discard_consumed_tokenizer_metadata(gguf_context * ctx) noexcept;
+
 } // namespace nanoembed

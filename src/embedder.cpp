@@ -188,6 +188,7 @@ Embedder::Embedder(const std::string & gguf_path)
     }
 
     impl_->tokenizer = create_tokenizer(impl_->gguf);
+    discard_consumed_tokenizer_metadata(impl_->gguf);
     impl_->arch->bind_weights(impl_->model_ctx);
 
 }

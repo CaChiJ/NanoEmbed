@@ -433,6 +433,7 @@ MappedModelPreparation::MappedModelPreparation(const std::string & path)
     // they have completed, making pointer publication a single final phase.
     arch_ = create_model_arch(store_.gguf(), store_.model_context());
     tokenizer_ = create_tokenizer(store_.gguf());
+    discard_consumed_tokenizer_metadata(store_.gguf());
     store_.bind_validated_tensors();
     arch_->bind_weights(store_.model_context());
 }
