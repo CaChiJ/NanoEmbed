@@ -38,7 +38,9 @@ NanoEmbed는 텍스트 임베딩 모델을 C++에서 실행하는 라이브러�
 
 가중치는 학습이 끝난 모델의 숫자다. 토큰 임베딩 표, 어텐션의 Q·K·V 행렬, FFN 행렬, 정규화 계수 등이 여기에 포함된다.
 
-추론 중에는 값이 바뀌지 않는다. 현재 구현은 GGUF에서 읽은 모든 가중치를 모델 핸들이 살아 있는 동안 메모리에 유지한다. M4의 가중치 스트리밍은 이 영역을 줄이는 기능이다.
+추론 중에는 값이 바뀌지 않는다. 기본 eager 모드는 GGUF에서 읽은 모든 가중치를
+모델 핸들이 살아 있는 동안 메모리에 유지한다. Linux의 M4 streaming 모드는 같은
+가중치를 read-only mmap에서 직접 읽고 레이어별 페이지 상주를 조절한다.
 
 ### 2.2 계산 그래프
 
@@ -104,7 +106,7 @@ M3.5에서는 `ggml_gallocr`를 도입했다. 이 할당기는 그래프를 분�
 
 현재 구조에서는 각 `nanoembed_context`가 `ComputeScratch`를 가진다. 이 객체가 CPU 백엔드, 그래프 할당기, 텐서 메타데이터 영역과 활성값 버퍼를 소유한다. 같은 컨텍스트에서 여러 번 추론하면 버퍼를 다시 사용한다.
 
-### 3.2 레이어별 가중치 스트리밍 — 예정, M4
+### 3.2 레이어별 가중치 스트리밍 — 완료, M4
 
 BERT 인코더의 각 레이어는 서로 다른 가중치를 사용하지만 실행 순서는 0번부터 마지막 레이어까지 고정되어 있다. 한 레이어의 계산이 끝나면 이전 레이어 가중치는 같은 요청에서 다시 필요하지 않다.
 
@@ -136,6 +138,18 @@ harrier-270m (F32 1.09 GB)
 
 이것이 M4를 "명시적 로드/해제"가 아니라 "`mmap` + `madvise`로 페이지 상주 제어"로
 설계해야 하는 이유다. 대상 모델을 열어보기 전에는 알 수 없는 사실이었다.
+
+현재 구현은 하나의 `MAP_PRIVATE|PROT_READ` mapping에 metadata-only ggml weight
+tensor를 연결한다. 토큰 임베딩은 실제 token ID가 가리키는 row의 page range만,
+각 transformer block은 해당 레이어 range만 `MADV_WILLNEED` lease로 보호한다.
+계산과 다음 활성값 복사가 끝나면 마지막 사용자가 `MADV_DONTNEED`를 요청한다. 서로
+다른 streaming context가 공유 mapping을 동시에 사용할 때는 active lease와 common
+range를 coordinator가 보호하며, advice 실패나 mixed mode는 eager fallback 없이 오류다.
+
+레이어 사이의 활성값은 context-local F32 ping-pong buffer 두 개로 유지한다. 따라서
+M4는 가중치 상주를 줄이지만 activation memory까지 제거하지는 않는다. `madvise`는
+커널에 대한 advisory이고 실제 page eviction을 보장하지 않으므로, 기능의 정확성과
+저장된 RSS/PSS/USS 관찰을 구분해서 해석한다.
 
 양자화로 우회할 수도 없다. 배포된 q8_0 / q5_k / q4_k 세 파일 모두 토큰 임베딩 표를
 q8_0으로 유지하고 블록만 더 줄인다. 그래서 임베딩 표는 어느 파일에서든 178 MB로
@@ -281,7 +295,7 @@ nanoembed_load_model
 | `n_threads` | 0 | 자동 선택. macOS 하이브리드 CPU는 성능 코어 수를 우선 사용 |
 | `max_batch` | 64 | 유효성 검사에 사용. 실제 배치는 M5 예정 |
 | `max_seq_len` | 512 | 2 이상. 더 긴 입력은 자르고 모델 자체 상한도 넘지 않음 |
-| `use_streaming` | 0 | 1은 아직 지원하지 않으므로 오류 |
+| `use_streaming` | 0 | Linux에서 1은 strict mmap/layer streaming; 그 밖의 값과 비-Linux 1은 오류 |
 | `pooling` | Model default | 필요하면 Mean/CLS/LAST로 명시적 변경 가능 |
 | `normalize` | 1 | 결과에 L2 정규화 적용 |
 
@@ -410,16 +424,34 @@ M3.6 벤치 선택에는 BERT 단문·장문과 Harrier F32가 모두 포함된�
 baseline은 다른 머신에서 측정됐으므로, 같은 머신에 접근할 수 있을 때 별도로
 기록한다.
 
-### M4 — 레이어 스트리밍과 양자화 가중치: 예정
+### M4 — 레이어 스트리밍과 양자화 가중치: 완료
 
-- GGUF 파일을 `mmap`으로 연결
-- 공통 임베딩 가중치와 현재 레이어만 실제 메모리에 유지
-- 레이어가 끝나면 필요 없는 페이지를 `madvise(DONTNEED)`로 반환
-- Q8_0과 Q4_K_M 또는 대상 모델의 Q3_K_M 검증
-- `use_streaming=1` 지원
-- bge-small과 더 큰 harrier-270m에서 스트리밍 전후 RSS 비교
+- read-only GGUF mmap과 validated metadata-only weight tensor
+- token row, common range, 현재 layer range를 구분한 residency lease
+- 레이어 계산 뒤 `madvise(DONTNEED)`와 동시 context 보호
+- BERT F16, Harrier F32/Q8_0/Q4_K 실행 및 strict `use_streaming=1`
+- 최초 context의 atomic mode lock, mixed mode와 비-Linux의 loud failure
+- benchmark requested/resolved mode 증거와 eager/streaming full-vector 비교
 
-목표는 짧은 단일 입력에서 최대 RSS를 40 MiB 아래로 낮추는 것이다. 정확한 목표값은 대상 양자화 모델과 공통 임베딩 크기를 확인한 뒤 기준 측정값으로 확정한다.
+동일 M4 binary의 Docker Desktop arm64 warm/profile-off 측정에서 streaming의 lifetime
+RSS는 BERT short 79.07→14.90 MiB(-81.2%), BERT long 91.94→34.02 MiB(-63.0%),
+Harrier F32 1111.97~1113.90→102.24~102.94 MiB(약 -90.8%), Harrier Q8_0
+360.83~363.04→87.04~87.05 MiB(약 -76.0%)였다. Q4_K는 313.26→84.62
+MiB(-73.0%)이지만 pre-M4 baseline이 없는 report-only 축이다. BERT short의 40 MiB
+목표는 충족했고 long context와 Harrier는 activation과 common/token range 때문에 그보다
+높다.
+
+메모리 절감에는 비용이 있다. 같은 authoritative warm/profile-off 결과에서 throughput은
+BERT long +0.1%, BERT short -3.4%, Harrier F32 -4.5~-17.2%, Harrier Q8_0
+-21.7~-38.0%, Q4_K -14.0%였다. strict-cold canonical startup은 Harrier에서
+12.9~48.7% 줄었지만 첫 layer 실행의 page fault와 inference-only latency는 증가했다.
+출력은 F16/F32/Q8/Q4 모두 eager와 원소 수준에서 일치(max absolute error, MAE, RMSE,
+norm difference 0)했고 기존 PyTorch cosine gate도 유지한 채 통과했다.
+
+이 수치는 [저장된 B5 closeout](bench/results/M4-docker-desktop-arm64/CLOSEOUT.md)의 동일
+Docker Desktop 4.38.0 Ubuntu 24.04 arm64 VM과 bind mount 범위에만 해당한다. 10 ms
+PSS/USS는 sampled lower bound이고 profile-on latency는 diagnostic이다. 1회 독립 실행,
+null confidence interval이며 통계적 유의성을 주장하지 않는다.
 
 ### M5 — 실제 레이어 단위 배치: 예정
 
@@ -482,13 +514,15 @@ python bench/compare.py \
 
 ## 11. 남은 설계 질문
 
-- M4에서 레이어 가중치를 복사 없이 가리키는 ggml 텐서로 사용할지, 백엔드 버퍼로 복사할지 측정이 필요하다.
-- 양자화 텐서가 `ggml_mul_mat`과 `ggml_get_rows`에서 별도 변환 없이 동작하는지는
-  더 이상 가정이 아니다. q8_0/q5_k/q4_k 파일이 스캐너와 forward 경로를 그대로
-  통과했다. 다만 이는 인메모리 경로에서 확인한 것이고, 스트리밍 경로에서는
-  다시 확인해야 한다.
-- 긴 문맥에서 활성값이 가중치보다 큰 경우 스트리밍 벤치의 입력 길이를 어떤 값으로 고정할지 정해야 한다.
-- 자체 호스팅 Linux 러너를 마련하기 전까지 성능 기준값을 어느 머신에서 관리할지 운영 규칙이 필요하다.
-- ggml 서브모듈을 올릴 때 가중치 텐서와 백엔드 버퍼 소유 규칙이 바뀌는지 확인해야 한다.
+- M5 layer batching이 M4에서 관찰한 Q8_0의 21.7~38.0% warm throughput 비용과 반복
+  page fault를 얼마나 상쇄하는지 같은 환경에서 측정해야 한다.
+- Docker Desktop 결과를 물리 Linux target의 성능/저장장치 동작으로 일반화할 수 없다.
+  자체 호스팅 target runner와 여러 independent run 운영 규칙이 필요하다.
+- Harrier token embedding table은 layer가 아니며 요청 token row가 계속 필요하다. 실제
+  multi-worker PSS sharing은 단일 프로세스 sampled PSS로 추정하지 말고 별도 실험한다.
+- verified Hugging Face revision으로 golden fixture를 재생성하기 전까지 B5 정확도
+  provenance는 `legacy_unverified`다.
+- ggml 서브모듈을 올릴 때 mapped leaf tensor와 backend buffer 소유 규칙, quantized
+  `ggml_mul_mat`/`ggml_get_rows`, `madvise` lease 경계를 다시 검증해야 한다.
 
 라이선스와 배포 형식은 M7 패키징 단계 전에 확정한다.
