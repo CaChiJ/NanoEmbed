@@ -39,3 +39,6 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# MCP browser tooling scratch output.
+.playwright-mcp/
