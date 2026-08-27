@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "result_schema_version": 2,
+  "started_at_utc": "2026-08-24T09:18:43.254437Z",
+  "latency_unit": "ms",
+  "scenarios": {
+    "single_short_harrier_q4_streaming": {
+      "corpus_group": "english_short",
+      "cache_state": "warm",
+      "selected_ids": [
+        "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec"
+      ],
+      "latency_ms": [
+        40.359417,
+        38.211708,
+        38.276,
+        43.358542,
+        40.296291,
+        41.039792,
+        39.736292,
+        38.795166,
+        49.412625,
+        40.488625
+      ]
+    }
+  }
+}

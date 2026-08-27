@@ -20,11 +20,18 @@ cmake-build-*/
 .cache/
 .claude/
 
-# Bench
-bench/results/
+# Bench: local runs stay ignored; the environment-scoped M4 closeout is a
+# checksummed project artifact.
+bench/results/*
+!bench/results/M4-docker-desktop-arm64/
+!bench/results/M4-docker-desktop-arm64/**
 
 # Local models (gitignored — too large for git)
 models/
+
+# Locally generated certification corpora and multi-gigabyte golden shards.
+# Commit only their pinned source specifications and checksummed manifests.
+certification-data/
 
 # Python
 __pycache__/

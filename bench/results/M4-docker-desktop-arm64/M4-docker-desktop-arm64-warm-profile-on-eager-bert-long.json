@@ -1,0 +1,665 @@
+{
+  "schema_version": 2,
+  "milestone": "M4",
+  "git_sha": "f473b16",
+  "started_at_utc": "2026-08-24T09:20:14.803350Z",
+  "independent_runs": 1,
+  "confidence_interval": null,
+  "run_settings": {
+    "requested": {
+      "milestone": "M4",
+      "scenario_filter": "single_long_f16",
+      "groups": [
+        "long_context:1"
+      ],
+      "samples_per_group": null,
+      "selection_seed": 0,
+      "memory_profile": true,
+      "memory_profile_interval_ms": 10,
+      "cache_state_override": "warm",
+      "strict_cold": false,
+      "raw_samples_out": "/out/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-bert-long.samples.json",
+      "scenarios_path": "bench/scenarios.yaml",
+      "corpus_manifest_path": "bench/corpus_groups.json",
+      "benchmark_binary_path": "/build/bin/nanoembed-bench",
+      "output_path": "/out/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-bert-long.json"
+    },
+    "resolved": {
+      "selected_scenario_definitions": 1,
+      "planned_scenario_group_runs": 1
+    }
+  },
+  "fingerprints": {
+    "code": {
+      "nanoembed": {
+        "collection_status": "collected",
+        "sha": "f473b1651e9f9084e6a24f1133061aab5b41032f",
+        "dirty": true
+      },
+      "ggml": {
+        "collection_status": "collected",
+        "sha": "387fa29fbbf3149f06a631c7850b6c35c24b0232"
+      }
+    },
+    "benchmark_binary": {
+      "collection_status": "collected",
+      "configured_path": "/build/bin/nanoembed-bench",
+      "resolved_path": "/build/bin/nanoembed-bench",
+      "size_bytes": 394520,
+      "sha256": "8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/build",
+        "source": "/run/host_mark/private[/tmp/nanoembed-a8-build.JucGHh]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "build": {
+      "collection_status": "collected",
+      "cmake_cache_path": "/build/CMakeCache.txt",
+      "build_type": "Release",
+      "compiler": {
+        "id": "GNU",
+        "version": "13.3.0",
+        "path": "/usr/bin/c++"
+      },
+      "cmake_options": {
+        "BUILD_SHARED_LIBS": "ON",
+        "BUILD_TESTING": "ON",
+        "CMAKE_CXX_FLAGS": "",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "CMAKE_C_FLAGS": "",
+        "CMAKE_C_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "GGML_AMX_BF16": "OFF",
+        "GGML_AMX_INT8": "OFF",
+        "GGML_ACCELERATE": "ON",
+        "GGML_AVX": "OFF",
+        "GGML_AVX2": "OFF",
+        "GGML_AVX512": "OFF",
+        "GGML_AVX512_BF16": "OFF",
+        "GGML_AVX512_VNNI": "OFF",
+        "GGML_BLAS": "OFF",
+        "GGML_BLAS_VENDOR": "Generic",
+        "GGML_BMI2": "OFF",
+        "GGML_CPU": "ON",
+        "GGML_CPU_ALL_VARIANTS": "OFF",
+        "GGML_CPU_REPACK": "ON",
+        "GGML_CUDA": "OFF",
+        "GGML_HIP": "OFF",
+        "GGML_F16C": "OFF",
+        "GGML_FMA": "OFF",
+        "GGML_LTO": "OFF",
+        "GGML_METAL": "OFF",
+        "GGML_NATIVE": "ON",
+        "GGML_OPENCL": "OFF",
+        "GGML_OPENMP": "ON",
+        "GGML_RPC": "OFF",
+        "GGML_SSE42": "OFF",
+        "GGML_SYCL": "OFF",
+        "GGML_VULKAN": "OFF"
+      }
+    },
+    "environment": {
+      "collection_status": "partial",
+      "os": "Linux",
+      "kernel": "6.12.5-linuxkit",
+      "machine": "aarch64",
+      "cpu_model": null,
+      "nproc": 8,
+      "page_size_bytes": 4096,
+      "cpu_frequency_policy": {
+        "collection_status": "unavailable",
+        "policy_count": null,
+        "governors": null,
+        "drivers": null
+      },
+      "numa": {
+        "collection_status": "unavailable",
+        "online_nodes": null,
+        "possible_nodes": null,
+        "node_count": null
+      },
+      "total_ram_bytes": 8217858048,
+      "total_ram_collection_status": "collected",
+      "working_directory_filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "scenario_config": {
+      "collection_status": "collected",
+      "configured_path": "bench/scenarios.yaml",
+      "resolved_path": "bench/scenarios.yaml",
+      "size_bytes": 4670,
+      "sha256": "85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "corpus_manifest": {
+      "collection_status": "collected",
+      "configured_path": "bench/corpus_groups.json",
+      "resolved_path": "bench/corpus_groups.json",
+      "size_bytes": 1206,
+      "sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    }
+  },
+  "corpus_manifest": {
+    "path": "bench/corpus_groups.json",
+    "schema_version": 1,
+    "size_bytes": 1206,
+    "sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+    "selection_seed": 0,
+    "samples_per_group": null,
+    "duplicate_policy": {
+      "within_group": "error",
+      "across_groups": "preserve"
+    }
+  },
+  "cache_state_override": "warm",
+  "strict_cold": false,
+  "raw_samples": {
+    "collection_status": "collected",
+    "format": "nanoembed-benchmark-raw-latency-json",
+    "schema_version": 1,
+    "path": "M4-docker-desktop-arm64-warm-profile-on-eager-bert-long.samples.json",
+    "size_bytes": 605,
+    "sha256": "eb2bdd06fd86aa61727fc16bb5aa5adfe1318c59104bb11326b1e19eaae870db",
+    "scenario_count": 1
+  },
+  "scenarios": {
+    "single_long_f16": {
+      "schema_version": 2,
+      "scenario": "single_long_f16",
+      "os": "linux",
+      "model": "/src/models/bge-small-en-v1.5-f16.gguf",
+      "inputs": "corpus-group:long_context",
+      "warmup": 2,
+      "iter": 10,
+      "total_items": 10,
+      "threads": 4,
+      "pooling": "cls",
+      "normalize": 1,
+      "requested_execution_mode": "eager",
+      "resolved_execution_mode": "eager",
+      "settings": {
+        "requested": {
+          "warmup": 2,
+          "iter": 10,
+          "threads": 4,
+          "pooling": "cls",
+          "normalize": true,
+          "execution_mode": "eager",
+          "cache_state": "warm",
+          "strict_cold": false,
+          "memory_profile": true,
+          "memory_profile_interval_ms": 10,
+          "timeout_sec": 1800,
+          "raw_samples_requested": true,
+          "max_seq_len": null,
+          "max_seq_len_source": "library-default",
+          "corpus_group": "long_context",
+          "selected_input_count": 1,
+          "selection_seed": 0
+        },
+        "resolved": {
+          "threads": 4,
+          "threads_collection_status": "collected",
+          "pooling": "cls",
+          "normalize": true,
+          "execution_mode": "eager",
+          "cache_regime": "warm",
+          "max_seq_len": 512,
+          "corpus_group": "long_context",
+          "selected_input_count": 1
+        }
+      },
+      "execution_mode_resolution": {
+        "contract_version": 1,
+        "requested_execution_mode": "eager",
+        "resolved_execution_mode": "eager",
+        "strict_no_fallback": true,
+        "context_creation_succeeded_with_exact_request": true,
+        "evidence": "frozen nanoembed_context_params.use_streaming request plus successful strict context creation"
+      },
+      "environment": {
+        "collection_status": "partial",
+        "os": "Linux",
+        "kernel": "6.12.5-linuxkit",
+        "machine": "aarch64",
+        "cpu_model": "",
+        "nproc": 8,
+        "page_size_bytes": 4096,
+        "cpu_frequency_policy": {
+          "collection_status": "unavailable",
+          "policy_count": null,
+          "governors": null,
+          "drivers": null
+        },
+        "numa": {
+          "collection_status": "unavailable",
+          "online_nodes": null,
+          "possible_nodes": null,
+          "node_count": null
+        },
+        "total_ram_bytes": 8217858048,
+        "total_ram_collection_status": "collected",
+        "working_directory_filesystem": {
+          "collection_status": "collected",
+          "mount_target": "/src",
+          "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+          "fs_type": "fakeowner",
+          "uuid": null
+        },
+        "native_worker_report": {
+          "kernel": "6.12.5-linuxkit",
+          "cpu_model": "",
+          "nproc": 8,
+          "page_size_bytes": 4096
+        }
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "cache_regime_requested": "warm",
+        "cache_regime": "warm",
+        "execution_shape": "one-worker-warmup-then-timed-repetitions",
+        "warmup_items_executed": 2,
+        "latency_scope": "timed-inference-window-warmup-excluded",
+        "throughput_scope": "timed-inference-window",
+        "resource_counter_scope": "timed-inference-window",
+        "memory_profile_enabled": true,
+        "memory_profile_interval_requested_ms": 10,
+        "memory_profile_samples_requested": 2589,
+        "memory_profile_samples_attempted": 2085,
+        "memory_profile_samples_effective": 2085,
+        "memory_profile_valid_sample_ratio": 1,
+        "memory_profile_final_sample_collected": true,
+        "memory_profile_final_in_aggregates": true,
+        "latency_result_role": "diagnostic",
+        "memory_profile_may_perturb_memory_lifecycle": true,
+        "memory_profile_observer_effect": "smaps_rollup page-table walks may perturb timing and page residency",
+        "memory_profile_read_duration_min_ms": 0.052959,
+        "memory_profile_read_duration_mean_ms": 0.268497,
+        "memory_profile_read_duration_max_ms": 13.7913,
+        "percentile_method": "lower: floor(q * (count - 1))",
+        "stddev_kind": "population",
+        "hwm_reset": true,
+        "rss_interval_ms": 10,
+        "rollup_interval_ms": 10,
+        "rss_samples": 2085,
+        "rollup_samples": 2085,
+        "cache_control": {
+          "cold_cache_requested": false,
+          "strict_cold": false,
+          "platform_supported": null,
+          "eviction_call_succeeded": null,
+          "eviction_error_number": null,
+          "cold_cache_verified": null,
+          "verification_definition": "not_requested",
+          "verification_status": "not_requested",
+          "before_eviction": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          },
+          "after_eviction_before_worker": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          },
+          "after_worker_load_and_first_result": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          }
+        }
+      },
+      "metrics": {
+        "collection_status": {
+          "rss_peak_lifetime": "collected",
+          "rss_peak_window": "collected",
+          "rss_baseline": "collected",
+          "rss_final": "collected",
+          "rss_sampled": "collected",
+          "pss_baseline": "collected",
+          "pss_final": "collected",
+          "pss_sampled": "collected",
+          "uss_baseline": "collected",
+          "uss_final": "collected",
+          "uss_sampled": "collected",
+          "latency": "collected",
+          "single_request_items_per_sec": "collected",
+          "fixed_item_window_throughput": "insufficient_samples"
+        },
+        "rss_peak_lifetime_mb": 91.9258,
+        "rss_peak_window_mb": 91.9258,
+        "rss_baseline_mb": 92.6016,
+        "rss_final_mb": 92.6016,
+        "rss_avg_mb": 92.6016,
+        "rss_max_sampled_mb": 92.6016,
+        "pss_baseline_mb": 90.4229,
+        "pss_final_mb": 90.3965,
+        "pss_avg_mb": 90.3965,
+        "pss_peak_sampled_mb": 90.3965,
+        "uss_baseline_mb": 89.0234,
+        "uss_final_mb": 88.9805,
+        "uss_avg_mb": 88.9805,
+        "uss_peak_sampled_mb": 88.9805,
+        "memory_breakdown": {
+          "pss_anon": {
+            "collection_status": "collected",
+            "baseline_mb": 87.7109,
+            "average_mb": 87.7109,
+            "peak_sampled_mb": 87.7109,
+            "final_mb": 87.7109
+          },
+          "pss_file": {
+            "collection_status": "collected",
+            "baseline_mb": 2.71191,
+            "average_mb": 2.68555,
+            "peak_sampled_mb": 2.68555,
+            "final_mb": 2.68555
+          },
+          "anonymous": {
+            "collection_status": "collected",
+            "baseline_mb": 87.7109,
+            "average_mb": 87.7109,
+            "peak_sampled_mb": 87.7109,
+            "final_mb": 87.7109
+          },
+          "private_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 1.3125,
+            "average_mb": 1.26953,
+            "peak_sampled_mb": 1.26953,
+            "final_mb": 1.26953
+          },
+          "private_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 87.7109,
+            "average_mb": 87.7109,
+            "peak_sampled_mb": 87.7109,
+            "final_mb": 87.7109
+          },
+          "shared_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 3.57812,
+            "average_mb": 3.62109,
+            "peak_sampled_mb": 3.62109,
+            "final_mb": 3.62109
+          },
+          "shared_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 0,
+            "average_mb": 0,
+            "peak_sampled_mb": 0,
+            "final_mb": 0
+          }
+        },
+        "cpu_user_sec": 103.037,
+        "cpu_sys_sec": 0.046499,
+        "page_faults_major": 0,
+        "page_faults_minor": 0,
+        "io_read_bytes": 0,
+        "wall_sec": 25.8728,
+        "latency_count": 10,
+        "latency_min_ms": 2515,
+        "latency_max_ms": 2701.61,
+        "latency_mean_ms": 2587.28,
+        "latency_p50_ms": 2548.23,
+        "latency_p90_ms": 2647.02,
+        "latency_p95_ms": 2647.02,
+        "latency_p99_ms": 2647.02,
+        "latency_stddev_ms": 61.5228,
+        "latency_mad_ms": 33.2287,
+        "single_request_items_per_sec": 0.386506,
+        "cold_phase_timings": {
+          "collection_status": "not_applicable_warm",
+          "startup_boundary": "worker GO through first embed result; excludes cache eviction, process launch, input parsing and pipe synchronization",
+          "fresh_worker_count": 0,
+          "model_load_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "context_create_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "first_request_latency_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "startup_to_first_result_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          }
+        },
+        "fixed_item_window_throughput": {
+          "collection_status": "insufficient_samples",
+          "canonical": false,
+          "source": "sum-of-per-request-latencies",
+          "window_size_items": 10,
+          "minimum_windows_for_statistics": 2,
+          "complete_windows": 1,
+          "dropped_tail_items": 0,
+          "count": 1,
+          "min_items_per_sec": null,
+          "max_items_per_sec": null,
+          "mean_items_per_sec": null,
+          "p50_items_per_sec": null,
+          "p90_items_per_sec": null,
+          "p95_items_per_sec": null,
+          "p99_items_per_sec": null,
+          "stddev_items_per_sec": null,
+          "mad_items_per_sec": null
+        }
+      },
+      "corpus_selection": {
+        "manifest": "bench/corpus_groups.json",
+        "manifest_schema_version": 1,
+        "group": "long_context",
+        "group_size": 20,
+        "selected_size": 1,
+        "seed": 0,
+        "selected_ids": [
+          "sha256:fa088c808bfe49b649647117592c9e9791f41872984cb187c6ba25a94579444a"
+        ],
+        "selection_sha256": "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc",
+        "sources": [
+          "tests/corpus/eval_long.txt"
+        ],
+        "duplicate_policy": {
+          "within_group": "error",
+          "across_groups": "preserve"
+        },
+        "manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "selected_input_sha256": "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc"
+      },
+      "independent_runs": 1,
+      "confidence_interval": null,
+      "scenario_definition": {
+        "name": "single_long_f16",
+        "model": "models/bge-small-en-v1.5-f16.gguf",
+        "corpus_group": "long_context",
+        "pooling": "cls",
+        "normalize": true,
+        "threads": 4,
+        "streaming": false,
+        "cache_state": "warm",
+        "warmup": 2,
+        "iter": 10,
+        "milestones": [
+          "M3.5",
+          "M3.6",
+          "M4",
+          "M5",
+          "M6",
+          "M7",
+          "M8"
+        ]
+      },
+      "fingerprints": {
+        "model": {
+          "collection_status": "collected",
+          "configured_path": "models/bge-small-en-v1.5-f16.gguf",
+          "resolved_path": "models/bge-small-en-v1.5-f16.gguf",
+          "size_bytes": 67308128,
+          "sha256": "f0b2fef971e8366438bfd2d9aefea1b0115919389448806d290237f638bae999",
+          "filesystem": {
+            "collection_status": "collected",
+            "mount_target": "/src",
+            "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+            "fs_type": "fakeowner",
+            "uuid": null
+          }
+        },
+        "selected_input": {
+          "collection_status": "collected",
+          "sha256": "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc",
+          "selected_ids": [
+            "sha256:fa088c808bfe49b649647117592c9e9791f41872984cb187c6ba25a94579444a"
+          ]
+        },
+        "corpus_manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "benchmark_binary_sha256": "8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c"
+      }
+    }
+  },
+  "aggregates": {
+    "aggregation_role": "descriptive; individual scenario results are canonical",
+    "throughput_method": "sum(total_items) / sum(canonical timed wall seconds)",
+    "latency_method": "count-weighted mean plus extrema; percentiles require raw samples and are not reconstructed",
+    "independent_runs": 1,
+    "confidence_interval": null,
+    "by_group": {
+      "long_context": {
+        "scenario_keys": [
+          "single_long_f16"
+        ],
+        "scenario_count": 1,
+        "homogeneous_dimensions": true,
+        "dimensions": {
+          "model_sha256s": [
+            "f0b2fef971e8366438bfd2d9aefea1b0115919389448806d290237f638bae999"
+          ],
+          "cache_regimes": [
+            "warm"
+          ],
+          "memory_profile_states": [
+            true
+          ],
+          "selection_sha256s": [
+            "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc"
+          ],
+          "resolved_execution_modes": [
+            "eager"
+          ]
+        },
+        "total_items": 10,
+        "total_timed_wall_sec": 25.8728,
+        "single_request_items_per_sec": 0.386506292322439,
+        "latency_count": 10,
+        "latency_min_ms": 2515.0,
+        "latency_max_ms": 2701.61,
+        "latency_weighted_mean_ms": 2587.28,
+        "latency_percentiles": null,
+        "confidence_interval": null
+      }
+    },
+    "overall": {
+      "scenario_keys": [
+        "single_long_f16"
+      ],
+      "scenario_count": 1,
+      "homogeneous_dimensions": true,
+      "dimensions": {
+        "model_sha256s": [
+          "f0b2fef971e8366438bfd2d9aefea1b0115919389448806d290237f638bae999"
+        ],
+        "cache_regimes": [
+          "warm"
+        ],
+        "memory_profile_states": [
+          true
+        ],
+        "selection_sha256s": [
+          "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc"
+        ],
+        "resolved_execution_modes": [
+          "eager"
+        ]
+      },
+      "total_items": 10,
+      "total_timed_wall_sec": 25.8728,
+      "single_request_items_per_sec": 0.386506292322439,
+      "latency_count": 10,
+      "latency_min_ms": 2515.0,
+      "latency_max_ms": 2701.61,
+      "latency_weighted_mean_ms": 2587.28,
+      "latency_percentiles": null,
+      "confidence_interval": null
+    }
+  }
+}
