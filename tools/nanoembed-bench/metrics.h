@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace nanoembed::bench {
 
@@ -35,7 +36,53 @@ struct MemSample {
     size_t rss_bytes = 0;
     size_t pss_bytes = 0;
     size_t uss_bytes = 0;   // Private_Clean + Private_Dirty
-    bool   valid     = false;
+    size_t pss_anon_bytes      = 0;
+    size_t pss_file_bytes      = 0;
+    size_t anonymous_bytes     = 0;
+    size_t private_clean_bytes = 0;
+    size_t private_dirty_bytes = 0;
+    size_t shared_clean_bytes  = 0;
+    size_t shared_dirty_bytes  = 0;
+
+    // A field may be absent on older kernels; a present zero is still valid.
+    bool has_rss           = false;
+    bool has_pss           = false;
+    bool has_uss           = false;
+    bool has_pss_anon      = false;
+    bool has_pss_file      = false;
+    bool has_anonymous     = false;
+    bool has_private_clean = false;
+    bool has_private_dirty = false;
+    bool has_shared_clean  = false;
+    bool has_shared_dirty  = false;
+    bool valid             = false;
+};
+
+struct SampledSizeSummary {
+    size_t valid_samples = 0;
+    double average_bytes = 0.0;
+    size_t peak_bytes    = 0;
+    size_t p50_bytes     = 0;
+    size_t p75_bytes     = 0;
+    size_t p90_bytes     = 0;
+    size_t p95_bytes     = 0;
+    size_t p99_bytes     = 0;
+
+    bool available() const { return valid_samples > 0; }
+};
+
+struct MemSampleSummary {
+    size_t total_samples = 0;
+    SampledSizeSummary rss;
+    SampledSizeSummary pss;
+    SampledSizeSummary uss;
+    SampledSizeSummary pss_anon;
+    SampledSizeSummary pss_file;
+    SampledSizeSummary anonymous;
+    SampledSizeSummary private_clean;
+    SampledSizeSummary private_dirty;
+    SampledSizeSummary shared_clean;
+    SampledSizeSummary shared_dirty;
 };
 
 // Counters a process can only observe about itself (getrusage + /proc/self/io).
@@ -65,6 +112,8 @@ size_t parse_kb_line(std::string_view text, std::string_view key);
 
 MemSample parse_smaps_rollup(std::string_view rollup);
 
+MemSampleSummary summarize_mem_samples(const std::vector<MemSample> & samples);
+
 // ---- /proc readers ---------------------------------------------------------
 
 // Contents of /proc/<pid>/<name>, or "" if unreadable.
@@ -74,12 +123,14 @@ std::string read_proc_file(int pid, const char * name);
 // unlike sampling it cannot miss a spike between two observations.
 size_t read_peak_rss(int pid);
 
-// Current RSS via /proc/<pid>/statm. ~0.004 ms — cheap enough to poll at 50 ms.
+// Current RSS via /proc/<pid>/statm. The profile-off benchmark uses this only
+// at window boundaries; it does not create a polling thread.
 size_t read_current_rss(int pid);
 
 // Full RSS/PSS/USS via /proc/<pid>/smaps_rollup. ~6 ms on a 300 MB process:
 // it walks the page table under the target's mmap_lock, so polling this at the
-// RSS cadence would perturb the very process being measured. Poll it slowly.
+// short intervals can perturb timing and page residency. Only call this in
+// profile-on runs.
 MemSample read_mem_sample(int pid);
 
 // Reset VmHWM to the current RSS by writing "5" to /proc/<pid>/clear_refs

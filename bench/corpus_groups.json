@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "duplicate_policy": {
+    "within_group": "error",
+    "across_groups": "preserve"
+  },
+  "groups": {
+    "english_short": {
+      "description": "Short English sentences from the existing evaluation corpus.",
+      "sources": ["tests/corpus/eval.txt"]
+    },
+    "multilingual_short": {
+      "description": "Short multilingual and mixed-script inputs from the existing evaluation corpus.",
+      "sources": ["tests/corpus/eval_multilingual.txt"]
+    },
+    "unicode_edge": {
+      "description": "Emoji, combining forms, bidirectional text, and unusual Unicode sequences.",
+      "sources": ["tests/corpus/eval_unicode_edge.txt"]
+    },
+    "vocab_spread": {
+      "description": "Diverse scripts and symbol domains intended to spread token-embedding row access.",
+      "sources": ["tests/corpus/eval_vocab_spread.txt"]
+    },
+    "medium": {
+      "description": "Medium-length paragraph inputs between short sentences and the model context cap.",
+      "sources": ["tests/corpus/eval_medium.txt"]
+    },
+    "long_context": {
+      "description": "Existing inputs designed to saturate the 512-token context cap.",
+      "sources": ["tests/corpus/eval_long.txt"]
+    }
+  }
+}
