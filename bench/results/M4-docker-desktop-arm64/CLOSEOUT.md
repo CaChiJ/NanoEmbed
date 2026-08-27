@@ -415,12 +415,13 @@ NanoEmbed process is using it.
   dedicated PMR arena backed by anonymous OS mappings (`VirtualAlloc` on
   Windows), then the entire arena is returned after the atomic cache write.
 - Header/source/payload validation happens before GGUF tokenizer metadata is
-  discarded. Every page carries a CRC that is checked on each physical page
-  read, so a cache file replaced or truncated after load -- which the load-time
-  SHA-256 cannot see -- raises `TokenizerError` instead of returning a plausible
-  wrong token ID. The check is deliberately not repeated for a page already
-  held in the encode scratch cache; see the encode-latency section below.
-  Invalid cache files are regenerated
+  discarded: `open_validated()` checks the header, every page's CRC, fence
+  ordering, record ordering, and the whole payload's SHA-256. Encode itself
+  runs only structural checks per page read -- record-count bounds and page
+  identity -- plus a bounds check on every merged ID it returns. The per-read
+  CRC was removed because it measured 96% of encode time; what that gives up,
+  and why the merged bounds check had to come with it, is in the encode-latency
+  section below. Invalid cache files are regenerated
   through a unique temporary file plus atomic replacement. If generation or
   replacement cannot succeed, model loading fails; there is no high-memory
   hash-map fallback.
@@ -445,47 +446,31 @@ the 32,320-byte fence is below the 64 KiB permanent-index limit. Opening Harrier
 Q8_0 after Harrier F32 with the same cache directory produced a cache hit,
 confirming cross-quantization tokenizer sharing.
 
-## Encode latency: a 404x regression this trade accepts
+## Encode latency: a 16x regression, after removing what caused it
 
-The memory reduction is not free, and the cost lands on `encode()`. The earlier
-draft of this addendum recorded the absolute figure without a before/after
-comparison, which understated it. Both sides below were measured in this same
-arm64 container on `models/harrier-270m.gguf`, encoding the probe sentence
-`"The quick brown fox jumps over the lazy dog."` (12 token IDs) 100 times after
-20 warmup iterations.
+The memory reduction is not free and the cost lands on `encode()`. An earlier
+draft recorded the absolute figure with no before/after, which understated the
+regression; a later one blamed the index layout, which the decomposition below
+disproves. Every row was measured in this same arm64 container on
+`models/harrier-270m.gguf`, encoding `"The quick brown fox jumps over the lazy
+dog."` (12 token IDs) 100 times after 20 warmup iterations.
 
 | tokenizer | encode p50 us | encode p95 us | physical page reads/encode |
 |---|---:|---:|---:|
 | in-memory `unordered_map` (commit `1bf3364`) | 2.458 | 2.625 | n/a |
-| disk index, CRC verified per lookup | 1,160.04 | 1,334.67 | 94 |
-| disk index, CRC verified per page load (shipped) | 993.21 | 1,067.17 | 94 |
+| disk index, CRC per lookup | 1,160.04 | 1,334.67 | 94 |
+| disk index, CRC per page load | 993.21 | 1,067.17 | 94 |
+| disk index, no runtime CRC | 40.42 | 45.58 | 94 |
+| **shipped**: no runtime CRC + merged bounds check | **40.67** | **49.67** | 94 |
 
-**The shipped configuration is about 404x slower than the table it replaced.**
-For a Harrier F32 request of roughly 350 ms that is under 0.3% of wall time, but
-the ratio is the honest number and it grows with input length, since page reads
-scale with the number of merge lookups rather than with the vocabulary.
+**The shipped configuration is about 16x slower than the table it replaced**, or
+under 0.02% of a roughly 350 ms Harrier F32 request. The first disk-index
+version was 472x; what closed most of that gap is described next.
 
-Two things were measured and only one was kept.
+### Where the time actually went
 
-Moving the per-page CRC check from every lookup into the branch that actually
-reads a page recovered 14% (1,160.04 -> 993.21 us). It is kept: `open_validated`
-already hashes the whole payload with SHA-256 at load, so re-running CRC32 over
-a page already sitting in this process's own scratch buffer was verifying our
-own memory. The check still runs on every physical read, which is what catches a
-cache file replaced or truncated after load -- the case load-time SHA-256 cannot
-see, and the one the runtime-corruption test exercises.
-
-Raising the per-encode page cache from 8 slots to 256 was measured at 804.13 us
-p50 with 72 page reads, a further 19%. It was **not** kept: it costs 1 MiB per
-concurrent encode instead of 32 KiB, which erodes the 43.8 MiB this work exists
-to save as soon as several contexts run at once.
-
-### Where the time actually goes
-
-Neither knob addresses the real cost, and an early reading of this data blamed
-the wrong thing. The page reads look like the obvious suspect -- 94 of them per
-encode -- but measuring them directly says otherwise. Decomposing one encode
-against the real index file in this same container:
+The 94 page reads per encode look like the obvious suspect, and they are not.
+Decomposing one encode against the real index file in this same container:
 
 | component | 94x total us | per call us | share |
 |---|---:|---:|---:|
@@ -493,37 +478,64 @@ against the real index file in this same container:
 | `crc32` over one page's 4,080 record bytes | 1,020.62 | 10.858 | 96.4% |
 | sum | 1,058.29 | | |
 
-That sum matches the 1,062.29 us `encode_p50` observed in the same run, so
-essentially all of encode is these two, and CRC is 96% of it. Page I/O is
-nearly free: 0.4 us per warm `pread`.
+That sum matched the 1,062.29 us `encode_p50` measured in the same run, so
+encode was essentially these two and CRC was 96% of it. Warm page I/O costs
+0.4 us. The cause was the CRC implementation: `crc32()` is a byte-at-a-time
+table lookup whose loop carries a dependency on the previous value, measured at
+**376 MB/s**, and each encode pushed 94 x 4,080 B = 384 KB through it.
 
-The cause is the CRC implementation, not the index layout. `crc32()` is a
-byte-at-a-time table lookup whose loop carries a dependency on the previous
-`crc` value, and it measured **376 MB/s**. Each encode pushes 94 x 4,080 B =
-384 KB through it.
+This also explains an experiment that was measured and rejected. Raising the
+per-encode page cache from 8 slots to 256 reached 804.13 us with 72 page reads
+-- it did not make reads cheaper, it just cut how many pages were loaded and
+with them how many CRC passes ran. It was not kept: 1 MiB per concurrent encode
+instead of 32 KiB erodes the 43.8 MiB this work exists to save.
 
-This also explains the 8-to-256 slot result above: raising the cache did not
-make reads cheaper, it just cut the number of pages loaded from 94 to 72, and
-with them the number of CRC passes.
+### What was removed, and what that costs
 
-So the earlier framing -- that only a different index layout could help -- was
-wrong. Clustering keys to reduce page reads would barely move a 3.6% term.
-Three changes would move the 96% term, and none is taken here:
+Two changes were taken.
 
-- **Hardware CRC32.** ARM64 `__crc32*` and x86-64 SSE4.2 `_mm_crc32_u64` reach
-  several GB/s. They implement Castagnoli (CRC32C), not the zlib polynomial
-  used here, so this needs a `kFormatVersion` bump -- which costs nothing
-  operationally, since a version mismatch already regenerates the cache.
-- **Slice-by-8/16.** Keeps the current polynomial and file format, typically
-  2-3 GB/s.
-- **Dropping the runtime CRC entirely.** `open_validated` already verifies the
-  whole payload with SHA-256 at load, so the per-read CRC only adds detection
-  of a file replaced after load. Accepting that risk removes the 1,020 us
-  outright and puts encode near 40 us -- 16x the in-memory table rather than
-  404x.
+**The per-lookup CRC became a per-page-load CRC** (1,160.04 -> 993.21 us).
+Re-running CRC32 over a page already sitting in this process's own scratch
+buffer verified nothing that load-time SHA-256 had not.
 
-These are recorded as available headroom, not as work this closeout performed.
-The shipped numbers in the table above stand as measured.
+**Then the runtime CRC was removed entirely** (993.21 -> 40.42 us), leaving the
+two structural checks that cost nothing: the record-count bound, which also
+keeps the in-page binary search inside the page, and the page identity check
+against the fence. `open_validated()` still verifies every page's CRC and the
+whole payload's SHA-256 when the cache is opened.
+
+The risk this accepts is specific and was measured rather than assumed. A record
+edited in place after load, on a page whose 16-byte header stays intact, is no
+longer detected. Flipping one byte of the first record's key in the synthetic
+fixture makes `encode("abc")` return `[1, 2, 3]` instead of `[5]` -- the merge
+silently disappears and the caller gets a plausible wrong answer with no error.
+Truncation, a short read, and a page swapped for a different one are still
+caught. The window is bounded by the next load, which re-verifies and
+regenerates. A test asserts this new behavior explicitly so it is not mistaken
+for a bug later.
+
+### The bounds check that had to come with it
+
+Removing the CRC made one existing gap reachable, so it was closed in the same
+change. A merged ID read from the cache is a row index into the token embedding
+table, and `ggml_compute_forward_get_rows_f32` asserts `i01 >= 0 && i01 < ne01`
+-- an abort, not an exception any caller can catch. The eager path uploads token
+IDs straight to the tensor with no range check of its own; only the streaming
+path validated them, at `streaming_execution.cpp`.
+
+Merged IDs are now bounded in two places: during the load-time page walk, where
+an out-of-range value rejects the whole file so it is regenerated, and in
+`find()`, which catches the post-load corruption the CRC no longer sees. The
+check is an integer comparison and does not show up in the timings above --
+40.42 us without it, 40.67 us with it. The worst case for a corrupted cache is
+now an ordinary `TokenizerError` on either execution path.
+
+Remaining headroom, measured or estimated but not taken: hardware CRC32C
+(ARM64 `__crc32*`, x86-64 SSE4.2) would restore per-read verification at several
+GB/s, at the cost of a `kFormatVersion` bump since it uses a different
+polynomial than the zlib one written today; slice-by-8/16 would reach 2-3 GB/s
+while keeping the current format. Either would buy back the detection given up
+above. The remaining 16x is page I/O, which no CRC change affects.
 
 ## Full-process RSS/PSS/USS sample distributions
 
@@ -582,8 +594,11 @@ construction peak remains covered by the separate construction probe above.
 
 - SHA-256 standard vectors; header version/endian/source-digest damage;
   payload damage; partial final page; present/absent lookup; duplicate-rank
-  selection; runtime corruption; truncation/short read; and unusable cache
-  root are covered by tokenizer unit tests.
+  selection; truncation/short read; and unusable cache root are covered by
+  tokenizer unit tests. Two tests pin the post-CRC contract specifically: a
+  record edited after load is asserted to produce the wrong-but-plausible IDs
+  rather than an error, and a corrupted merged field is asserted to raise
+  `TokenizerError` rather than reach ggml's abort.
 - Concurrent first creation is exercised with four threads on every platform
   and four processes on POSIX; no temporary partial file is accepted or left
   behind.
