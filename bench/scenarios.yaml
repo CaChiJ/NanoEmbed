@@ -201,6 +201,164 @@ scenarios:
     iter: 10
     milestones: [M4, M5, M6, M7, M8]
 
-  # Future scenarios:
-  # - name: batch32_mixed_q8              # M5+
-  # - name: batch128_mixed_q8             # M5+
+  # M5 true-batch axes. `samples` is resolved with the global fixed seed, and
+  # CLI --group/--samples-per-group still overrides it for ad-hoc runs.
+  - name: batch32_mixed_harrier_q8
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_q8_streaming
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch128_mixed_harrier_q8
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 128
+    batch_size: 128
+    max_batch: 128
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 1
+    iter: 3
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch128_mixed_harrier_q8_streaming
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 128
+    batch_size: 128
+    max_batch: 128
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 1
+    iter: 3
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch128_mixed_harrier_q8_streaming_control
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 128
+    batch_size: 128
+    max_batch: 128
+    batch_control: true
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 1
+    iter: 3
+    milestones: [M5]
+
+  - name: batch32_mixed_bert_f16
+    model: models/bge-small-en-v1.5-f16.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    pooling: cls
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_f32
+    model: models/harrier-270m.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_q8_streaming_control
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    batch_control: true
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5]
+
+  - name: batch32_mixed_harrier_q8_streaming_attn_ffn
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: attn-ffn
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_q8_streaming_budget10m
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: budget:10485760
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_q8_streaming_unit
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: unit
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]

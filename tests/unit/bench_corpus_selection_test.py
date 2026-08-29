@@ -250,6 +250,7 @@ class CorpusSelectionTest(unittest.TestCase):
         expected = {
             "english_short",
             "multilingual_short",
+            "mixed_short",
             "unicode_edge",
             "vocab_spread",
             "medium",
@@ -303,7 +304,7 @@ class CorpusSelectionTest(unittest.TestCase):
             return types.SimpleNamespace(
                 returncode=0,
                 stdout=json.dumps({
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "settings": {
                         "requested": {"execution_mode": mode},
                         "resolved": {"execution_mode": mode},

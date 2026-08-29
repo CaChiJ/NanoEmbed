@@ -121,9 +121,11 @@ void print_arch(const nanoembed::ModelArch & arch) {
     std::printf("\n  default pooling=%s\n", pool_name(arch.default_pooling()));
 
     const nanoembed::InputRequirements r = arch.inputs();
-    std::printf("  graph inputs: token_ids%s%s\n",
-                r.needs_pos_ids  ? " pos_ids"  : "",
-                r.needs_type_ids ? " type_ids" : "");
+    std::printf("  graph inputs: token_ids%s%s%s%s\n",
+                r.needs_learned_pos_ids ? " learned_pos_ids" : "",
+                r.needs_rope_pos_ids    ? " rope_pos_ids"    : "",
+                r.needs_type_ids        ? " type_ids"        : "",
+                r.uses_kq_mask          ? " kq_mask(batch)"  : "");
 }
 
 void print_manifest(const nanoembed::ModelManifest & m) {

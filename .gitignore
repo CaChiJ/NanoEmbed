@@ -20,11 +20,13 @@ cmake-build-*/
 .cache/
 .claude/
 
-# Bench: local runs stay ignored; the environment-scoped M4 closeout is a
-# checksummed project artifact.
+# Bench: local runs stay ignored; environment-scoped closeout bundles are
+# checksummed project artifacts.
 bench/results/*
 !bench/results/M4-docker-desktop-arm64/
 !bench/results/M4-docker-desktop-arm64/**
+!bench/results/M5-docker-desktop-arm64/
+!bench/results/M5-docker-desktop-arm64/**
 
 # Local models (gitignored — too large for git)
 models/

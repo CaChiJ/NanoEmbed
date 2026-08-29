@@ -32,7 +32,7 @@ RSS_TOL     = 0.05   # 5% noise allowance for peak RSS
 
 # Fields that must agree for two runs to be comparable at all.
 ENV_KEYS = ("kernel", "cpu_model", "nproc", "page_size_bytes")
-SUPPORTED_SCHEMA_VERSIONS = (1, 2)
+SUPPORTED_SCHEMA_VERSIONS = (1, 2, 3)
 
 # Schema v1 was emitted without a schema_version field. Keep aliases here so
 # committed M3/M3.5 baselines remain useful after names become explicit in v2.

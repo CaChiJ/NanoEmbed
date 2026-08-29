@@ -1,0 +1,52 @@
+# warm 손해에서 패딩 몫과 캐시 몫을 분리하는 대조 실험.
+#
+# uniform_len 코퍼스는 모든 문장이 같은 7개 단어의 순열이라 토큰 수가 동일하다.
+# 따라서 길이순 정렬 후 어떤 배치 크기에서도 패딩이 0이다.
+#
+# mixed_short 매트릭스와 partition, threads, warmup, iter, samples가 모두 같으므로
+# 처리량 곡선의 모양을 직접 비교할 수 있다.
+#   - 곡선이 평평해지면 warm 손해는 패딩 때문이었다.
+#   - 여전히 떨어지면 남은 원인은 활성값 캐시 압박이다.
+uniform_base: &uniform_base
+  model: models/harrier-270m-q8_0.gguf
+  corpus_group: uniform_len
+  samples: 132
+  normalize: true
+  threads: 4
+  streaming: true
+  cache_state: warm
+  warmup: 1
+  iter: 5
+  partition: layer
+  milestones: [M5-UNIFORM]
+
+scenarios:
+  - <<: *uniform_base
+    name: m5_uniform_b01_layer
+    batch_size: 1
+    max_batch: 1
+
+  - <<: *uniform_base
+    name: m5_uniform_b02_layer
+    batch_size: 2
+    max_batch: 2
+
+  - <<: *uniform_base
+    name: m5_uniform_b03_layer
+    batch_size: 3
+    max_batch: 3
+
+  - <<: *uniform_base
+    name: m5_uniform_b04_layer
+    batch_size: 4
+    max_batch: 4
+
+  - <<: *uniform_base
+    name: m5_uniform_b05_layer
+    batch_size: 5
+    max_batch: 5
+
+  - <<: *uniform_base
+    name: m5_uniform_b10_layer
+    batch_size: 10
+    max_batch: 10

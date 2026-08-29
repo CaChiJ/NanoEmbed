@@ -1,0 +1,40 @@
+# Configure/build (host command; /src was mounted read-only)
+docker run --rm --platform linux/arm64 \
+  -v "$PWD":/src:ro \
+  -v /tmp/nanoembed-m5-linux-build:/build \
+  -v "$PWD/models":/models:ro nanoembed-linux-build:latest \
+  bash -lc 'cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release ... && cmake --build /build -j 8'
+
+# macOS regression
+cmake --build build -j 8
+ctest --test-dir build --output-on-failure
+
+# Linux true-batch regression
+ctest --test-dir /build \
+  -R '^(batch|streaming_integration|context_concurrency|bench_selftest|bench_selftest_memory_profile)$' \
+  --output-on-failure
+
+# Canonical runner form. Each batch-32 control/true scenario was invoked in a
+# fresh container five times, with run1..run5 output names.
+NANOEMBED_CACHE_DIR=/cache python3 bench/runner.py \
+  --milestone M5 \
+  --filter batch32_mixed_harrier_q8_streaming \
+  --bench /build/bin/nanoembed-bench \
+  --out /out/true-b32-run1.json
+
+NANOEMBED_CACHE_DIR=/cache python3 bench/runner.py \
+  --milestone M5 \
+  --filter batch32_mixed_harrier_q8_streaming_control \
+  --bench /build/bin/nanoembed-bench \
+  --out /out/control-b32-run1.json
+
+# batch 128/eager reference axes: replace FILTER with each scenario name.
+python3 bench/runner.py --milestone M5 --filter FILTER \
+  --bench /build/bin/nanoembed-bench --out /out/FILTER.json
+
+# Partition memory profiles: replace FILTER with layer/attn-ffn/budget/unit.
+python3 bench/runner.py --milestone M5 --filter FILTER \
+  --bench /build/bin/nanoembed-bench \
+  --memory-profile --memory-profile-interval-ms 10 \
+  --out /out/FILTER-profile10ms.json
+

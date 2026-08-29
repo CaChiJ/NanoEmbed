@@ -1,0 +1,770 @@
+{
+  "schema_version": 3,
+  "milestone": "M5",
+  "git_sha": "unknown",
+  "started_at_utc": "2026-08-27T15:20:40.527609Z",
+  "independent_runs": 1,
+  "confidence_interval": null,
+  "run_settings": {
+    "requested": {
+      "milestone": "M5",
+      "scenario_filter": "batch32_mixed_harrier_q8_streaming_budget10m",
+      "groups": [],
+      "samples_per_group": null,
+      "selection_seed": 0,
+      "memory_profile": true,
+      "memory_profile_interval_ms": 10,
+      "cache_state_override": null,
+      "strict_cold": false,
+      "raw_samples_out": null,
+      "scenarios_path": "bench/scenarios.yaml",
+      "corpus_manifest_path": "bench/corpus_groups.json",
+      "benchmark_binary_path": "/build/bin/nanoembed-bench",
+      "output_path": "/out/batch32_mixed_harrier_q8_streaming_budget10m-profile10ms.json"
+    },
+    "resolved": {
+      "selected_scenario_definitions": 1,
+      "planned_scenario_group_runs": 1
+    }
+  },
+  "fingerprints": {
+    "code": {
+      "nanoembed": {
+        "collection_status": "unavailable",
+        "sha": null,
+        "dirty": null
+      },
+      "ggml": {
+        "collection_status": "unavailable",
+        "sha": null
+      }
+    },
+    "benchmark_binary": {
+      "collection_status": "collected",
+      "configured_path": "/build/bin/nanoembed-bench",
+      "resolved_path": "/build/bin/nanoembed-bench",
+      "size_bytes": 629240,
+      "sha256": "1b2b1366f6a8d40eb5c604ec1978e5705aaa0c18f1da52fa5dd597611b6c068d",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/build",
+        "source": "/run/host_mark/private[/tmp/nanoembed-m5-linux-build]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "build": {
+      "collection_status": "collected",
+      "cmake_cache_path": "/build/CMakeCache.txt",
+      "build_type": "Release",
+      "compiler": {
+        "id": "GNU",
+        "version": "13.3.0",
+        "path": "/usr/bin/c++"
+      },
+      "cmake_options": {
+        "BUILD_SHARED_LIBS": "ON",
+        "BUILD_TESTING": "ON",
+        "CMAKE_CXX_FLAGS": "",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "CMAKE_C_FLAGS": "",
+        "CMAKE_C_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "GGML_AMX_BF16": "OFF",
+        "GGML_AMX_INT8": "OFF",
+        "GGML_ACCELERATE": "ON",
+        "GGML_AVX": "OFF",
+        "GGML_AVX2": "OFF",
+        "GGML_AVX512": "OFF",
+        "GGML_AVX512_BF16": "OFF",
+        "GGML_AVX512_VNNI": "OFF",
+        "GGML_BLAS": "OFF",
+        "GGML_BLAS_VENDOR": "Generic",
+        "GGML_BMI2": "OFF",
+        "GGML_CPU": "ON",
+        "GGML_CPU_ALL_VARIANTS": "OFF",
+        "GGML_CPU_REPACK": "ON",
+        "GGML_CUDA": "OFF",
+        "GGML_HIP": "OFF",
+        "GGML_F16C": "OFF",
+        "GGML_FMA": "OFF",
+        "GGML_LTO": "OFF",
+        "GGML_METAL": "OFF",
+        "GGML_NATIVE": "ON",
+        "GGML_OPENCL": "OFF",
+        "GGML_OPENMP": "ON",
+        "GGML_RPC": "OFF",
+        "GGML_SSE42": "OFF",
+        "GGML_SYCL": "OFF",
+        "GGML_VULKAN": "OFF"
+      }
+    },
+    "environment": {
+      "collection_status": "partial",
+      "os": "Linux",
+      "kernel": "6.12.5-linuxkit",
+      "machine": "aarch64",
+      "cpu_model": null,
+      "nproc": 8,
+      "page_size_bytes": 4096,
+      "cpu_frequency_policy": {
+        "collection_status": "unavailable",
+        "policy_count": null,
+        "governors": null,
+        "drivers": null
+      },
+      "numa": {
+        "collection_status": "unavailable",
+        "online_nodes": null,
+        "possible_nodes": null,
+        "node_count": null
+      },
+      "total_ram_bytes": 8217858048,
+      "total_ram_collection_status": "collected",
+      "working_directory_filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "scenario_config": {
+      "collection_status": "collected",
+      "configured_path": "bench/scenarios.yaml",
+      "resolved_path": "bench/scenarios.yaml",
+      "size_bytes": 10181,
+      "sha256": "51d150ab5b4b642184deb14fca7118ce17bad345c83f6f310f779c764d512465",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "corpus_manifest": {
+      "collection_status": "collected",
+      "configured_path": "bench/corpus_groups.json",
+      "resolved_path": "bench/corpus_groups.json",
+      "size_bytes": 1427,
+      "sha256": "bcbe20d6e58dc42fbf4944cc9d196b3d654c6ef3740d29cb49eb6db7a2fac863",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    }
+  },
+  "corpus_manifest": {
+    "path": "bench/corpus_groups.json",
+    "schema_version": 1,
+    "size_bytes": 1427,
+    "sha256": "bcbe20d6e58dc42fbf4944cc9d196b3d654c6ef3740d29cb49eb6db7a2fac863",
+    "selection_seed": 0,
+    "samples_per_group": null,
+    "duplicate_policy": {
+      "within_group": "error",
+      "across_groups": "preserve"
+    }
+  },
+  "cache_state_override": null,
+  "strict_cold": false,
+  "raw_samples": {
+    "collection_status": "not_requested",
+    "format": null,
+    "schema_version": null,
+    "memory_profile_schema_version": null,
+    "extensions": [],
+    "path": null,
+    "size_bytes": null,
+    "sha256": null,
+    "scenario_count": 0
+  },
+  "scenarios": {
+    "batch32_mixed_harrier_q8_streaming_budget10m": {
+      "schema_version": 3,
+      "scenario": "batch32_mixed_harrier_q8_streaming_budget10m",
+      "os": "linux",
+      "model": "/src/models/harrier-270m-q8_0.gguf",
+      "inputs": "corpus-group:mixed_short",
+      "warmup": 2,
+      "iter": 5,
+      "total_items": 160,
+      "total_batches": 5,
+      "batch_size": 32,
+      "max_batch": 32,
+      "threads": 4,
+      "pooling": "model-default",
+      "normalize": 1,
+      "requested_execution_mode": "streaming",
+      "resolved_execution_mode": "streaming",
+      "settings": {
+        "requested": {
+          "warmup": 2,
+          "iter": 5,
+          "threads": 4,
+          "batch_size": 32,
+          "max_batch": 32,
+          "batch_control": false,
+          "pooling": "model-default",
+          "normalize": true,
+          "execution_mode": "streaming",
+          "streaming_partition": "budget:10485760",
+          "cache_state": "warm",
+          "strict_cold": false,
+          "memory_profile": true,
+          "memory_profile_interval_ms": 10,
+          "timeout_sec": 1800,
+          "raw_samples_requested": true,
+          "max_seq_len": null,
+          "max_seq_len_source": "library-default",
+          "corpus_group": "mixed_short",
+          "selected_input_count": 32,
+          "selection_seed": 0
+        },
+        "resolved": {
+          "threads": 4,
+          "max_batch": 32,
+          "threads_collection_status": "collected",
+          "pooling": "last",
+          "normalize": true,
+          "execution_mode": "streaming",
+          "cache_regime": "warm",
+          "max_seq_len": 512,
+          "corpus_group": "mixed_short",
+          "selected_input_count": 32
+        }
+      },
+      "execution_mode_resolution": {
+        "contract_version": 1,
+        "requested_execution_mode": "streaming",
+        "resolved_execution_mode": "streaming",
+        "strict_no_fallback": true,
+        "context_creation_succeeded_with_exact_request": true,
+        "evidence": "frozen nanoembed_context_params.use_streaming request plus successful strict context creation"
+      },
+      "environment": {
+        "collection_status": "partial",
+        "os": "Linux",
+        "kernel": "6.12.5-linuxkit",
+        "machine": "aarch64",
+        "cpu_model": "",
+        "nproc": 8,
+        "page_size_bytes": 4096,
+        "cpu_frequency_policy": {
+          "collection_status": "unavailable",
+          "policy_count": null,
+          "governors": null,
+          "drivers": null
+        },
+        "numa": {
+          "collection_status": "unavailable",
+          "online_nodes": null,
+          "possible_nodes": null,
+          "node_count": null
+        },
+        "total_ram_bytes": 8217858048,
+        "total_ram_collection_status": "collected",
+        "working_directory_filesystem": {
+          "collection_status": "collected",
+          "mount_target": "/src",
+          "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+          "fs_type": "fakeowner",
+          "uuid": null
+        },
+        "native_worker_report": {
+          "kernel": "6.12.5-linuxkit",
+          "cpu_model": "",
+          "nproc": 8,
+          "page_size_bytes": 4096
+        }
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "cache_regime_requested": "warm",
+        "cache_regime": "warm",
+        "execution_shape": "one-worker-warmup-then-timed-repetitions",
+        "warmup_items_executed": 64,
+        "latency_scope": "timed-inference-window-warmup-excluded",
+        "throughput_scope": "timed-inference-window",
+        "resource_counter_scope": "timed-inference-window",
+        "memory_profile_enabled": true,
+        "memory_profile_interval_requested_ms": 10,
+        "memory_profile_samples_requested": 862,
+        "memory_profile_samples_attempted": 706,
+        "memory_profile_samples_effective": 706,
+        "memory_profile_valid_sample_ratio": 1,
+        "memory_profile_final_sample_collected": true,
+        "memory_profile_final_in_aggregates": true,
+        "latency_result_role": "diagnostic",
+        "memory_profile_may_perturb_memory_lifecycle": true,
+        "memory_profile_observer_effect": "smaps_rollup page-table walks may perturb timing and page residency",
+        "memory_profile_read_duration_min_ms": 0.097459,
+        "memory_profile_read_duration_mean_ms": 0.252852,
+        "memory_profile_read_duration_max_ms": 3.86179,
+        "percentile_method": "lower: floor(q * (count - 1))",
+        "stddev_kind": "population",
+        "hwm_reset": true,
+        "rss_interval_ms": 10,
+        "rollup_interval_ms": 10,
+        "rss_samples": 706,
+        "rollup_samples": 706,
+        "cache_control": {
+          "cold_cache_requested": false,
+          "strict_cold": false,
+          "platform_supported": null,
+          "eviction_call_succeeded": null,
+          "eviction_error_number": null,
+          "cold_cache_verified": null,
+          "verification_definition": "not_requested",
+          "verification_status": "not_requested",
+          "before_eviction": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          },
+          "after_eviction_before_worker": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          },
+          "after_worker_load_and_first_result": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          }
+        }
+      },
+      "metrics": {
+        "collection_status": {
+          "rss_peak_lifetime": "collected",
+          "rss_peak_window": "collected",
+          "rss_baseline": "collected",
+          "rss_final": "collected",
+          "rss_sampled": "collected",
+          "pss_baseline": "collected",
+          "pss_final": "collected",
+          "pss_sampled": "collected",
+          "uss_baseline": "collected",
+          "uss_final": "collected",
+          "uss_sampled": "collected",
+          "latency": "collected",
+          "single_request_items_per_sec": "collected",
+          "fixed_item_window_throughput": "unavailable"
+        },
+        "rss_peak_lifetime_mb": 58.9648,
+        "rss_peak_window_mb": 58.9258,
+        "rss_baseline_mb": 53.3086,
+        "rss_final_mb": 53.3086,
+        "rss_avg_mb": 55.6966,
+        "rss_max_sampled_mb": 58.9805,
+        "rss_sampled_p50_mb": 55.0039,
+        "rss_sampled_p75_mb": 57.6602,
+        "rss_sampled_p90_mb": 58.918,
+        "rss_sampled_p95_mb": 58.9805,
+        "rss_sampled_p99_mb": 58.9805,
+        "pss_baseline_mb": 51.0693,
+        "pss_final_mb": 51.0645,
+        "pss_avg_mb": 53.4525,
+        "pss_peak_sampled_mb": 56.7363,
+        "pss_sampled_p50_mb": 52.7598,
+        "pss_sampled_p75_mb": 55.416,
+        "pss_sampled_p90_mb": 56.6738,
+        "pss_sampled_p95_mb": 56.7363,
+        "pss_sampled_p99_mb": 56.7363,
+        "uss_baseline_mb": 49.6562,
+        "uss_final_mb": 49.6562,
+        "uss_avg_mb": 52.0443,
+        "uss_peak_sampled_mb": 55.3281,
+        "uss_sampled_p50_mb": 51.3516,
+        "uss_sampled_p75_mb": 54.0078,
+        "uss_sampled_p90_mb": 55.2656,
+        "uss_sampled_p95_mb": 55.3281,
+        "uss_sampled_p99_mb": 55.3281,
+        "memory_breakdown": {
+          "pss_anon": {
+            "collection_status": "collected",
+            "baseline_mb": 46.75,
+            "average_mb": 46.75,
+            "peak_sampled_mb": 46.75,
+            "final_mb": 46.75
+          },
+          "pss_file": {
+            "collection_status": "collected",
+            "baseline_mb": 4.31934,
+            "average_mb": 6.7025,
+            "peak_sampled_mb": 9.98633,
+            "final_mb": 4.31445
+          },
+          "anonymous": {
+            "collection_status": "collected",
+            "baseline_mb": 46.75,
+            "average_mb": 46.75,
+            "peak_sampled_mb": 46.75,
+            "final_mb": 46.75
+          },
+          "private_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 2.90625,
+            "average_mb": 5.2943,
+            "peak_sampled_mb": 8.57812,
+            "final_mb": 2.90625
+          },
+          "private_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 46.75,
+            "average_mb": 46.75,
+            "peak_sampled_mb": 46.75,
+            "final_mb": 46.75
+          },
+          "shared_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 3.65234,
+            "average_mb": 3.65234,
+            "peak_sampled_mb": 3.65234,
+            "final_mb": 3.65234
+          },
+          "shared_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 0,
+            "average_mb": 0,
+            "peak_sampled_mb": 0,
+            "final_mb": 0
+          }
+        },
+        "cpu_user_sec": 33.4811,
+        "cpu_sys_sec": 0.115337,
+        "page_faults_major": 0,
+        "page_faults_minor": 15434,
+        "io_read_bytes": 0,
+        "wall_sec": 8.60563,
+        "latency_count": 5,
+        "latency_min_ms": 1693.59,
+        "latency_max_ms": 1746.45,
+        "latency_mean_ms": 1721.13,
+        "latency_p50_ms": 1725.47,
+        "latency_p90_ms": 1740.64,
+        "latency_p95_ms": 1740.64,
+        "latency_p99_ms": 1740.64,
+        "latency_stddev_ms": 21.2977,
+        "latency_mad_ms": 20.9865,
+        "batch_latency_p50_ms": 1725.47,
+        "batch_latency_p90_ms": 1740.64,
+        "batch_latency_p95_ms": 1740.64,
+        "batch_latency_p99_ms": 1740.64,
+        "item_latency_p50_ms": 53.9208,
+        "item_latency_p90_ms": 54.395,
+        "item_latency_p95_ms": 54.395,
+        "item_latency_p99_ms": 54.395,
+        "batches_per_sec": 0.581015,
+        "items_per_sec": 18.5925,
+        "single_request_items_per_sec": null,
+        "page_faults_major_per_item": 0,
+        "page_faults_minor_per_item": 96.4625,
+        "io_read_bytes_per_item": 0,
+        "cold_phase_timings": {
+          "collection_status": "not_applicable_warm",
+          "startup_boundary": "worker GO through first embed result; excludes cache eviction, process launch, input parsing and pipe synchronization",
+          "fresh_worker_count": 0,
+          "model_load_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "context_create_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "first_request_latency_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "startup_to_first_result_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          }
+        },
+        "fixed_item_window_throughput": {
+          "collection_status": "unavailable",
+          "canonical": false,
+          "source": "sum-of-per-request-latencies",
+          "window_size_items": 10,
+          "minimum_windows_for_statistics": 2,
+          "complete_windows": 0,
+          "dropped_tail_items": 5,
+          "count": 0,
+          "min_items_per_sec": null,
+          "max_items_per_sec": null,
+          "mean_items_per_sec": null,
+          "p50_items_per_sec": null,
+          "p90_items_per_sec": null,
+          "p95_items_per_sec": null,
+          "p99_items_per_sec": null,
+          "stddev_items_per_sec": null,
+          "mad_items_per_sec": null
+        }
+      },
+      "corpus_selection": {
+        "manifest": "bench/corpus_groups.json",
+        "manifest_schema_version": 1,
+        "group": "mixed_short",
+        "group_size": 132,
+        "selected_size": 32,
+        "seed": 0,
+        "selected_ids": [
+          "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec",
+          "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43",
+          "sha256:a607875ef3b9c64dc09d21362c142fc81cb7f311c13277d79d0ea6424251a5c5",
+          "sha256:c858c6cf1861ef601c6163d053bd5f772cedee9697924ae0e2ee217c95786afa",
+          "sha256:e8f9e4adba66cd3792d6eb481fe5937e34a81d36a1de3258e89c31811305022e",
+          "sha256:d78be59f4e711001503189c5bf1b33d698ab65b0bd411909229fd5338ff3de8d",
+          "sha256:f1c24001f9a3315c7f74e05ac7b1604b60df753bd46cd0fca930a785c570a2ba",
+          "sha256:1114de975ed7f8f1a9810e2063b4411c915569bfa5bb7629cc2aec0dc466b907",
+          "sha256:08a93cad8779a0f921244a980684eef196e50fbd81a08192acece281a14cf812",
+          "sha256:1511589c31709516c69068bbb7ed7fa045e5d59a0d491966272b6af07d947f10",
+          "sha256:4af367e9469e749a6da1a5d8c956c8a491a3a4b0ed9559bd7cd37079d4f3d713",
+          "sha256:ebb0d203de50dee39d15a5bd8a23c8d655b4c5ab79ef2f2a5064220c3424b119",
+          "sha256:957621a4cb3cc091069a1efea431752fcf58abf4e6e1476b050916b176dbfae2",
+          "sha256:2add1ca535959a39b24cb298170157e12212ccc773499f80dcab406aa7c1221a",
+          "sha256:a10ae220fd9bf1e73f8091f074d14c6b04ec3e57f68062f59b6b85da94097d5f",
+          "sha256:bfe7cab6a9279026becb7f31f9098275cd75a7efa7c54e179d86628f94d7fc05",
+          "sha256:d676097b07358fceef4380e433ce20d5112b7a9af0a768e65de6f742bcd1ac45",
+          "sha256:8adb743e57ae20c41a2b71c458ec59822fe0bc55f5b181f5f2a9df81b2bc2c71",
+          "sha256:08c35c4fac722e121e36492c293c26a9751233e65fed2adc2bcd0a584b1f7683",
+          "sha256:4da8b388d2a5e92235970b0b6bd53d1e1aecdf48f16444c525c4bbf70f2ec994",
+          "sha256:5d2820cb28ed2115063b44feaee2bbc9c81dd6c8ce784d8fa642b6d93a4e6ee4",
+          "sha256:8168f32e39e7a8412f8eba779daf7975c0f263ed1001f619fe8a468014cd1357",
+          "sha256:0972decfc44c55df059e4409e8b1984f65ce0889e5c90159e5e0c2c0fc3ad706",
+          "sha256:9e36f51ffc5e085a4d8fcbd97e2efcb87aa71b3d161e1e2756894bde07d1fbf9",
+          "sha256:70bee43a98ad208118481c5e91e282c86cc25ac737ae1726de372d637e956eeb",
+          "sha256:9860ac314bbd71f415bb49bb121efe4b7ebaafa7bf2036261bc774c0c6c2ec0c",
+          "sha256:5122b236ff1128e695f79298134a328c8920a4fa78976b8516b8b525f493a88e",
+          "sha256:50f81f1ecd4e23910443ed5968fd96fb2abb8b0429b7dd81b8579713309c40f4",
+          "sha256:723d208b56a89654356236ed0820d1a3856b8c163f8b51502c687030ddf0dbe7",
+          "sha256:e44d430ccf4dcbf328039c64d3ab11d752db58b5df3e9ba8d663262c64a346c5",
+          "sha256:50dfbc8132a5ab500a588cc039ab8ae3cd116a7ede17a46b1483ec434bb70115",
+          "sha256:947e3356c2bc6de6d4093762967ed20f4a6ece25c917549625a10dea138f7def"
+        ],
+        "selection_sha256": "af374fc457de85a1a5e63fa88907c54672d9854ac79c8a169c67109f3a91f7bc",
+        "sources": [
+          "tests/corpus/eval.txt",
+          "tests/corpus/eval_multilingual.txt"
+        ],
+        "duplicate_policy": {
+          "within_group": "error",
+          "across_groups": "preserve"
+        },
+        "manifest_sha256": "bcbe20d6e58dc42fbf4944cc9d196b3d654c6ef3740d29cb49eb6db7a2fac863",
+        "selected_input_sha256": "af374fc457de85a1a5e63fa88907c54672d9854ac79c8a169c67109f3a91f7bc"
+      },
+      "independent_runs": 1,
+      "confidence_interval": null,
+      "scenario_definition": {
+        "name": "batch32_mixed_harrier_q8_streaming_budget10m",
+        "model": "models/harrier-270m-q8_0.gguf",
+        "corpus_group": "mixed_short",
+        "samples": 32,
+        "batch_size": 32,
+        "max_batch": 32,
+        "normalize": true,
+        "threads": 4,
+        "streaming": true,
+        "partition": "budget:10485760",
+        "cache_state": "warm",
+        "warmup": 2,
+        "iter": 5,
+        "milestones": [
+          "M5",
+          "M6",
+          "M7",
+          "M8"
+        ]
+      },
+      "fingerprints": {
+        "model": {
+          "collection_status": "collected",
+          "configured_path": "models/harrier-270m-q8_0.gguf",
+          "resolved_path": "models/harrier-270m-q8_0.gguf",
+          "size_bytes": 300796192,
+          "sha256": "db410d2f5d39bc07f4b69064adfde70f0962da6bb51dc8288c2d1e08e3155b5e",
+          "filesystem": {
+            "collection_status": "collected",
+            "mount_target": "/src",
+            "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+            "fs_type": "fakeowner",
+            "uuid": null
+          }
+        },
+        "selected_input": {
+          "collection_status": "collected",
+          "sha256": "af374fc457de85a1a5e63fa88907c54672d9854ac79c8a169c67109f3a91f7bc",
+          "selected_ids": [
+            "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec",
+            "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43",
+            "sha256:a607875ef3b9c64dc09d21362c142fc81cb7f311c13277d79d0ea6424251a5c5",
+            "sha256:c858c6cf1861ef601c6163d053bd5f772cedee9697924ae0e2ee217c95786afa",
+            "sha256:e8f9e4adba66cd3792d6eb481fe5937e34a81d36a1de3258e89c31811305022e",
+            "sha256:d78be59f4e711001503189c5bf1b33d698ab65b0bd411909229fd5338ff3de8d",
+            "sha256:f1c24001f9a3315c7f74e05ac7b1604b60df753bd46cd0fca930a785c570a2ba",
+            "sha256:1114de975ed7f8f1a9810e2063b4411c915569bfa5bb7629cc2aec0dc466b907",
+            "sha256:08a93cad8779a0f921244a980684eef196e50fbd81a08192acece281a14cf812",
+            "sha256:1511589c31709516c69068bbb7ed7fa045e5d59a0d491966272b6af07d947f10",
+            "sha256:4af367e9469e749a6da1a5d8c956c8a491a3a4b0ed9559bd7cd37079d4f3d713",
+            "sha256:ebb0d203de50dee39d15a5bd8a23c8d655b4c5ab79ef2f2a5064220c3424b119",
+            "sha256:957621a4cb3cc091069a1efea431752fcf58abf4e6e1476b050916b176dbfae2",
+            "sha256:2add1ca535959a39b24cb298170157e12212ccc773499f80dcab406aa7c1221a",
+            "sha256:a10ae220fd9bf1e73f8091f074d14c6b04ec3e57f68062f59b6b85da94097d5f",
+            "sha256:bfe7cab6a9279026becb7f31f9098275cd75a7efa7c54e179d86628f94d7fc05",
+            "sha256:d676097b07358fceef4380e433ce20d5112b7a9af0a768e65de6f742bcd1ac45",
+            "sha256:8adb743e57ae20c41a2b71c458ec59822fe0bc55f5b181f5f2a9df81b2bc2c71",
+            "sha256:08c35c4fac722e121e36492c293c26a9751233e65fed2adc2bcd0a584b1f7683",
+            "sha256:4da8b388d2a5e92235970b0b6bd53d1e1aecdf48f16444c525c4bbf70f2ec994",
+            "sha256:5d2820cb28ed2115063b44feaee2bbc9c81dd6c8ce784d8fa642b6d93a4e6ee4",
+            "sha256:8168f32e39e7a8412f8eba779daf7975c0f263ed1001f619fe8a468014cd1357",
+            "sha256:0972decfc44c55df059e4409e8b1984f65ce0889e5c90159e5e0c2c0fc3ad706",
+            "sha256:9e36f51ffc5e085a4d8fcbd97e2efcb87aa71b3d161e1e2756894bde07d1fbf9",
+            "sha256:70bee43a98ad208118481c5e91e282c86cc25ac737ae1726de372d637e956eeb",
+            "sha256:9860ac314bbd71f415bb49bb121efe4b7ebaafa7bf2036261bc774c0c6c2ec0c",
+            "sha256:5122b236ff1128e695f79298134a328c8920a4fa78976b8516b8b525f493a88e",
+            "sha256:50f81f1ecd4e23910443ed5968fd96fb2abb8b0429b7dd81b8579713309c40f4",
+            "sha256:723d208b56a89654356236ed0820d1a3856b8c163f8b51502c687030ddf0dbe7",
+            "sha256:e44d430ccf4dcbf328039c64d3ab11d752db58b5df3e9ba8d663262c64a346c5",
+            "sha256:50dfbc8132a5ab500a588cc039ab8ae3cd116a7ede17a46b1483ec434bb70115",
+            "sha256:947e3356c2bc6de6d4093762967ed20f4a6ece25c917549625a10dea138f7def"
+          ]
+        },
+        "corpus_manifest_sha256": "bcbe20d6e58dc42fbf4944cc9d196b3d654c6ef3740d29cb49eb6db7a2fac863",
+        "benchmark_binary_sha256": "1b2b1366f6a8d40eb5c604ec1978e5705aaa0c18f1da52fa5dd597611b6c068d"
+      }
+    }
+  },
+  "aggregates": {
+    "aggregation_role": "descriptive; individual scenario results are canonical",
+    "throughput_method": "sum(total_items) / sum(canonical timed wall seconds)",
+    "latency_method": "count-weighted mean plus extrema; percentiles require raw samples and are not reconstructed",
+    "independent_runs": 1,
+    "confidence_interval": null,
+    "by_group": {
+      "mixed_short": {
+        "scenario_keys": [
+          "batch32_mixed_harrier_q8_streaming_budget10m"
+        ],
+        "scenario_count": 1,
+        "homogeneous_dimensions": true,
+        "dimensions": {
+          "model_sha256s": [
+            "db410d2f5d39bc07f4b69064adfde70f0962da6bb51dc8288c2d1e08e3155b5e"
+          ],
+          "cache_regimes": [
+            "warm"
+          ],
+          "memory_profile_states": [
+            true
+          ],
+          "selection_sha256s": [
+            "af374fc457de85a1a5e63fa88907c54672d9854ac79c8a169c67109f3a91f7bc"
+          ],
+          "resolved_execution_modes": [
+            "streaming"
+          ]
+        },
+        "total_items": 160,
+        "total_batches": 5,
+        "total_timed_wall_sec": 8.60563,
+        "single_request_items_per_sec": 18.592479574418142,
+        "items_per_sec": 18.592479574418142,
+        "batches_per_sec": 0.581014986700567,
+        "latency_count": 5,
+        "latency_min_ms": 1693.59,
+        "latency_max_ms": 1746.45,
+        "latency_weighted_mean_ms": 1721.1300000000003,
+        "latency_percentiles": null,
+        "confidence_interval": null
+      }
+    },
+    "overall": {
+      "scenario_keys": [
+        "batch32_mixed_harrier_q8_streaming_budget10m"
+      ],
+      "scenario_count": 1,
+      "homogeneous_dimensions": true,
+      "dimensions": {
+        "model_sha256s": [
+          "db410d2f5d39bc07f4b69064adfde70f0962da6bb51dc8288c2d1e08e3155b5e"
+        ],
+        "cache_regimes": [
+          "warm"
+        ],
+        "memory_profile_states": [
+          true
+        ],
+        "selection_sha256s": [
+          "af374fc457de85a1a5e63fa88907c54672d9854ac79c8a169c67109f3a91f7bc"
+        ],
+        "resolved_execution_modes": [
+          "streaming"
+        ]
+      },
+      "total_items": 160,
+      "total_batches": 5,
+      "total_timed_wall_sec": 8.60563,
+      "single_request_items_per_sec": 18.592479574418142,
+      "items_per_sec": 18.592479574418142,
+      "batches_per_sec": 0.581014986700567,
+      "latency_count": 5,
+      "latency_min_ms": 1693.59,
+      "latency_max_ms": 1746.45,
+      "latency_weighted_mean_ms": 1721.1300000000003,
+      "latency_percentiles": null,
+      "confidence_interval": null
+    }
+  }
+}

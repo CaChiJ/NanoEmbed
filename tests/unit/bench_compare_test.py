@@ -9,6 +9,7 @@ class BenchCompareCompatibilityTest(unittest.TestCase):
     def test_unversioned_result_is_schema_v1(self) -> None:
         self.assertEqual(compare.schema_version({}), 1)
         self.assertEqual(compare.schema_version({"schema_version": 2}), 2)
+        self.assertEqual(compare.schema_version({"schema_version": 3}), 3)
         self.assertEqual(compare.schema_version({"schema_version": "2"}), -1)
 
     def test_v1_throughput_alias_is_visible_under_v2_name(self) -> None:

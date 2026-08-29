@@ -86,8 +86,8 @@ jobs:
             echo "hello world" | build/bin/nanoembed-cli "$m" | grep -q "," || exit 1
           done
 
-  windows-tokenizer:
-    name: windows-tokenizer
+  windows-core-synthetic:
+    name: windows-core-synthetic
     runs-on: windows-latest
 
     steps:
@@ -98,13 +98,14 @@ jobs:
 
       # The Windows job intentionally stays synthetic: it exercises SHA-256,
       # VirtualAlloc arena lifetime, explicit-offset ReadFile, corruption
-      # recovery, and concurrent cache creation without downloading a 1 GiB
-      # model. Ubuntu/macOS above run the real Harrier cold/warm fixture.
+      # recovery, concurrent cache creation, and the M5 batch planner/mask
+      # layout without downloading a 1 GiB model. Ubuntu/macOS above run the
+      # real Harrier fixtures.
       - name: Configure
         run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build tokenizer test
-        run: cmake --build build --config Release --target nanoembed_tokenizer_test -j 2
+      - name: Build synthetic core tests
+        run: cmake --build build --config Release --target nanoembed_tokenizer_test nanoembed_batch_test -j 2
 
-      - name: Test tokenizer disk index
-        run: ctest --test-dir build -C Release --output-on-failure -R "^tokenizer$"
+      - name: Test tokenizer disk index and batch planner
+        run: ctest --test-dir build -C Release --output-on-failure -R "^(tokenizer|batch)$"

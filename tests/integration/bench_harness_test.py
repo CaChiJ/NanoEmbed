@@ -206,7 +206,7 @@ if raw_path is not None:
     }), encoding="utf-8")
 
 print(json.dumps({
-    "schema_version": 2,
+    "schema_version": 3,
     "scenario": scenario,
     "inputs": option("--inputs"),
     "warmup": warmup,
@@ -310,7 +310,7 @@ class BenchHarnessIntegrationTest(unittest.TestCase):
     def test_warm_profile_off_uses_full_default_group_and_excludes_warmup(self) -> None:
         result, invocations = self.run_runner()
 
-        self.assertEqual(result["schema_version"], 2)
+        self.assertEqual(result["schema_version"], 3)
         self.assertEqual(result["independent_runs"], 1)
         self.assertIsNone(result["confidence_interval"])
         self.assertEqual(len(invocations), 1)
