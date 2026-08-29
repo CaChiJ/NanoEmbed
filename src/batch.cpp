@@ -109,6 +109,28 @@ MaterializedBatch materialize_batch(const BatchPlan & plan,
         }
 
         if (out.padded) {
+            // Padding-free copy. Sentences keep plan order, so slicing sentence
+            // b is offsets[b]..offsets[b+1] and nothing has to be moved later.
+            out.offsets.resize(B + 1);
+            out.packed_token_ids.reserve(out.valid_tokens);
+            out.packed_positions.reserve(out.valid_tokens);
+            int32_t cursor = 0;
+            for (size_t b = 0; b < B; ++b) {
+                out.offsets[b] = cursor;
+                const BatchItem & item = plan.items[begin + b];
+                for (size_t s = 0; s < item.ids.size(); ++s) {
+                    out.packed_token_ids.push_back(static_cast<int32_t>(item.ids[s]));
+                    out.packed_positions.push_back(static_cast<int32_t>(s));
+                }
+                if (item.ids.size() > static_cast<size_t>(
+                        std::numeric_limits<int32_t>::max() - cursor)) {
+                    throw AllocationError("packed token count exceeds int32");
+                }
+                cursor += static_cast<int32_t>(item.ids.size());
+            }
+            out.offsets[B] = cursor;
+            out.total_tokens = cursor;
+
             const size_t mask_cells = checked_mul(checked_mul(S, S, "S*S"), B, "S*S*B");
             out.attention_mask.resize(mask_cells);
             out.valid_mask.resize(cells);

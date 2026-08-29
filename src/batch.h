@@ -52,6 +52,17 @@ struct MaterializedBatch {
     std::vector<float>       mean_scale;     // [1,B] = 1/length
     std::vector<int32_t>     last_indices;   // [B], flattened S*B index
 
+    // Padding-free view of the same sub-batch, built only when `padded`.
+    // Token-wise operators -- embedding lookup, norms, the Q/K/V/O linear
+    // transforms and the FFN -- read one token and write one token, so they
+    // can run over `total_tokens` real tokens and skip the padded cells
+    // entirely. Attention is the only operator that needs sentence bounds,
+    // and it takes them from `offsets`.
+    std::vector<int32_t> packed_token_ids;  // [T]
+    std::vector<int32_t> packed_positions;  // [T], each sentence restarts at 0
+    std::vector<int32_t> offsets;           // [B+1], first token of each sentence
+    int64_t total_tokens = 0;               // T = sum of lengths
+
     std::vector<size_t> original_indices;
     std::vector<int32_t> lengths;
     uint64_t valid_tokens = 0;

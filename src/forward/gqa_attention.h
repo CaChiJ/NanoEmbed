@@ -77,13 +77,20 @@ GqaProjections build_gqa_projections(ggml_context *              ctx,
 // at a time at that sentence's own length, so no padded key is ever scored and
 // no mask is needed. Sentences never mix in either form -- the batch axis
 // already keeps them apart -- so this only removes wasted work.
+//
+// `seq_offsets` switches the input from padded [.., S, B] to packed [.., T, 1],
+// where sentence b occupies offsets[b]..offsets[b+1]. The slices then start at
+// a running offset instead of a fixed stride, and the results concatenate back
+// along the token axis with nothing to pad.
 ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
                                        const GqaProjections &      proj,
                                        ggml_tensor *               pos,
                                        ggml_tensor *               kq_mask,
                                        const GqaAttentionWeights & w,
                                        const GqaAttentionParams &  p,
-                                       const int32_t *             seq_lengths = nullptr);
+                                       const int32_t *             seq_lengths = nullptr,
+                                       const int32_t *             seq_offsets = nullptr,
+                                       int64_t                     n_seq = 0);
 
 // The composition of the two. The eager path calls this and is unaffected by
 // the split: the same ggml calls are emitted in the same order.
@@ -93,6 +100,8 @@ ggml_tensor * build_gqa_attention(ggml_context *             ctx,
                                   ggml_tensor *              kq_mask,
                                   const GqaAttentionWeights & w,
                                   const GqaAttentionParams &  p,
-                                  const int32_t *            seq_lengths = nullptr);
+                                  const int32_t *            seq_lengths = nullptr,
+                                  const int32_t *            seq_offsets = nullptr,
+                                  int64_t                    n_seq = 0);
 
 } // namespace nanoembed::forward

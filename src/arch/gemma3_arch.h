@@ -106,7 +106,7 @@ public:
     InputRequirements inputs() const noexcept override {
         return InputRequirements{/*learned_pos=*/false, /*rope_pos=*/true,
                                  /*type_ids=*/false, /*kq_mask=*/true,
-                                 /*seq_lengths=*/true};
+                                 /*seq_lengths=*/true, /*packed=*/true};
     }
     InputRequirements embedding_inputs() const noexcept override { return {}; }
 
@@ -135,7 +135,9 @@ public:
                               ggml_tensor *  pos,
                               int            layer,
                               ggml_tensor *  kq_mask = nullptr,
-                              const int32_t * seq_lengths = nullptr) const;
+                              const int32_t * seq_lengths = nullptr,
+                              const int32_t * seq_offsets = nullptr,
+                              int64_t         n_seq = 0) const;
     ggml_tensor * build_final_norm(ggml_context * gctx, ggml_tensor * x) const;
 
     // Scales the graph applies that are not folded into the weights.

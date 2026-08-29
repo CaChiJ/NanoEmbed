@@ -255,6 +255,7 @@ class CorpusSelectionTest(unittest.TestCase):
             "vocab_spread",
             "medium",
             "long_context",
+            "uniform_len",
         }
         self.assertEqual(set(manifest["groups"]), expected)
         for group_name, spec in manifest["groups"].items():

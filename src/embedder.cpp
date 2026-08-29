@@ -87,6 +87,7 @@ struct GraphIO {
     GraphInputs   in;
     forward::PoolInputs pool;
     ggml_tensor * out   = nullptr;
+    bool          packed = false;
 };
 
 } // namespace
@@ -104,9 +105,38 @@ struct Embedder::Impl {
                         bool            padded,
                         PoolType        pooling,
                         bool            normalize,
-                        const int32_t * seq_lengths = nullptr) const {
+                        const MaterializedBatch * batch = nullptr) const {
         const InputRequirements req = arch->inputs();
         GraphIO io;
+
+        // Packed mode drops the padded cells from every token-wise operator.
+        // It needs the architecture to opt in, because attention and pooling
+        // must then slice by sentence offset rather than by batch stride.
+        const bool packed = padded && batch != nullptr &&
+                            req.consumes_seq_lengths && req.consumes_packed_batch;
+        if (packed) {
+            const int64_t T = batch->total_tokens;
+            io.in.token_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, T, 1);
+            ggml_set_input(io.in.token_ids);
+            if (req.needs_rope_pos_ids) {
+                io.in.rope_pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, T);
+                ggml_set_input(io.in.rope_pos_ids);
+            }
+            io.in.seq_lengths = batch->lengths.data();
+            io.in.seq_offsets = batch->offsets.data();
+            io.in.n_seq       = batch->batch_size;
+            io.packed         = true;
+
+            ggml_tensor * x = arch->build_graph(gctx, io.in);
+            io.out = forward::build_packed_pool(
+                gctx, x, to_forward_pool(pooling),
+                batch->offsets.data(), batch->lengths.data(), batch->batch_size);
+            if (normalize) io.out = forward::build_l2_normalize(gctx, io.out);
+            ggml_set_output(io.out);
+            io.graph = ggml_new_graph(gctx);
+            ggml_build_forward_expand(io.graph, io.out);
+            return io;
+        }
 
         auto make_input = [&](ggml_tensor ** slot) {
             *slot = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
@@ -124,8 +154,8 @@ struct Embedder::Impl {
         if (req.needs_type_ids) make_input(&io.in.type_ids);
         // Per-sentence attention needs no mask, so only build one when the
         // architecture has not been handed the lengths it would replace.
-        io.in.seq_lengths =
-            (padded && req.consumes_seq_lengths) ? seq_lengths : nullptr;
+        io.in.seq_lengths = (padded && req.consumes_seq_lengths && batch != nullptr)
+            ? batch->lengths.data() : nullptr;
         if (padded && req.uses_kq_mask && io.in.seq_lengths == nullptr) {
             io.in.kq_mask = ggml_new_tensor_4d(
                 gctx, GGML_TYPE_F16, S, S, 1, B);
@@ -363,7 +393,7 @@ void Embedder::embed_batch(ComputeScratch &                 scratch,
         try {
             const GraphIO io = impl_->build_graph(
                 gctx, batch.seq_len, batch.batch_size, batch.padded,
-                cfg.pooling, cfg.normalize, batch.lengths.data());
+                cfg.pooling, cfg.normalize, &batch);
             if (!ggml_gallocr_alloc_graph(sc.galloc, io.graph)) {
                 throw AllocationError("failed to allocate the batched graph buffer");
             }
@@ -371,6 +401,12 @@ void Embedder::embed_batch(ComputeScratch &                 scratch,
             auto set = [](ggml_tensor * tensor, const void * data, size_t bytes) {
                 if (tensor != nullptr) ggml_backend_tensor_set(tensor, data, 0, bytes);
             };
+            if (io.packed) {
+                set(io.in.token_ids, batch.packed_token_ids.data(),
+                    batch.packed_token_ids.size() * sizeof(int32_t));
+                set(io.in.rope_pos_ids, batch.packed_positions.data(),
+                    batch.packed_positions.size() * sizeof(int32_t));
+            } else {
             set(io.in.token_ids, batch.token_ids.data(),
                 batch.token_ids.size() * sizeof(int32_t));
             set(io.in.learned_pos_ids, batch.learned_positions.data(),
@@ -387,6 +423,7 @@ void Embedder::embed_batch(ComputeScratch &                 scratch,
                 batch.mean_scale.size() * sizeof(float));
             set(io.pool.last_indices, batch.last_indices.data(),
                 batch.last_indices.size() * sizeof(int32_t));
+            }
 
             if (ggml_backend_graph_compute(sc.backend, io.graph) != GGML_STATUS_SUCCESS) {
                 throw std::runtime_error("batched ggml graph compute failed");

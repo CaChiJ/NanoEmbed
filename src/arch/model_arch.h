@@ -72,6 +72,13 @@ struct GraphInputs {
     // attention per sentence at that sentence's own length instead of one
     // padded [S,S,1,B] attention plus a mask. Null keeps the masked path.
     const int32_t * seq_lengths    = nullptr;
+
+    // Set together with `seq_lengths` when the sub-batch is packed instead of
+    // padded. `token_ids` is then [T,1] and `rope_pos_ids` is [T], holding only
+    // real tokens; sentence b occupies offsets[b]..offsets[b+1]. Attention and
+    // pooling slice through these; every other operator just sees T tokens.
+    const int32_t * seq_offsets    = nullptr; // [n_seq + 1]
+    int64_t         n_seq          = 0;
 };
 
 // What the embedder must supply for this family.
@@ -85,6 +92,10 @@ struct InputRequirements {
     // entirely. An architecture that does not set this keeps the masked path,
     // so the two families can migrate independently.
     bool consumes_seq_lengths  = false;
+    // True when the architecture can also take the packed layout, dropping the
+    // padded cells from every token-wise operator rather than only from
+    // attention. Requires consumes_seq_lengths.
+    bool consumes_packed_batch = false;
 };
 
 // A value that crosses a graph boundary in the streaming runner. Architectures

@@ -28,7 +28,9 @@ ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
                                        ggml_tensor *               kq_mask,
                                        const GqaAttentionWeights & w,
                                        const GqaAttentionParams &  p,
-                                       const int32_t *             seq_lengths) {
+                                       const int32_t *             seq_lengths,
+                                       const int32_t *             seq_offsets,
+                                       int64_t                     n_seq) {
     // S and B come from the projections rather than a residual stream the core
     // half never sees. ggml_mul_mat preserves ne[1..2], so these are the same
     // values the fused function read off x.
@@ -64,7 +66,7 @@ ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
     // which is what makes one KV head serve a group of query heads without
     // materializing a repeated copy.
     ggml_tensor * attn = nullptr;
-    if (seq_lengths != nullptr && B > 1) {
+    if (seq_lengths != nullptr && (B > 1 || seq_offsets != nullptr)) {
         // One attention per sentence, each at its own length. The padded form
         // below scores S keys for every query and then discards the padded
         // ones through the mask; ggml has no early exit for a masked score, so
@@ -73,18 +75,25 @@ ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
         // Each slice is a plain view: q/k/v are contiguous [D, S, n_head, B],
         // so sentence b starts at b*nb[3] and keeping nb[1..3] truncates the
         // token axis without moving anything.
+        const bool packed = seq_offsets != nullptr;
+        const int64_t count = packed ? n_seq : B;
         std::vector<ggml_tensor *> parts;
-        parts.reserve(static_cast<size_t>(B));
-        for (int64_t b = 0; b < B; ++b) {
+        parts.reserve(static_cast<size_t>(count));
+        for (int64_t b = 0; b < count; ++b) {
             const int64_t len = seq_lengths[b];
-            if (len <= 0 || len > S) {
+            if (len <= 0 || (!packed && len > S)) {
                 throw std::invalid_argument(
-                    "build_gqa_attention: sentence length outside the padded window");
+                    "build_gqa_attention: sentence length outside the window");
             }
+            // Padded input: sentence b is a whole batch slot, one nb[3] apart.
+            // Packed input: sentences share the token axis, so b starts at its
+            // own offset along nb[1]. Both are views; nothing is copied.
             auto slice = [&](ggml_tensor * t) {
+                const size_t offset = packed
+                    ? static_cast<size_t>(seq_offsets[b]) * t->nb[1]
+                    : static_cast<size_t>(b) * t->nb[3];
                 return ggml_view_4d(ctx, t, t->ne[0], len, t->ne[2], 1,
-                                    t->nb[1], t->nb[2], t->nb[3],
-                                    static_cast<size_t>(b) * t->nb[3]);
+                                    t->nb[1], t->nb[2], t->nb[3], offset);
             };
             ggml_tensor * q_b = slice(q);
             ggml_tensor * k_b = slice(k);
@@ -100,17 +109,17 @@ ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
             ggml_tensor * v_t_b = ggml_cont(ctx, ggml_permute(ctx, v_b, 1, 0, 2, 3));
             ggml_tensor * a_b   = ggml_mul_mat(ctx, v_t_b, s_b);  // [D, len, n_head, 1]
 
-            // Restore the padded window so the residual stream keeps one shape.
-            // ggml_pad appends zeros and the trailing rows are exactly the
-            // padded positions, which pooling discards.
-            if (len < S) {
+            // Padded input has to get its window back so the residual stream
+            // keeps one shape; packed input just resumes the token axis, and
+            // the lengths already add up to T with nothing to fill.
+            if (!packed && len < S) {
                 a_b = ggml_pad(ctx, a_b, 0, static_cast<int>(S - len), 0, 0);
             }
             parts.push_back(a_b);
         }
         attn = parts[0];
         for (size_t i = 1; i < parts.size(); ++i) {
-            attn = ggml_concat(ctx, attn, parts[i], /*dim=*/3);
+            attn = ggml_concat(ctx, attn, parts[i], packed ? 1 : 3);
         }
     } else {
         ggml_tensor * scores = ggml_mul_mat(ctx, k, q);     // [S_k, S_q, n_head, B]
@@ -141,14 +150,17 @@ ggml_tensor * build_gqa_attention(ggml_context *              ctx,
                                   ggml_tensor *               kq_mask,
                                   const GqaAttentionWeights & w,
                                   const GqaAttentionParams &  p,
-                                  const int32_t *             seq_lengths) {
+                                  const int32_t *             seq_lengths,
+                                  const int32_t *             seq_offsets,
+                                  int64_t                     n_seq) {
     // Kept here as well as in the core half so the eager path still rejects a
     // missing position ramp before emitting any node, exactly as it used to.
     if (p.rope_freq_base > 0.0f && pos == nullptr) {
         throw std::invalid_argument("build_gqa_attention: rope requested without positions");
     }
     return build_gqa_attention_core(
-        ctx, build_gqa_projections(ctx, x, w), pos, kq_mask, w, p, seq_lengths);
+        ctx, build_gqa_projections(ctx, x, w), pos, kq_mask, w, p,
+        seq_lengths, seq_offsets, n_seq);
 }
 
 } // namespace nanoembed::forward

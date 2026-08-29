@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 struct ggml_context;
 struct ggml_tensor;
 
@@ -30,6 +32,16 @@ ggml_tensor * build_last_pool(ggml_context * ctx, ggml_tensor * x);
 ggml_tensor * build_pool(ggml_context * ctx, ggml_tensor * x, PoolType type);
 ggml_tensor * build_pool(ggml_context * ctx, ggml_tensor * x, PoolType type,
                          const PoolInputs & inputs);
+
+// Pool a packed [H, T, 1] stream, where sentence b covers
+// offsets[b]..offsets[b+1]. Each sentence is reduced over its own tokens, so
+// no mask or scale tensor is needed -- there is no padding to exclude.
+ggml_tensor * build_packed_pool(ggml_context * ctx,
+                                ggml_tensor *  x,
+                                PoolType       type,
+                                const int32_t * offsets,
+                                const int32_t * lengths,
+                                int64_t         n_seq);
 
 // L2 normalize each row: y = x / max(||x||_2, sqrt(eps)).
 ggml_tensor * build_l2_normalize(ggml_context * ctx, ggml_tensor * x,

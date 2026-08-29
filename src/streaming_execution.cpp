@@ -697,7 +697,12 @@ struct InternalStreamingContext::Impl {
     // path as a group of eight.
     void run_group(const ResolvedGroup &        group,
                    ggml_context *               gctx,
-                   const MaterializedBatch &     batch) {
+                   const MaterializedBatch &     batch,
+                   bool                          packed) {
+        // `packed` is a property of the whole sub-batch, not of one group: the
+        // embedding phase already produced a packed activation, so every group
+        // downstream must agree. Deriving it per group let an FFN-only group
+        // disagree with the stream it was handed.
         const int64_t S = batch.seq_len;
         const int64_t B = batch.batch_size;
         GraphInputs graph_in;
@@ -706,7 +711,8 @@ struct InternalStreamingContext::Impl {
             ggml_set_input(graph_in.learned_pos_ids);
         }
         if (group.graph_inputs.needs_rope_pos_ids) {
-            graph_in.rope_pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, S);
+            graph_in.rope_pos_ids = ggml_new_tensor_1d(
+                gctx, GGML_TYPE_I32, packed ? batch.total_tokens : S);
             ggml_set_input(graph_in.rope_pos_ids);
         }
         if (group.graph_inputs.needs_type_ids) {
@@ -717,6 +723,10 @@ struct InternalStreamingContext::Impl {
         graph_in.seq_lengths =
             (batch.padded && group.graph_inputs.consumes_seq_lengths)
                 ? batch.lengths.data() : nullptr;
+        if (packed) {
+            graph_in.seq_offsets = batch.offsets.data();
+            graph_in.n_seq       = B;
+        }
         if (batch.padded && group.graph_inputs.uses_kq_mask &&
             graph_in.seq_lengths == nullptr) {
             graph_in.kq_mask = ggml_new_tensor_4d(
@@ -784,8 +794,10 @@ struct InternalStreamingContext::Impl {
                        "group_learned_position_ids");
         }
         if (graph_in.rope_pos_ids != nullptr) {
-            set_tensor(graph_in.rope_pos_ids, batch.rope_positions.data(),
-                       batch.rope_positions.size() * sizeof(int32_t),
+            const std::vector<int32_t> & rope = packed ? batch.packed_positions
+                                                       : batch.rope_positions;
+            set_tensor(graph_in.rope_pos_ids, rope.data(),
+                       rope.size() * sizeof(int32_t),
                        "group_rope_position_ids");
         }
         if (graph_in.type_ids != nullptr) {
@@ -1119,6 +1131,10 @@ void InternalStreamingModel::embed_batch(
                                      static_cast<size_t>(B);
         std::vector<float> batch_output(output_floats);
 
+        // One decision for the whole sub-batch: the embedding phase, every
+        // layer group and the final pooling must all read the same layout.
+        const bool packed_stream = batch.padded && arch.inputs().consumes_packed_batch;
+
         // Previous sub-batch values mean nothing to this one. Retain capacity
         // but invalidate contents so a liveness error cannot read stale data.
         sc.slots.invalidate_all();
@@ -1135,10 +1151,15 @@ void InternalStreamingModel::embed_batch(
                 impl_->preparation.store().mapped_size(), impl_->page_size);
             auto lease = impl_->residency->acquire("token", rows, true);
             try {
-                GraphInputs in;
-                in.token_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
-                ggml_set_input(in.token_ids);
                 const InputRequirements req = arch.embedding_inputs();
+                // The embedding phase is a table lookup, so it never needs
+                // sentence bounds; packing only removes the padded rows.
+                const bool packed_embed = packed_stream;
+                GraphInputs in;
+                in.token_ids = packed_embed
+                    ? ggml_new_tensor_2d(gctx, GGML_TYPE_I32, batch.total_tokens, 1)
+                    : ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
+                ggml_set_input(in.token_ids);
                 if (req.needs_learned_pos_ids) {
                     in.learned_pos_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
                     ggml_set_input(in.learned_pos_ids);
@@ -1156,8 +1177,12 @@ void InternalStreamingModel::embed_batch(
                 ggml_cgraph * graph = ggml_new_graph(gctx);
                 ggml_build_forward_expand(graph, phase_out);
                 sc.allocate(graph, "embedding");
-                sc.set_tensor(in.token_ids, batch.token_ids.data(),
-                              batch.token_ids.size() * sizeof(int32_t), "token_ids");
+                {
+                    const std::vector<int32_t> & ids = packed_embed
+                        ? batch.packed_token_ids : batch.token_ids;
+                    sc.set_tensor(in.token_ids, ids.data(),
+                                  ids.size() * sizeof(int32_t), "token_ids");
+                }
                 if (in.learned_pos_ids != nullptr) {
                     sc.set_tensor(in.learned_pos_ids, batch.learned_positions.data(),
                                   batch.learned_positions.size() * sizeof(int32_t),
@@ -1203,7 +1228,7 @@ void InternalStreamingModel::embed_batch(
                         impl_->residency->acquire(group.key, group.ranges, false);
                     try {
                         std::fill(sc.slot_tensors.begin(), sc.slot_tensors.end(), nullptr);
-                        sc.run_group(group, group_ctx, batch);
+                        sc.run_group(group, group_ctx, batch, packed_stream);
                         group_lease.mark_compute_complete();
                         group_lease.release();
                     } catch (...) {
@@ -1224,8 +1249,12 @@ void InternalStreamingModel::embed_batch(
             const SlotId exit = impl_->layers.back().output_slot;
             ggml_tensor * activation = sc.slots.create_input(exit, final_ctx);
             ggml_tensor * phase_out = arch.build_final_phase(final_ctx, activation);
+            const bool packed_final = packed_stream;
             forward::PoolInputs pool;
-            if (batch.padded && config.pooling == PoolType::Mean) {
+            if (packed_final) {
+                // Packed pooling reduces each sentence over its own tokens, so
+                // there is no mask or scale tensor to create or upload.
+            } else if (batch.padded && config.pooling == PoolType::Mean) {
                 pool.valid_mask = ggml_new_tensor_3d(
                     final_ctx, GGML_TYPE_F32, 1, S, B);
                 pool.mean_scale = ggml_new_tensor_2d(
@@ -1237,8 +1266,12 @@ void InternalStreamingModel::embed_batch(
                     final_ctx, GGML_TYPE_I32, B);
                 ggml_set_input(pool.last_indices);
             }
-            phase_out = forward::build_pool(
-                final_ctx, phase_out, to_forward_pool(config.pooling), pool);
+            phase_out = packed_final
+                ? forward::build_packed_pool(
+                      final_ctx, phase_out, to_forward_pool(config.pooling),
+                      batch.offsets.data(), batch.lengths.data(), B)
+                : forward::build_pool(
+                      final_ctx, phase_out, to_forward_pool(config.pooling), pool);
             if (config.normalize) phase_out = forward::build_l2_normalize(final_ctx, phase_out);
             ggml_set_output(phase_out);
             ggml_cgraph * graph = ggml_new_graph(final_ctx);

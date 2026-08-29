@@ -265,7 +265,9 @@ ggml_tensor * Gemma3ModelArch::build_block(ggml_context * gctx,
                                            ggml_tensor *  pos,
                                            int            layer,
                                            ggml_tensor *  kq_mask,
-                                           const int32_t * seq_lengths) const {
+                                           const int32_t * seq_lengths,
+                                           const int32_t * seq_offsets,
+                                           int64_t         n_seq) const {
     const ArchParams &         a = manifest_.params;
     const Gemma3LayerWeights & w = layer_w_[static_cast<size_t>(layer)];
 
@@ -275,7 +277,8 @@ ggml_tensor * Gemma3ModelArch::build_block(ggml_context * gctx,
     // residual added last — BERT normalizes only after the residual, and
     // Llama only before the sub-layer.
     ggml_tensor * h = forward::build_rms_norm(gctx, x, w.attn_norm, a.norm_eps);
-    h = forward::build_gqa_attention(gctx, h, pos, kq_mask, w.attn, ap, seq_lengths);
+    h = forward::build_gqa_attention(gctx, h, pos, kq_mask, w.attn, ap,
+                                    seq_lengths, seq_offsets, n_seq);
     h = forward::build_rms_norm(gctx, h, w.attn_post_norm, a.norm_eps);
     x = ggml_add(gctx, x, h);
 
@@ -295,7 +298,8 @@ ggml_tensor * Gemma3ModelArch::build_graph(ggml_context *      gctx,
                                            const GraphInputs & in) const {
     ggml_tensor * x = build_embedding_phase(gctx, in);
     for (int li = 0; li < manifest_.params.n_layer; ++li) {
-        x = build_block(gctx, x, in.rope_pos_ids, li, in.kq_mask, in.seq_lengths);
+        x = build_block(gctx, x, in.rope_pos_ids, li, in.kq_mask,
+                        in.seq_lengths, in.seq_offsets, in.n_seq);
     }
     return build_final_phase(gctx, x);
 }
@@ -376,14 +380,16 @@ StreamingLayerPlan Gemma3ModelArch::streaming_units(int layer) const {
     core.stage   = StreamingStage::Attention;
     core.graph_inputs = InputRequirements{/*learned_pos=*/false, /*rope_pos=*/true,
                                           /*type_ids=*/false, /*kq_mask=*/true,
-                                          /*seq_lengths=*/true};
+                                          /*seq_lengths=*/true, /*packed=*/true};
     core.build = [this, li](ggml_context * ctx, SlotTable & s) {
         forward::GqaProjections proj{s.in(0), s.in(1), s.in(2)};
         s.out(0, forward::build_gqa_attention_core(
                      ctx, proj, s.graph_inputs().rope_pos_ids,
                      s.graph_inputs().kq_mask,
                      layer_w_[li].attn, gqa_params(),
-                     s.graph_inputs().seq_lengths));
+                     s.graph_inputs().seq_lengths,
+                     s.graph_inputs().seq_offsets,
+                     s.graph_inputs().n_seq));
     };
     plan.units.push_back(std::move(core));
 
