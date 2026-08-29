@@ -177,20 +177,27 @@ scatter한다. 같은 길이만 있는 sub-batch와 단일 `embed()`는 mask 없
 sub-batch 수에 비례한다. 이 성질은 측정으로 확인됐다 — cold 캐시에서 문장당
 major fault가 정확히 1/B로 준다 (263.7 → 25.9, 배치 10).
 
-**손익은 캐시 상태가 가른다.**
+처음 측정에서는 손익이 캐시 상태와 입력 길이에 따라 갈렸다. 디스크 읽기가 0회인
+warm 조건에서 길이가 섞이면 아낄 I/O는 없는데 패딩 비용만 남아 27% 느려졌다.
 
-| 조건 | 배치 1 → 10 처리량 | 문장당 major fault |
+**패딩을 제거해 이 문제를 해소했다.** 두 단계였다. 어텐션을 문장별로 분리하고,
+이어서 모든 토큰 단위 연산에서 패딩을 뺐다. 후자가 가능한 이유는 선형 변환·FFN·
+정규화가 토큰 하나를 받아 토큰 하나를 내놓기 때문이고, 문장 간 간섭이 가능한
+어텐션은 앞 단계에서 이미 분리했기 때문이다.
+
+| 조건 | 패딩 제거 전 | 패딩 제거 후 |
 |---|---:|---:|
-| warm + 길이 편차 큼 | −27% | 0 → 0 |
-| warm + 길이 균일 | **+56%** | 0 → 0 |
-| cold (길이 편차 큼) | **+356 ~ +523%** | 263.7 → 25.9 |
+| warm + 길이 편차 큼 | −27% | **+44%** |
+| warm + 길이 균일 | +56% | +56% (경로 미변경) |
+| cold | +523% | **+607%** |
 
-warm + 길이 편차에서 지는 이유는 두 가지가 겹쳐서다. 디스크 읽기가 0회라 배치가
-아낄 I/O가 없는데, 길이가 섞여 패딩 비용은 그대로 낸다. 길이를 균일하게 하면 같은
-warm 조건에서도 +56%로 바뀐다.
+정확도도 해결됐다. 마스크가 붙으면 softmax가 패딩 칸까지 훑어 덧셈 순서가 달라졌는데,
+실제 길이만 계산하니 harrier는 순차 처리와 **완전히 동일**해졌다. 원래 기준(1e-5)을
+통과한다.
 
-즉 지는 조건은 셋 중 하나뿐이며, 원인은 구현이 아니라 **입력 길이 편차**다.
-기능·정확도 구현은 완료됐고, 남은 과제는 sub-batch 분할 기준이다.
+남은 것은 BERT다. 아직 마스크 경로를 쓰므로 최대 오차 2.345e-4가 그대로이고 성능
+이득도 받지 못한다. 측정과 구현은
+[`docs/m5-padding-removal.ko.md`](docs/m5-padding-removal.ko.md)에 있다.
 
 ### 3.4 활성값 압축 — 예정, M6
 
@@ -477,7 +484,7 @@ Docker Desktop 4.38.0 Ubuntu 24.04 arm64 VM과 bind mount 범위에만 해당한
 PSS/USS는 sampled lower bound이고 profile-on latency는 diagnostic이다. 1회 독립 실행,
 null confidence interval이며 통계적 유의성을 주장하지 않는다.
 
-### M5 — 실제 레이어 단위 배치: 기능 완료, 성능은 조건부
+### M5 — 실제 레이어 단위 배치: 완료 (BERT 적용은 미완)
 
 - 길이 stable sort, right padding, 원래 순서 복원 구현
 - eager와 Linux streaming의 실제 B축 graph 구현
@@ -485,8 +492,11 @@ null confidence interval이며 통계적 유의성을 주장하지 않는다.
 - `max_batch` 초과 입력의 내부 분할과 batch 단위 streaming lease 구현
 - schema v3 batch 32/128 및 partition별 RSS/PSS/USS 측정 완료
 - 실용 회귀 정확도와 phase-count gate 통과; 원 계획의 더 엄격한 정확도 gate는 실패
-- warm 캐시 Harrier Q8 streaming batch 32 처리량 gate 실패: 34.36 → 16.30 items/s
-- cold 캐시에서는 같은 구현이 배치 1→10에서 +356~523%로 gate를 크게 통과
+- 최초 측정에서 warm·혼합 길이 처리량 gate 실패 (배치 1→10 −27%)
+- 원인을 패딩으로 확정하고 제거: 어텐션 문장별 분리 후 토큰 단위 연산 패킹
+- 패딩 제거 후 warm·혼합 길이 **+44%**, cold **+607%**로 gate 통과
+- harrier 정확도가 순차 처리와 완전히 일치해 원 기준(1e-5) 통과
+- BERT는 아직 마스크 경로 유지 — 최대 오차 2.345e-4, 성능 이득 미적용
 
 상세 수치와 재현 명령은
 [`bench/results/M5-docker-desktop-arm64/CLOSEOUT.md`](bench/results/M5-docker-desktop-arm64/CLOSEOUT.md)에 있다.
