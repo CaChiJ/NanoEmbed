@@ -71,6 +71,7 @@ public:
 
     int  max_seq_len() const noexcept override { return max_seq_len_; }
     int  vocab_size()  const noexcept override { return vocab_size_; }
+    int  padding_id()  const noexcept override { return pad_id_; }
     void set_max_seq_len(int n) override { max_seq_len_ = n; }
 
     int bos_id() const noexcept { return bos_id_; }

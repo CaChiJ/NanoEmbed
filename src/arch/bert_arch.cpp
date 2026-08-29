@@ -79,7 +79,7 @@ ggml_tensor * BertModelArch::build_graph(ggml_context *      gctx,
 
     for (int li = 0; li < params_.n_layer; ++li) {
         x = forward::build_encoder_block(
-            gctx, x, /*kq_mask=*/nullptr, params_.n_head,
+            gctx, x, in.kq_mask, params_.n_head,
             layer_w_[static_cast<size_t>(li)], params_.norm_eps);
     }
     return build_final_phase(gctx, x);
@@ -88,7 +88,8 @@ ggml_tensor * BertModelArch::build_graph(ggml_context *      gctx,
 ggml_tensor * BertModelArch::build_embedding_phase(
     ggml_context * gctx, const GraphInputs & in) const {
     return forward::build_embed_layer(
-        gctx, in.token_ids, in.pos_ids, in.type_ids, embed_w_, params_.norm_eps);
+        gctx, in.token_ids, in.learned_pos_ids, in.type_ids,
+        embed_w_, params_.norm_eps);
 }
 
 ggml_tensor * BertModelArch::build_final_phase(ggml_context *, ggml_tensor * x) const {
@@ -153,16 +154,22 @@ StreamingLayerPlan BertModelArch::streaming_units(int layer) const {
              s.out(2, proj.v);
          });
 
-    unit("attn_out",
+    StreamingUnit attn_out;
+    attn_out.name = "attn_out";
+    attn_out.weights =
          {p + "attn_output.weight", p + "attn_output.bias",
-          p + "attn_output_norm.weight", p + "attn_output_norm.bias"},
-         {"q", "k", "v", "x"}, {"xa"}, StreamingStage::Attention,
-         [this, li, n_head, eps](ggml_context * ctx, SlotTable & s) {
-             forward::AttentionProjections proj{s.in(0), s.in(1), s.in(2)};
-             s.out(0, forward::build_attention_output(
-                          ctx, proj, s.in(3), /*kq_mask=*/nullptr, n_head,
-                          layer_w_[li].attn, eps));
-         });
+          p + "attn_output_norm.weight", p + "attn_output_norm.bias"};
+    attn_out.inputs = {"q", "k", "v", "x"};
+    attn_out.outputs = {"xa"};
+    attn_out.stage = StreamingStage::Attention;
+    attn_out.graph_inputs.uses_kq_mask = true;
+    attn_out.build = [this, li, n_head, eps](ggml_context * ctx, SlotTable & s) {
+        forward::AttentionProjections proj{s.in(0), s.in(1), s.in(2)};
+        s.out(0, forward::build_attention_output(
+                     ctx, proj, s.in(3), s.graph_inputs().kq_mask, n_head,
+                     layer_w_[li].attn, eps));
+    };
+    plan.units.push_back(std::move(attn_out));
 
     unit("ffn_up", {p + "ffn_up.weight", p + "ffn_up.bias"},
          {"xa"}, {"fh"}, StreamingStage::Ffn,

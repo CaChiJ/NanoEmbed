@@ -19,9 +19,21 @@ ggml_tensor * build_embed_layer(
     // is normal for BERT GGUFs from llama.cpp's converter). ggml_add promotes
     // internally; the layer-isolation parity test confirms the result is
     // bit-stable to within ~1.4e-6 vs HuggingFace.
-    ggml_tensor * tok  = ggml_get_rows(ctx, w.tok,  token_ids);
-    ggml_tensor * pos  = ggml_get_rows(ctx, w.pos,  position_ids);
-    ggml_tensor * type = ggml_get_rows(ctx, w.type, type_ids);
+    auto rows = [&](ggml_tensor * table, ggml_tensor * ids) {
+        if (ids->ne[1] == 1) return ggml_get_rows(ctx, table, ids);
+        const int64_t S = ids->ne[0];
+        const int64_t B = ids->ne[1];
+        // GET_ROWS in the vendored ggml requires its source and index batch
+        // axes to match. The embedding table is shared by every sentence, so
+        // flatten the contiguous [S,B] IDs, perform one lookup, and restore
+        // the natural [H,S,B] activation shape. Both reshapes are views.
+        ggml_tensor * indexed = ggml_get_rows(
+            ctx, table, ggml_reshape_1d(ctx, ids, S * B));
+        return ggml_reshape_3d(ctx, indexed, indexed->ne[0], S, B);
+    };
+    ggml_tensor * tok  = rows(w.tok,  token_ids);
+    ggml_tensor * pos  = rows(w.pos,  position_ids);
+    ggml_tensor * type = rows(w.type, type_ids);
 
     // Sum the three embedding contributions.
     ggml_tensor * sum = ggml_add(ctx, tok, pos);

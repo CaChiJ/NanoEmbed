@@ -1,6 +1,7 @@
 #include "streaming_execution.h"
 
 #include "arch/model_arch.h"
+#include "batch.h"
 #include "forward/pool.h"
 #include "mapped_weight_store.h"
 #include "tokenizer/tokenizer.h"
@@ -636,7 +637,12 @@ struct InternalStreamingContext::Impl {
     // make re-planning matter before deciding to give each group its own
     // allocator.
     uint64_t graph_replans = 0;
+    uint64_t batches_processed = 0;
+    uint64_t items_processed = 0;
+    uint64_t valid_tokens_processed = 0;
+    uint64_t padding_tokens_processed = 0;
     int previous_graph_nodes = -1;
+    int64_t graph_context_failure_countdown = -1;
 
     Impl() {
 #if !defined(__linux__)
@@ -660,9 +666,18 @@ struct InternalStreamingContext::Impl {
     }
 
     ggml_context * new_graph_context() {
+        if (graph_context_failure_countdown == 0) {
+            graph_context_failure_countdown = -1;
+            throw AllocationError("injected streaming graph context allocation failure");
+        }
+        if (graph_context_failure_countdown > 0) {
+            --graph_context_failure_countdown;
+        }
         ggml_init_params params{meta.size(), meta.data(), true};
         ggml_context * result = ggml_init(params);
-        if (result == nullptr) throw std::runtime_error("streaming graph metadata arena exhausted");
+        if (result == nullptr) {
+            throw AllocationError("streaming graph metadata arena exhausted");
+        }
         return result;
     }
 
@@ -682,16 +697,31 @@ struct InternalStreamingContext::Impl {
     // path as a group of eight.
     void run_group(const ResolvedGroup &        group,
                    ggml_context *               gctx,
-                       const std::vector<int32_t> & pos_ramp,
-                       int64_t                      S) {
+                   const MaterializedBatch &     batch) {
+        const int64_t S = batch.seq_len;
+        const int64_t B = batch.batch_size;
         GraphInputs graph_in;
-        if (group.graph_inputs.needs_pos_ids) {
-            graph_in.pos_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, 1);
-            ggml_set_input(graph_in.pos_ids);
+        if (group.graph_inputs.needs_learned_pos_ids) {
+            graph_in.learned_pos_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
+            ggml_set_input(graph_in.learned_pos_ids);
+        }
+        if (group.graph_inputs.needs_rope_pos_ids) {
+            graph_in.rope_pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, S);
+            ggml_set_input(graph_in.rope_pos_ids);
         }
         if (group.graph_inputs.needs_type_ids) {
-            graph_in.type_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, 1);
+            graph_in.type_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
             ggml_set_input(graph_in.type_ids);
+        }
+        // Per-sentence attention replaces the mask; see GraphInputs.
+        graph_in.seq_lengths =
+            (batch.padded && group.graph_inputs.consumes_seq_lengths)
+                ? batch.lengths.data() : nullptr;
+        if (batch.padded && group.graph_inputs.uses_kq_mask &&
+            graph_in.seq_lengths == nullptr) {
+            graph_in.kq_mask = ggml_new_tensor_4d(
+                gctx, GGML_TYPE_F16, S, S, 1, B);
+            ggml_set_input(graph_in.kq_mask);
         }
 
         // Keep the created input tensors aside. A slot is routinely both an
@@ -748,14 +778,24 @@ struct InternalStreamingContext::Impl {
             set_tensor(upload.second, slots.data(upload.first), bytes, "slot input");
             activation_copy_bytes += bytes;
         }
-        if (graph_in.pos_ids != nullptr) {
-            set_tensor(graph_in.pos_ids, pos_ramp.data(),
-                          pos_ramp.size() * sizeof(int32_t), "group_position_ids");
+        if (graph_in.learned_pos_ids != nullptr) {
+            set_tensor(graph_in.learned_pos_ids, batch.learned_positions.data(),
+                       batch.learned_positions.size() * sizeof(int32_t),
+                       "group_learned_position_ids");
+        }
+        if (graph_in.rope_pos_ids != nullptr) {
+            set_tensor(graph_in.rope_pos_ids, batch.rope_positions.data(),
+                       batch.rope_positions.size() * sizeof(int32_t),
+                       "group_rope_position_ids");
         }
         if (graph_in.type_ids != nullptr) {
-            const std::vector<int32_t> zeros(static_cast<size_t>(S), 0);
-            set_tensor(graph_in.type_ids, zeros.data(),
-                          zeros.size() * sizeof(int32_t), "group_type_ids");
+            set_tensor(graph_in.type_ids, batch.type_ids.data(),
+                       batch.type_ids.size() * sizeof(int32_t), "group_type_ids");
+        }
+        if (graph_in.kq_mask != nullptr) {
+            set_tensor(graph_in.kq_mask, batch.attention_mask.data(),
+                       batch.attention_mask.size() * sizeof(ggml_fp16_t),
+                       "group_attention_mask");
         }
 
         if (ggml_backend_graph_compute(backend, graph) != GGML_STATUS_SUCCESS) {
@@ -777,7 +817,7 @@ struct InternalStreamingContext::Impl {
             previous_graph_nodes = nodes;
         }
         if (!ggml_gallocr_alloc_graph(galloc, graph)) {
-            throw std::runtime_error(std::string("streaming graph allocation failed: ") + subject);
+            throw AllocationError(std::string("streaming graph allocation failed: ") + subject);
         }
     }
 };
@@ -785,6 +825,15 @@ struct InternalStreamingContext::Impl {
 InternalStreamingContext::InternalStreamingContext()
     : impl_(std::make_unique<Impl>()) {}
 InternalStreamingContext::~InternalStreamingContext() = default;
+
+void InternalStreamingContext::diagnostic_fail_graph_context_after(
+    uint64_t successful_creations) {
+    if (successful_creations > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        throw std::invalid_argument("graph context failure countdown exceeds int64");
+    }
+    impl_->graph_context_failure_countdown =
+        static_cast<int64_t>(successful_creations);
+}
 
 struct InternalStreamingModel::Impl {
     // preparation must come first: the unit closures below capture the
@@ -941,8 +990,14 @@ struct InternalStreamingModel::Impl {
                     const ResolvedUnit & unit = resolved.units[i];
                     group.members.push_back(&unit);
                     group.weight_bytes += unit.weight_bytes;
-                    group.graph_inputs.needs_pos_ids  |= unit.graph_inputs.needs_pos_ids;
+                    group.graph_inputs.needs_learned_pos_ids |=
+                        unit.graph_inputs.needs_learned_pos_ids;
+                    group.graph_inputs.needs_rope_pos_ids |=
+                        unit.graph_inputs.needs_rope_pos_ids;
                     group.graph_inputs.needs_type_ids |= unit.graph_inputs.needs_type_ids;
+                    group.graph_inputs.uses_kq_mask |= unit.graph_inputs.uses_kq_mask;
+                    group.graph_inputs.consumes_seq_lengths |=
+                        unit.graph_inputs.consumes_seq_lengths;
                     raw.insert(raw.end(), unit.raw_ranges.begin(), unit.raw_ranges.end());
                     label += (label.empty() ? "" : "+") + unit.name;
                 }
@@ -1020,99 +1075,141 @@ void InternalStreamingModel::embed(
     const std::string & text,
     const EmbedderConfig & config,
     float * output) const {
+    embed_batch(context, std::vector<std::string>{text}, config, output);
+}
+
+void InternalStreamingModel::embed_batch(
+    InternalStreamingContext & context,
+    const std::vector<std::string> & texts,
+    const EmbedderConfig & config,
+    float * output) const {
 #if !defined(__linux__)
-    (void) context; (void) text; (void) config; (void) output;
+    (void) context; (void) texts; (void) config; (void) output;
     throw std::runtime_error("internal streaming execute is unsupported outside Linux");
 #else
     if (output == nullptr) throw std::runtime_error("streaming output pointer is null");
+    if (texts.empty()) return;
     auto & sc = *context.impl_;
     const ModelArch & arch = impl_->preparation.arch();
     const Tokenizer & tokenizer = impl_->preparation.tokenizer();
     const ArchParams & params = arch.params();
     int limit = config.max_seq_len > 0 ? config.max_seq_len : params.max_seq_len;
     limit = std::min(limit, params.max_seq_len);
-    const std::vector<int> ids = tokenizer.encode(text, limit);
-    if (ids.empty()) throw std::runtime_error("streaming tokenizer produced no IDs");
-    const int64_t S = static_cast<int64_t>(ids.size());
+    const BatchPlan plan = make_batch_plan(tokenizer, texts, limit, config.max_batch);
     ggml_backend_cpu_set_n_threads(sc.backend, resolve_threads(config.n_threads));
 
     sc.slots.resize(impl_->slot_ids.size());
     sc.slot_tensors.assign(impl_->slot_ids.size(), nullptr);
-    // Last sentence's values mean nothing to this one, and leaving them valid
-    // would let a mis-resolved group read a stale buffer instead of failing.
-    sc.slots.invalidate_all();
-
-    std::vector<int32_t> pos_ramp(ids.size());
-    for (size_t i = 0; i < pos_ramp.size(); ++i) pos_ramp[i] = static_cast<int32_t>(i);
 
     auto poison_output = [&] {
-        std::fill(output, output + params.n_embed,
+        std::fill(output, output + texts.size() * static_cast<size_t>(params.n_embed),
                   std::numeric_limits<float>::quiet_NaN());
     };
     try {
-        {
-        // Embedding phase: token table rows have a scoped lease; common small
-        // weights were retained once at model initialization.
-        const auto rows = streaming_detail::token_row_ranges(
-            impl_->token.absolute_offset, impl_->token.nbytes,
-            impl_->token.row_stride, impl_->token.row_count, ids,
-            impl_->preparation.store().mapped_size(), impl_->page_size);
-        auto lease = impl_->residency->acquire("token", rows, true);
+      for (size_t batch_index = 0; batch_index < plan.subbatch_count(); ++batch_index) {
+        const MaterializedBatch batch = materialize_batch(
+            plan, batch_index, tokenizer.padding_id(), tokenizer.vocab_size());
+        const int64_t S = batch.seq_len;
+        const int64_t B = batch.batch_size;
+        if (static_cast<size_t>(B) > std::numeric_limits<size_t>::max() /
+                                      static_cast<size_t>(params.n_embed)) {
+            throw AllocationError("streaming batch output size overflow");
+        }
+        const size_t output_floats = static_cast<size_t>(params.n_embed) *
+                                     static_cast<size_t>(B);
+        std::vector<float> batch_output(output_floats);
+
+        // Previous sub-batch values mean nothing to this one. Retain capacity
+        // but invalidate contents so a liveness error cannot read stale data.
+        sc.slots.invalidate_all();
+
         ggml_context * gctx = sc.new_graph_context();
         try {
-            GraphInputs in;
-            in.token_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, 1);
-            ggml_set_input(in.token_ids);
-            if (arch.embedding_inputs().needs_pos_ids) {
-                in.pos_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, 1);
-                ggml_set_input(in.pos_ids);
+            // Finish every failure-prone host allocation before publishing a
+            // residency lease. A graph-context/range failure therefore cannot
+            // leave an active lease behind or poison the shared coordinator.
+            std::vector<int> range_ids(batch.token_ids.begin(), batch.token_ids.end());
+            const auto rows = streaming_detail::token_row_ranges(
+                impl_->token.absolute_offset, impl_->token.nbytes,
+                impl_->token.row_stride, impl_->token.row_count, range_ids,
+                impl_->preparation.store().mapped_size(), impl_->page_size);
+            auto lease = impl_->residency->acquire("token", rows, true);
+            try {
+                GraphInputs in;
+                in.token_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
+                ggml_set_input(in.token_ids);
+                const InputRequirements req = arch.embedding_inputs();
+                if (req.needs_learned_pos_ids) {
+                    in.learned_pos_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
+                    ggml_set_input(in.learned_pos_ids);
+                }
+                if (req.needs_rope_pos_ids) {
+                    in.rope_pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, S);
+                    ggml_set_input(in.rope_pos_ids);
+                }
+                if (req.needs_type_ids) {
+                    in.type_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, B);
+                    ggml_set_input(in.type_ids);
+                }
+                ggml_tensor * phase_out = arch.build_embedding_phase(gctx, in);
+                ggml_set_output(phase_out);
+                ggml_cgraph * graph = ggml_new_graph(gctx);
+                ggml_build_forward_expand(graph, phase_out);
+                sc.allocate(graph, "embedding");
+                sc.set_tensor(in.token_ids, batch.token_ids.data(),
+                              batch.token_ids.size() * sizeof(int32_t), "token_ids");
+                if (in.learned_pos_ids != nullptr) {
+                    sc.set_tensor(in.learned_pos_ids, batch.learned_positions.data(),
+                                  batch.learned_positions.size() * sizeof(int32_t),
+                                  "learned_position_ids");
+                }
+                if (in.rope_pos_ids != nullptr) {
+                    sc.set_tensor(in.rope_pos_ids, batch.rope_positions.data(),
+                                  batch.rope_positions.size() * sizeof(int32_t),
+                                  "rope_position_ids");
+                }
+                if (in.type_ids != nullptr) {
+                    sc.set_tensor(in.type_ids, batch.type_ids.data(),
+                                  batch.type_ids.size() * sizeof(int32_t), "type_ids");
+                }
+                if (ggml_backend_graph_compute(sc.backend, graph) != GGML_STATUS_SUCCESS) {
+                    throw std::runtime_error("streaming embedding compute failed");
+                }
+                ++sc.phase_graph_computes;
+                const SlotId entry = impl_->layers.front().input_slot;
+                sc.slots.download(entry, phase_out);
+                sc.activation_copy_bytes += sc.slots.nbytes(entry);
+                lease.mark_compute_complete();
+                lease.release();
+            } catch (...) {
+                // Backend execution is synchronous; by the time it returns or
+                // throws, mapped pages are safe to release.
+                lease.mark_compute_complete();
+                throw;
             }
-            if (arch.embedding_inputs().needs_type_ids) {
-                in.type_ids = ggml_new_tensor_2d(gctx, GGML_TYPE_I32, S, 1);
-                ggml_set_input(in.type_ids);
-            }
-            ggml_tensor * phase_out = arch.build_embedding_phase(gctx, in);
-            ggml_set_output(phase_out);
-            ggml_cgraph * graph = ggml_new_graph(gctx);
-            ggml_build_forward_expand(graph, phase_out);
-            sc.allocate(graph, "embedding");
-            sc.set_tensor(in.token_ids, ids.data(), ids.size() * sizeof(int32_t), "token_ids");
-            if (in.pos_ids != nullptr) {
-                sc.set_tensor(in.pos_ids, pos_ramp.data(),
-                              pos_ramp.size() * sizeof(int32_t), "position_ids");
-            }
-            if (in.type_ids != nullptr) {
-                const std::vector<int32_t> zeros(ids.size(), 0);
-                sc.set_tensor(in.type_ids, zeros.data(),
-                              zeros.size() * sizeof(int32_t), "type_ids");
-            }
-            if (ggml_backend_graph_compute(sc.backend, graph) != GGML_STATUS_SUCCESS) {
-                throw std::runtime_error("streaming embedding compute failed");
-            }
-            ++sc.phase_graph_computes;
-            const SlotId entry = impl_->layers.front().input_slot;
-            sc.slots.download(entry, phase_out);
-            sc.activation_copy_bytes += sc.slots.nbytes(entry);
-            lease.mark_compute_complete();
-            lease.release();
         } catch (...) {
             ggml_free(gctx);
             throw;
         }
         ggml_free(gctx);
-        }
 
         for (size_t layer_index = 0; layer_index < impl_->layers.size(); ++layer_index) {
-                const ResolvedLayer & layer = impl_->layers[layer_index];
+            const ResolvedLayer & layer = impl_->layers[layer_index];
             for (size_t group_index = 0; group_index < layer.groups.size(); ++group_index) {
                 const ResolvedGroup & group = layer.groups[group_index];
-                auto group_lease = impl_->residency->acquire(group.key, group.ranges, false);
                 ggml_context * group_ctx = sc.new_graph_context();
                 try {
-                    std::fill(sc.slot_tensors.begin(), sc.slot_tensors.end(), nullptr);
-                    sc.run_group(group, group_ctx, pos_ramp, S);
-                    group_lease.mark_compute_complete();
-                    group_lease.release();
+                    auto group_lease =
+                        impl_->residency->acquire(group.key, group.ranges, false);
+                    try {
+                        std::fill(sc.slot_tensors.begin(), sc.slot_tensors.end(), nullptr);
+                        sc.run_group(group, group_ctx, batch);
+                        group_lease.mark_compute_complete();
+                        group_lease.release();
+                    } catch (...) {
+                        group_lease.mark_compute_complete();
+                        throw;
+                    }
                 } catch (...) {
                     ggml_free(group_ctx);
                     throw;
@@ -1127,7 +1224,21 @@ void InternalStreamingModel::embed(
             const SlotId exit = impl_->layers.back().output_slot;
             ggml_tensor * activation = sc.slots.create_input(exit, final_ctx);
             ggml_tensor * phase_out = arch.build_final_phase(final_ctx, activation);
-            phase_out = forward::build_pool(final_ctx, phase_out, to_forward_pool(config.pooling));
+            forward::PoolInputs pool;
+            if (batch.padded && config.pooling == PoolType::Mean) {
+                pool.valid_mask = ggml_new_tensor_3d(
+                    final_ctx, GGML_TYPE_F32, 1, S, B);
+                pool.mean_scale = ggml_new_tensor_2d(
+                    final_ctx, GGML_TYPE_F32, 1, B);
+                ggml_set_input(pool.valid_mask);
+                ggml_set_input(pool.mean_scale);
+            } else if (batch.padded && config.pooling == PoolType::Last) {
+                pool.last_indices = ggml_new_tensor_1d(
+                    final_ctx, GGML_TYPE_I32, B);
+                ggml_set_input(pool.last_indices);
+            }
+            phase_out = forward::build_pool(
+                final_ctx, phase_out, to_forward_pool(config.pooling), pool);
             if (config.normalize) phase_out = forward::build_l2_normalize(final_ctx, phase_out);
             ggml_set_output(phase_out);
             ggml_cgraph * graph = ggml_new_graph(final_ctx);
@@ -1136,18 +1247,39 @@ void InternalStreamingModel::embed(
             sc.set_tensor(activation, sc.slots.data(exit), sc.slots.nbytes(exit),
                           "final_activation");
             sc.activation_copy_bytes += sc.slots.nbytes(exit);
+            if (pool.valid_mask != nullptr) {
+                sc.set_tensor(pool.valid_mask, batch.valid_mask.data(),
+                              batch.valid_mask.size() * sizeof(float), "pool_valid_mask");
+                sc.set_tensor(pool.mean_scale, batch.mean_scale.data(),
+                              batch.mean_scale.size() * sizeof(float), "pool_mean_scale");
+            }
+            if (pool.last_indices != nullptr) {
+                sc.set_tensor(pool.last_indices, batch.last_indices.data(),
+                              batch.last_indices.size() * sizeof(int32_t),
+                              "pool_last_indices");
+            }
             if (ggml_backend_graph_compute(sc.backend, graph) != GGML_STATUS_SUCCESS) {
                 throw std::runtime_error("streaming final compute failed");
             }
             ++sc.phase_graph_computes;
-            ggml_backend_tensor_get(phase_out, output, 0,
-                                    static_cast<size_t>(params.n_embed) * sizeof(float));
-            sc.activation_copy_bytes += static_cast<size_t>(params.n_embed) * sizeof(float);
+            ggml_backend_tensor_get(phase_out, batch_output.data(), 0,
+                                    batch_output.size() * sizeof(float));
+            sc.activation_copy_bytes += batch_output.size() * sizeof(float);
         } catch (...) {
             ggml_free(final_ctx);
             throw;
         }
         ggml_free(final_ctx);
+        for (size_t b = 0; b < static_cast<size_t>(B); ++b) {
+            std::memcpy(output + batch.original_indices[b] * static_cast<size_t>(params.n_embed),
+                        batch_output.data() + b * static_cast<size_t>(params.n_embed),
+                        static_cast<size_t>(params.n_embed) * sizeof(float));
+        }
+        ++sc.batches_processed;
+        sc.items_processed += static_cast<uint64_t>(B);
+        sc.valid_tokens_processed += batch.valid_tokens;
+        sc.padding_tokens_processed += batch.padding_tokens;
+      }
     } catch (...) {
         poison_output();
         throw;
@@ -1178,6 +1310,10 @@ InternalStreamingDiagnostics InternalStreamingModel::diagnostics(
     result.activation_copy_bytes = context.impl_->activation_copy_bytes;
     result.slot_resident_bytes = context.impl_->slots.resident_bytes();
     result.graph_replans = context.impl_->graph_replans;
+    result.batches_processed = context.impl_->batches_processed;
+    result.items_processed = context.impl_->items_processed;
+    result.valid_tokens_processed = context.impl_->valid_tokens_processed;
+    result.padding_tokens_processed = context.impl_->padding_tokens_processed;
     return result;
 }
 

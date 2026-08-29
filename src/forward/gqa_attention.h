@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 struct ggml_context;
 struct ggml_tensor;
 
@@ -70,12 +72,18 @@ GqaProjections build_gqa_projections(ggml_context *              ctx,
 // `pos` is the I32 position ramp, required when rope_freq_base > 0.
 // `kq_mask` is an optional additive padding mask, as in attention.h; the
 // causal mask is generated internally and the two compose.
+// When `seq_lengths` is non-null it holds this sub-batch's true token counts
+// and takes precedence over `kq_mask`: the scores are then built one sentence
+// at a time at that sentence's own length, so no padded key is ever scored and
+// no mask is needed. Sentences never mix in either form -- the batch axis
+// already keeps them apart -- so this only removes wasted work.
 ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
                                        const GqaProjections &      proj,
                                        ggml_tensor *               pos,
                                        ggml_tensor *               kq_mask,
                                        const GqaAttentionWeights & w,
-                                       const GqaAttentionParams &  p);
+                                       const GqaAttentionParams &  p,
+                                       const int32_t *             seq_lengths = nullptr);
 
 // The composition of the two. The eager path calls this and is unaffected by
 // the split: the same ggml calls are emitted in the same order.
@@ -84,6 +92,7 @@ ggml_tensor * build_gqa_attention(ggml_context *             ctx,
                                   ggml_tensor *              pos,
                                   ggml_tensor *              kq_mask,
                                   const GqaAttentionWeights & w,
-                                  const GqaAttentionParams &  p);
+                                  const GqaAttentionParams &  p,
+                                  const int32_t *            seq_lengths = nullptr);
 
 } // namespace nanoembed::forward

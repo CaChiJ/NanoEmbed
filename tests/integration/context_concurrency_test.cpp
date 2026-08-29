@@ -54,6 +54,7 @@ void run_model(const ModelUnderTest & m) {
 
     nanoembed_context_params p = nanoembed_context_default_params();
     p.n_threads   = 1;
+    p.max_batch   = 3;
     p.max_seq_len = 128;
 
     nanoembed_context * a = nanoembed_new_context(model, p);
@@ -103,6 +104,48 @@ void run_model(const ModelUnderTest & m) {
 
     check(worker_failures.load(std::memory_order_relaxed) == 0,
           "parallel contexts match their sequential references");
+
+    const char * batch_a[] = {
+        "short", "a longer first-context batch sentence", "중복 batch"
+    };
+    const char * batch_b[] = {
+        "another", "第二の context", "edge embeddings under true batching"
+    };
+    std::vector<float> batch_ref_a(static_cast<size_t>(H) * 3);
+    std::vector<float> batch_ref_b(static_cast<size_t>(H) * 3);
+    check(nanoembed_embed_batch(a, batch_a, 3, batch_ref_a.data()) == NANOEMBED_OK,
+          "first context batch reference succeeds");
+    check(nanoembed_embed_batch(b, batch_b, 3, batch_ref_b.data()) == NANOEMBED_OK,
+          "second context batch reference succeeds");
+    start.store(false, std::memory_order_release);
+    worker_failures.store(0, std::memory_order_release);
+    auto batch_worker = [&](nanoembed_context * ctx,
+                            const char * const * texts,
+                            const std::vector<float> & ref) {
+        while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+        std::vector<float> got(static_cast<size_t>(H) * 3);
+        for (int i = 0; i < 3; ++i) {
+            const int rc = nanoembed_embed_batch(ctx, texts, 3, got.data());
+            for (int item = 0; item < 3; ++item) {
+                const size_t offset = static_cast<size_t>(item) * H;
+                std::vector<float> expected(ref.begin() + static_cast<std::ptrdiff_t>(offset),
+                                            ref.begin() + static_cast<std::ptrdiff_t>(offset + H));
+                std::vector<float> actual(got.begin() + static_cast<std::ptrdiff_t>(offset),
+                                          got.begin() + static_cast<std::ptrdiff_t>(offset + H));
+                if (rc != NANOEMBED_OK || cosine(actual, expected) < 0.99999f) {
+                    worker_failures.fetch_add(1, std::memory_order_relaxed);
+                    return;
+                }
+            }
+        }
+    };
+    std::thread batch_ta(batch_worker, a, batch_a, std::cref(batch_ref_a));
+    std::thread batch_tb(batch_worker, b, batch_b, std::cref(batch_ref_b));
+    start.store(true, std::memory_order_release);
+    batch_ta.join();
+    batch_tb.join();
+    check(worker_failures.load(std::memory_order_relaxed) == 0,
+          "parallel true batches match sequential batch references");
     std::fprintf(stderr, "[context_concurrency_test] %s: parallel contexts stable\n",
                  m.label);
 

@@ -101,11 +101,12 @@ public:
 
     const ArchParams & params() const noexcept override { return manifest_.params; }
 
-    // RoPE consumes the same 0..S-1 ramp BERT uses to index its learned
-    // position table, so the existing pos_ids input carries it. There are no
+    // RoPE consumes one shared 0..S-1 vector. There are no learned position or
     // segment embeddings.
     InputRequirements inputs() const noexcept override {
-        return InputRequirements{/*needs_pos_ids=*/true, /*needs_type_ids=*/false};
+        return InputRequirements{/*learned_pos=*/false, /*rope_pos=*/true,
+                                 /*type_ids=*/false, /*kq_mask=*/true,
+                                 /*seq_lengths=*/true};
     }
     InputRequirements embedding_inputs() const noexcept override { return {}; }
 
@@ -132,7 +133,9 @@ public:
     ggml_tensor * build_block(ggml_context * gctx,
                               ggml_tensor *  x,
                               ggml_tensor *  pos,
-                              int            layer) const;
+                              int            layer,
+                              ggml_tensor *  kq_mask = nullptr,
+                              const int32_t * seq_lengths = nullptr) const;
     ggml_tensor * build_final_norm(ggml_context * gctx, ggml_tensor * x) const;
 
     // Scales the graph applies that are not folded into the weights.

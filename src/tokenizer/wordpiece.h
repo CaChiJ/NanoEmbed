@@ -50,6 +50,7 @@ public:
     int unk_id()      const noexcept { return cfg_.unk_id; }
     int max_seq_len() const noexcept override { return cfg_.max_seq_len; }
     int vocab_size()  const noexcept override { return static_cast<int>(vocab_.size()); }
+    int padding_id()  const noexcept override { return cfg_.pad_id; }
 
     // Read-only access to the loaded vocab (id -> piece string).
     const std::vector<std::string> & vocab() const noexcept { return vocab_; }

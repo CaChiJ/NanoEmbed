@@ -15,11 +15,13 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace nanoembed {
 
 struct EmbedderConfig {
     int      n_threads   = 0;            // 0 = auto
+    int      max_batch   = 1;
     int      max_seq_len = 0;            // 0 = use model's default
     PoolType pooling     = PoolType::Mean;
     bool     normalize   = true;         // L2 normalize the pooled output
@@ -95,6 +97,14 @@ public:
                const std::string &    text,
                const EmbedderConfig & cfg,
                float *                out);
+
+    // Tokenize, length-bucket and execute true B>1 sub-batches. Results are
+    // scattered back to input order. `cfg.max_batch` is the sole subdivision
+    // limit; allocation failures are surfaced rather than silently retried.
+    void embed_batch(ComputeScratch &                 scratch,
+                     const std::vector<std::string> & texts,
+                     const EmbedderConfig &           cfg,
+                     float *                          out);
 
     Embedder(const Embedder &)             = delete;
     Embedder & operator=(const Embedder &) = delete;

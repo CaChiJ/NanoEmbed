@@ -1,4 +1,5 @@
 #include "attention.h"
+#include "linear.h"
 
 #include "ggml.h"
 
@@ -11,9 +12,9 @@ AttentionProjections build_attention_projections(ggml_context *           ctx,
                                                  const AttentionWeights & w) {
     // Linear projections produce [H, S, B] each.
     AttentionProjections proj;
-    proj.q = ggml_add(ctx, ggml_mul_mat(ctx, w.q_w, x), w.q_b);
-    proj.k = ggml_add(ctx, ggml_mul_mat(ctx, w.k_w, x), w.k_b);
-    proj.v = ggml_add(ctx, ggml_mul_mat(ctx, w.v_w, x), w.v_b);
+    proj.q = ggml_add(ctx, build_linear(ctx, w.q_w, x), w.q_b);
+    proj.k = ggml_add(ctx, build_linear(ctx, w.k_w, x), w.k_b);
+    proj.v = ggml_add(ctx, build_linear(ctx, w.v_w, x), w.v_b);
     return proj;
 }
 
@@ -62,7 +63,7 @@ ggml_tensor * build_attention_output(ggml_context *               ctx,
     attn = ggml_reshape_3d(ctx, attn, H, S, B);
 
     // Output projection.
-    attn = ggml_add(ctx, ggml_mul_mat(ctx, w.o_w, attn), w.o_b);
+    attn = ggml_add(ctx, build_linear(ctx, w.o_w, attn), w.o_b);
 
     // Residual + post-attention LayerNorm.
     ggml_tensor * y      = ggml_add(ctx, x_residual, attn);

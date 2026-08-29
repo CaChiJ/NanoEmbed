@@ -38,6 +38,10 @@ public:
 
     virtual int  max_seq_len() const noexcept = 0;
     virtual int  vocab_size()  const noexcept = 0;
+    // Preferred fill token for padded batch positions. A negative value means
+    // the tokenizer declares no PAD token; the batch planner then uses token
+    // zero as a masked, fill-only value.
+    virtual int  padding_id()  const noexcept = 0;
     virtual void set_max_seq_len(int n)       = 0;
 };
 

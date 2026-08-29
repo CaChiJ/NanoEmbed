@@ -233,7 +233,16 @@ ggml_tensor * Gemma3ModelArch::build_embeddings(ggml_context * gctx,
     // It survives into the residual stream: the first thing each block does is
     // RMSNorm, which would erase it, but the residual branch carries the
     // unnormalized value forward.
-    ggml_tensor * x = ggml_get_rows(gctx, tok_embed_, token_ids);
+    ggml_tensor * x = nullptr;
+    if (token_ids->ne[1] == 1) {
+        x = ggml_get_rows(gctx, tok_embed_, token_ids);
+    } else {
+        const int64_t S = token_ids->ne[0];
+        const int64_t B = token_ids->ne[1];
+        x = ggml_get_rows(gctx, tok_embed_,
+                          ggml_reshape_1d(gctx, token_ids, S * B));
+        x = ggml_reshape_3d(gctx, x, x->ne[0], S, B);
+    }
     return ggml_scale(gctx, x, manifest_.embed_scale);
 }
 
@@ -254,7 +263,9 @@ forward::GqaAttentionParams Gemma3ModelArch::gqa_params() const noexcept {
 ggml_tensor * Gemma3ModelArch::build_block(ggml_context * gctx,
                                            ggml_tensor *  x,
                                            ggml_tensor *  pos,
-                                           int            layer) const {
+                                           int            layer,
+                                           ggml_tensor *  kq_mask,
+                                           const int32_t * seq_lengths) const {
     const ArchParams &         a = manifest_.params;
     const Gemma3LayerWeights & w = layer_w_[static_cast<size_t>(layer)];
 
@@ -264,7 +275,7 @@ ggml_tensor * Gemma3ModelArch::build_block(ggml_context * gctx,
     // residual added last — BERT normalizes only after the residual, and
     // Llama only before the sub-layer.
     ggml_tensor * h = forward::build_rms_norm(gctx, x, w.attn_norm, a.norm_eps);
-    h = forward::build_gqa_attention(gctx, h, pos, /*kq_mask=*/nullptr, w.attn, ap);
+    h = forward::build_gqa_attention(gctx, h, pos, kq_mask, w.attn, ap, seq_lengths);
     h = forward::build_rms_norm(gctx, h, w.attn_post_norm, a.norm_eps);
     x = ggml_add(gctx, x, h);
 
@@ -284,7 +295,7 @@ ggml_tensor * Gemma3ModelArch::build_graph(ggml_context *      gctx,
                                            const GraphInputs & in) const {
     ggml_tensor * x = build_embedding_phase(gctx, in);
     for (int li = 0; li < manifest_.params.n_layer; ++li) {
-        x = build_block(gctx, x, in.pos_ids, li);
+        x = build_block(gctx, x, in.rope_pos_ids, li, in.kq_mask, in.seq_lengths);
     }
     return build_final_phase(gctx, x);
 }
@@ -363,12 +374,16 @@ StreamingLayerPlan Gemma3ModelArch::streaming_units(int layer) const {
     core.inputs  = {"q", "k", "v"};
     core.outputs = {"h"};
     core.stage   = StreamingStage::Attention;
-    core.graph_inputs = InputRequirements{/*needs_pos_ids=*/true, /*needs_type_ids=*/false};
+    core.graph_inputs = InputRequirements{/*learned_pos=*/false, /*rope_pos=*/true,
+                                          /*type_ids=*/false, /*kq_mask=*/true,
+                                          /*seq_lengths=*/true};
     core.build = [this, li](ggml_context * ctx, SlotTable & s) {
         forward::GqaProjections proj{s.in(0), s.in(1), s.in(2)};
         s.out(0, forward::build_gqa_attention_core(
-                     ctx, proj, s.graph_inputs().pos_ids, /*kq_mask=*/nullptr,
-                     layer_w_[li].attn, gqa_params()));
+                     ctx, proj, s.graph_inputs().rope_pos_ids,
+                     s.graph_inputs().kq_mask,
+                     layer_w_[li].attn, gqa_params(),
+                     s.graph_inputs().seq_lengths));
     };
     plan.units.push_back(std::move(core));
 

@@ -1,4 +1,5 @@
 #include "ffn.h"
+#include "linear.h"
 
 #include "ggml.h"
 
@@ -8,7 +9,7 @@ ggml_tensor * build_ffn_up(ggml_context *     ctx,
                            ggml_tensor *      x,
                            const FFNWeights & w) {
     // Up-projection: [H] -> [F]. mul_mat(up_w[H,F], x[H,S,B]) = [F, S, B].
-    ggml_tensor * h = ggml_add(ctx, ggml_mul_mat(ctx, w.up_w, x), w.up_b);
+    ggml_tensor * h = ggml_add(ctx, build_linear(ctx, w.up_w, x), w.up_b);
 
     // Exact erf-based GeLU — matches HuggingFace BertConfig.hidden_act = "gelu".
     // Kept on this side of the boundary so the down half reads only its own
@@ -22,7 +23,7 @@ ggml_tensor * build_ffn_down(ggml_context *     ctx,
                              const FFNWeights & w,
                              float              layer_norm_eps) {
     // Down-projection: [F] -> [H].
-    ggml_tensor * y = ggml_add(ctx, ggml_mul_mat(ctx, w.down_w, h), w.down_b);
+    ggml_tensor * y = ggml_add(ctx, build_linear(ctx, w.down_w, h), w.down_b);
 
     // Residual + post-FFN LayerNorm.
     y = ggml_add(ctx, y, x_residual);

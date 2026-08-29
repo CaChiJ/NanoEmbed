@@ -1,6 +1,7 @@
 // Linux-only B3 internal-path proof. No public use_streaming selection occurs.
 
 #include "embedder.h"
+#include "batch.h"
 #include "streaming_execution.h"
 
 #include <algorithm>
@@ -120,11 +121,113 @@ int run_case(const Case & item) {
         throw std::runtime_error(std::string(item.label) + " streaming/PyTorch mean gate failed");
     }
 
-    // Snapshot the residency peak while only this context has been running.
-    // advised_bytes_high_water is a coordinator-wide figure, and the two
-    // contexts below legitimately hold two groups resident at once -- reading
-    // it after them would measure concurrency, not partitioning.
-    const auto serial_residency = streaming.diagnostics(streaming_context).residency;
+    // One public batch call must execute one copy of each phase per
+    // sub-batch, not per item. Deliberately vary lengths so attention and
+    // pooling masks are exercised as well as stable output scattering.
+    const std::vector<std::string> batch_texts = {
+        "x",
+        "a somewhat longer streaming batch sentence",
+        "한국어와 English batch",
+        "same",
+        "same",
+    };
+    std::vector<float> eager_batch(
+        batch_texts.size() * static_cast<size_t>(streaming.n_embed()));
+    std::vector<float> stream_batch(eager_batch.size());
+    config.max_batch = 3;
+    const auto before_batch_diag = streaming.diagnostics(streaming_context);
+    eager.embed_batch(eager_context, batch_texts, config, eager_batch.data());
+    streaming.embed_batch(streaming_context, batch_texts, config, stream_batch.data());
+    for (size_t i = 0; i < batch_texts.size(); ++i) {
+        const size_t offset = i * static_cast<size_t>(streaming.n_embed());
+        std::vector<float> expected(
+            eager_batch.begin() + static_cast<std::ptrdiff_t>(offset),
+            eager_batch.begin() + static_cast<std::ptrdiff_t>(offset + streaming.n_embed()));
+        std::vector<float> actual(
+            stream_batch.begin() + static_cast<std::ptrdiff_t>(offset),
+            stream_batch.begin() + static_cast<std::ptrdiff_t>(offset + streaming.n_embed()));
+        if (cosine(expected, actual) < 0.999999) {
+            throw std::runtime_error(std::string(item.label) + " batched streaming/eager parity failed");
+        }
+    }
+    const auto after_batch_diag = streaming.diagnostics(streaming_context);
+    const auto batch_part = streaming.partition_info();
+    constexpr uint64_t expected_subbatches = 2;
+    if (after_batch_diag.phase_graph_computes - before_batch_diag.phase_graph_computes !=
+            expected_subbatches * batch_part.groups_per_sentence ||
+        after_batch_diag.batches_processed - before_batch_diag.batches_processed !=
+            expected_subbatches ||
+        after_batch_diag.items_processed - before_batch_diag.items_processed !=
+            batch_texts.size() ||
+        after_batch_diag.padding_tokens_processed <=
+            before_batch_diag.padding_tokens_processed) {
+        throw std::runtime_error(std::string(item.label) + " batch diagnostics scale per item");
+    }
+
+    // Freeze the serial residency peak before failure-injection or concurrent
+    // contexts add model-wide diagnostics. In particular, token_advised_bytes
+    // participates in the page-slack bound below and must describe only the
+    // canonical serial path.
+    const auto serial_residency =
+        streaming.diagnostics(streaming_context).residency;
+
+    // A graph metadata failure must happen before its corresponding residency
+    // lease is published. Verify both the embedding boundary (countdown 0) and
+    // the first layer-group boundary (countdown 1), then reuse the same context
+    // to prove the failure did not leave stale slots or a poisoned coordinator.
+    auto verify_graph_context_failure = [&](uint64_t countdown,
+                                            const char * boundary) {
+        nanoembed::InternalStreamingContext failure_context;
+        std::vector<float> failed_output(eager_batch.size(), 0.0f);
+        failure_context.diagnostic_fail_graph_context_after(countdown);
+        bool saw_allocation_error = false;
+        try {
+            streaming.embed_batch(
+                failure_context, batch_texts, config, failed_output.data());
+        } catch (const nanoembed::AllocationError &) {
+            saw_allocation_error = true;
+        }
+        if (!saw_allocation_error ||
+            !std::all_of(failed_output.begin(), failed_output.end(),
+                         [](float value) { return std::isnan(value); })) {
+            throw std::runtime_error(
+                std::string(item.label) + " " + boundary +
+                " failure did not return the poisoned-output contract");
+        }
+        const auto failed_diag = streaming.diagnostics(failure_context);
+        if (failed_diag.residency.poisoned ||
+            failed_diag.residency.active_leases != 0 ||
+            failed_diag.residency.leases_acquired !=
+                failed_diag.residency.leases_released ||
+            failed_diag.residency.premature_release_attempts != 0) {
+            throw std::runtime_error(
+                std::string(item.label) + " " + boundary +
+                " failure leaked or poisoned a residency lease");
+        }
+
+        std::fill(failed_output.begin(), failed_output.end(), 0.0f);
+        streaming.embed_batch(
+            failure_context, batch_texts, config, failed_output.data());
+        for (size_t i = 0; i < batch_texts.size(); ++i) {
+            const size_t offset = i * static_cast<size_t>(streaming.n_embed());
+            std::vector<float> expected(
+                eager_batch.begin() + static_cast<std::ptrdiff_t>(offset),
+                eager_batch.begin() +
+                    static_cast<std::ptrdiff_t>(offset + streaming.n_embed()));
+            std::vector<float> actual(
+                failed_output.begin() + static_cast<std::ptrdiff_t>(offset),
+                failed_output.begin() +
+                    static_cast<std::ptrdiff_t>(offset + streaming.n_embed()));
+            if (cosine(expected, actual) < 0.999999) {
+                throw std::runtime_error(
+                    std::string(item.label) + " " + boundary +
+                    " failure left the context unusable");
+            }
+        }
+    };
+    verify_graph_context_failure(/*countdown=*/0, "embedding-context");
+    verify_graph_context_failure(/*countdown=*/1, "group-context");
+
     // Two genuinely distinct contexts share only the mapped read-only model
     // and residency coordinator. Repeat concurrently to expose scratch/advice
     // races and require deterministic output.
@@ -171,7 +274,10 @@ int run_case(const Case & item) {
         part.groups_per_layer == 0 ||
         part.groups_per_sentence !=
             2 + part.groups_per_layer * static_cast<uint64_t>(streaming.n_layer()) ||
-        diag.phase_graph_computes != tested_samples * part.groups_per_sentence) {
+        diag.phase_graph_computes !=
+            (tested_samples + expected_subbatches) * part.groups_per_sentence ||
+        diag.batches_processed != tested_samples + expected_subbatches ||
+        diag.items_processed != tested_samples + batch_texts.size()) {
         throw std::runtime_error(std::string(item.label) + " phase/partition diagnostics invalid");
     }
     // The number the partitioning exists to lower. common is retained for the

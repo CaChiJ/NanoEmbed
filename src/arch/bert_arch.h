@@ -26,9 +26,13 @@ public:
     const ArchParams & params() const noexcept override { return params_; }
 
     InputRequirements inputs() const noexcept override {
-        return InputRequirements{/*needs_pos_ids=*/true, /*needs_type_ids=*/true};
+        return InputRequirements{/*learned_pos=*/true, /*rope_pos=*/false,
+                                 /*type_ids=*/true, /*kq_mask=*/true};
     }
-    InputRequirements embedding_inputs() const noexcept override { return inputs(); }
+    InputRequirements embedding_inputs() const noexcept override {
+        return InputRequirements{/*learned_pos=*/true, /*rope_pos=*/false,
+                                 /*type_ids=*/true, /*kq_mask=*/false};
+    }
 
     // Read from bert.pooling_type rather than assumed. BERT embedding models
     // disagree: bge-small is CLS, all-MiniLM and the e5 family are mean, and

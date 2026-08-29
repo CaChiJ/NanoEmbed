@@ -7,15 +7,19 @@
 #include "nanoembed/nanoembed.h"
 
 #include "arch/model_arch.h"
+#include "batch.h"
 #include "embedder.h"
 #include "streaming_execution.h"
 
+#include <algorithm>
 #include <cstring>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 // ---- Error handling ---------------------------------------------------------
 
@@ -72,6 +76,7 @@ nanoembed::EmbedderConfig from_params(const nanoembed_context_params & p,
                                       nanoembed::PoolType              pooling) {
     nanoembed::EmbedderConfig c;
     c.n_threads   = p.n_threads;
+    c.max_batch   = p.max_batch;
     c.max_seq_len = p.max_seq_len;
     c.pooling     = pooling;
     c.normalize   = (p.normalize != 0);
@@ -312,6 +317,18 @@ int nanoembed_embed(nanoembed_context * ctx,
         }
         clear_error();
         return NANOEMBED_OK;
+    } catch (const nanoembed::TokenizerError & e) {
+        set_error_from_exception(e);
+        return NANOEMBED_ERR_TOKENIZE;
+    } catch (const nanoembed::AllocationError & e) {
+        set_error_from_exception(e);
+        return NANOEMBED_ERR_OOM;
+    } catch (const std::bad_alloc & e) {
+        set_error_from_exception(e);
+        return NANOEMBED_ERR_OOM;
+    } catch (const std::length_error & e) {
+        set_error_from_exception(e);
+        return NANOEMBED_ERR_OOM;
     } catch (const std::exception & e) {
         set_error_from_exception(e);
         return NANOEMBED_ERR_INTERNAL;
@@ -333,32 +350,69 @@ int nanoembed_embed_batch(nanoembed_context *  ctx,
         set_error("n_texts must be non-negative");
         return NANOEMBED_ERR_INVALID_ARG;
     }
+    const int H = ctx->model->descriptor->params().n_embed;
+    const size_t count = static_cast<size_t>(n_texts);
+    if (H <= 0 || count > std::numeric_limits<size_t>::max() /
+                            static_cast<size_t>(H)) {
+        set_error("batch output size overflows size_t");
+        return NANOEMBED_ERR_INVALID_ARG;
+    }
+    for (int i = 0; i < n_texts; ++i) {
+        if (texts[i] == nullptr) {
+            set_error("null pointer in texts[]");
+            return NANOEMBED_ERR_INVALID_ARG;
+        }
+    }
+    if (n_texts == 0) {
+        clear_error();
+        return NANOEMBED_OK;
+    }
+
+    std::vector<std::string> owned_texts;
     try {
-        const int H = ctx->model->descriptor->params().n_embed;
-        // M3 baseline: loop the single-input path. M5 replaces this with the
-        // batched runner — same C ABI, real batching internally.
+        owned_texts.reserve(count);
         for (int i = 0; i < n_texts; ++i) {
-            if (texts[i] == nullptr) {
-                set_error("null pointer in texts[]");
-                return NANOEMBED_ERR_INVALID_ARG;
-            }
-            float * item_out = out + static_cast<size_t>(i) * static_cast<size_t>(H);
-            if (ctx->mode == nanoembed_model::ExecutionMode::Eager) {
-                ctx->model->eager->embed(
-                    *ctx->scratch, std::string(texts[i]), ctx->cfg, item_out);
-            } else if (ctx->mode == nanoembed_model::ExecutionMode::Streaming) {
-                ctx->model->streaming->embed(
-                    *ctx->streaming_context, std::string(texts[i]), ctx->cfg, item_out);
-            } else {
-                throw std::runtime_error("context has no resolved execution mode");
-            }
+            owned_texts.emplace_back(texts[i]);
+        }
+        if (ctx->mode == nanoembed_model::ExecutionMode::Eager) {
+            ctx->model->eager->embed_batch(
+                *ctx->scratch, owned_texts, ctx->cfg, out);
+        } else if (ctx->mode == nanoembed_model::ExecutionMode::Streaming) {
+            ctx->model->streaming->embed_batch(
+                *ctx->streaming_context, owned_texts, ctx->cfg, out);
+        } else {
+            throw std::runtime_error("context has no resolved execution mode");
         }
         clear_error();
         return NANOEMBED_OK;
+    } catch (const nanoembed::TokenizerError & e) {
+        std::fill(out, out + count * static_cast<size_t>(H),
+                  std::numeric_limits<float>::quiet_NaN());
+        set_error_from_exception(e);
+        return NANOEMBED_ERR_TOKENIZE;
+    } catch (const nanoembed::AllocationError & e) {
+        std::fill(out, out + count * static_cast<size_t>(H),
+                  std::numeric_limits<float>::quiet_NaN());
+        set_error_from_exception(e);
+        return NANOEMBED_ERR_OOM;
+    } catch (const std::bad_alloc & e) {
+        std::fill(out, out + count * static_cast<size_t>(H),
+                  std::numeric_limits<float>::quiet_NaN());
+        set_error_from_exception(e);
+        return NANOEMBED_ERR_OOM;
+    } catch (const std::length_error & e) {
+        std::fill(out, out + count * static_cast<size_t>(H),
+                  std::numeric_limits<float>::quiet_NaN());
+        set_error_from_exception(e);
+        return NANOEMBED_ERR_OOM;
     } catch (const std::exception & e) {
+        std::fill(out, out + count * static_cast<size_t>(H),
+                  std::numeric_limits<float>::quiet_NaN());
         set_error_from_exception(e);
         return NANOEMBED_ERR_INTERNAL;
     } catch (...) {
+        std::fill(out, out + count * static_cast<size_t>(H),
+                  std::numeric_limits<float>::quiet_NaN());
         set_error_unknown();
         return NANOEMBED_ERR_INTERNAL;
     }

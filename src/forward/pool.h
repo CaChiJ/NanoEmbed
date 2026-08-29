@@ -17,11 +17,19 @@ namespace nanoembed::forward {
 
 enum class PoolType { Mean, Cls, Last };
 
+struct PoolInputs {
+    ggml_tensor * valid_mask  = nullptr; // F32 [1,S,B]
+    ggml_tensor * mean_scale  = nullptr; // F32 [1,B]
+    ggml_tensor * last_indices = nullptr; // I32 [B], flattened S*B
+};
+
 ggml_tensor * build_mean_pool(ggml_context * ctx, ggml_tensor * x);
 ggml_tensor * build_cls_pool (ggml_context * ctx, ggml_tensor * x);
 ggml_tensor * build_last_pool(ggml_context * ctx, ggml_tensor * x);
 
 ggml_tensor * build_pool(ggml_context * ctx, ggml_tensor * x, PoolType type);
+ggml_tensor * build_pool(ggml_context * ctx, ggml_tensor * x, PoolType type,
+                         const PoolInputs & inputs);
 
 // L2 normalize each row: y = x / max(||x||_2, sqrt(eps)).
 ggml_tensor * build_l2_normalize(ggml_context * ctx, ggml_tensor * x,

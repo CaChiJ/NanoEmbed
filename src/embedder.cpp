@@ -1,6 +1,7 @@
 #include "embedder.h"
 
 #include "arch/model_arch.h"
+#include "batch.h"
 #include "forward/pool.h"
 #include "tokenizer/tokenizer.h"
 
@@ -84,6 +85,7 @@ int resolve_n_threads(int requested) {
 struct GraphIO {
     ggml_cgraph * graph = nullptr;
     GraphInputs   in;
+    forward::PoolInputs pool;
     ggml_tensor * out   = nullptr;
 };
 
@@ -96,12 +98,14 @@ struct Embedder::Impl {
     gguf_context * gguf      = nullptr;
     ggml_context * model_ctx = nullptr;
 
-    GraphIO build_graph(ggml_context * gctx,
-                        int64_t        S,
-                        PoolType       pooling,
-                        bool           normalize) const {
+    GraphIO build_graph(ggml_context *  gctx,
+                        int64_t         S,
+                        int64_t         B,
+                        bool            padded,
+                        PoolType        pooling,
+                        bool            normalize,
+                        const int32_t * seq_lengths = nullptr) const {
         const InputRequirements req = arch->inputs();
-        const int64_t           B   = 1;
         GraphIO io;
 
         auto make_input = [&](ggml_tensor ** slot) {
@@ -112,12 +116,38 @@ struct Embedder::Impl {
         };
 
         make_input(&io.in.token_ids);
-        if (req.needs_pos_ids)  make_input(&io.in.pos_ids);
+        if (req.needs_learned_pos_ids) make_input(&io.in.learned_pos_ids);
+        if (req.needs_rope_pos_ids) {
+            io.in.rope_pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, S);
+            ggml_set_input(io.in.rope_pos_ids);
+        }
         if (req.needs_type_ids) make_input(&io.in.type_ids);
+        // Per-sentence attention needs no mask, so only build one when the
+        // architecture has not been handed the lengths it would replace.
+        io.in.seq_lengths =
+            (padded && req.consumes_seq_lengths) ? seq_lengths : nullptr;
+        if (padded && req.uses_kq_mask && io.in.seq_lengths == nullptr) {
+            io.in.kq_mask = ggml_new_tensor_4d(
+                gctx, GGML_TYPE_F16, S, S, 1, B);
+            ggml_set_input(io.in.kq_mask);
+        }
+
+        if (padded && pooling == PoolType::Mean) {
+            io.pool.valid_mask = ggml_new_tensor_3d(
+                gctx, GGML_TYPE_F32, 1, S, B);
+            io.pool.mean_scale = ggml_new_tensor_2d(
+                gctx, GGML_TYPE_F32, 1, B);
+            ggml_set_input(io.pool.valid_mask);
+            ggml_set_input(io.pool.mean_scale);
+        } else if (padded && pooling == PoolType::Last) {
+            io.pool.last_indices = ggml_new_tensor_1d(
+                gctx, GGML_TYPE_I32, B);
+            ggml_set_input(io.pool.last_indices);
+        }
 
         ggml_tensor * x = arch->build_graph(gctx, io.in);
 
-        io.out = forward::build_pool(gctx, x, to_forward_pool(pooling));
+        io.out = forward::build_pool(gctx, x, to_forward_pool(pooling), io.pool);
         if (normalize) {
             io.out = forward::build_l2_normalize(gctx, io.out);
         }
@@ -225,9 +255,10 @@ void Embedder::reserve(ComputeScratch & scratch,
 
     ggml_context * gctx = sc.new_meta_ctx();
     try {
-        const GraphIO io = impl_->build_graph(gctx, want, pooling, normalize);
+        const GraphIO io = impl_->build_graph(
+            gctx, want, /*B=*/1, /*padded=*/false, pooling, normalize);
         if (!ggml_gallocr_reserve(sc.galloc, io.graph)) {
-            throw std::runtime_error(
+            throw AllocationError(
                 "failed to reserve the graph buffer for max_seq_len=" +
                 std::to_string(want));
         }
@@ -263,25 +294,34 @@ void Embedder::embed(ComputeScratch &       scratch,
     // of re-faulting a fresh arena.
     ggml_context * gctx = sc.new_meta_ctx();
     try {
-        const GraphIO io = impl_->build_graph(gctx, S, cfg.pooling, cfg.normalize);
+        const GraphIO io = impl_->build_graph(
+            gctx, S, /*B=*/1, /*padded=*/false, cfg.pooling, cfg.normalize);
 
         if (!ggml_gallocr_alloc_graph(sc.galloc, io.graph)) {
-            throw std::runtime_error("failed to allocate the graph buffer");
+            throw AllocationError("failed to allocate the graph buffer");
         }
         // Only now do the input tensors have storage.
         ggml_backend_tensor_set(io.in.token_ids, ids.data(), 0,
                                 ids.size() * sizeof(int32_t));
 
-        std::vector<int32_t> scratch(static_cast<size_t>(S));
-        if (io.in.pos_ids) {
-            for (int64_t s = 0; s < S; ++s) scratch[static_cast<size_t>(s)] = static_cast<int32_t>(s);
-            ggml_backend_tensor_set(io.in.pos_ids, scratch.data(), 0,
-                                    scratch.size() * sizeof(int32_t));
+        std::vector<int32_t> input_scratch(static_cast<size_t>(S));
+        if (io.in.learned_pos_ids || io.in.rope_pos_ids) {
+            for (int64_t s = 0; s < S; ++s) {
+                input_scratch[static_cast<size_t>(s)] = static_cast<int32_t>(s);
+            }
+            if (io.in.learned_pos_ids) {
+                ggml_backend_tensor_set(io.in.learned_pos_ids, input_scratch.data(), 0,
+                                        input_scratch.size() * sizeof(int32_t));
+            }
+            if (io.in.rope_pos_ids) {
+                ggml_backend_tensor_set(io.in.rope_pos_ids, input_scratch.data(), 0,
+                                        input_scratch.size() * sizeof(int32_t));
+            }
         }
         if (io.in.type_ids) {
-            std::fill(scratch.begin(), scratch.end(), 0);
-            ggml_backend_tensor_set(io.in.type_ids, scratch.data(), 0,
-                                    scratch.size() * sizeof(int32_t));
+            std::fill(input_scratch.begin(), input_scratch.end(), 0);
+            ggml_backend_tensor_set(io.in.type_ids, input_scratch.data(), 0,
+                                    input_scratch.size() * sizeof(int32_t));
         }
 
         const ggml_status st = ggml_backend_graph_compute(sc.backend, io.graph);
@@ -296,6 +336,84 @@ void Embedder::embed(ComputeScratch &       scratch,
         throw;
     }
     ggml_free(gctx);
+}
+
+void Embedder::embed_batch(ComputeScratch &                 scratch,
+                           const std::vector<std::string> & texts,
+                           const EmbedderConfig &           cfg,
+                           float *                          out) {
+    if (out == nullptr) throw std::invalid_argument("batch output pointer is null");
+    if (texts.empty()) return;
+
+    ComputeScratch::Impl & sc = *scratch.impl_;
+    const int H = impl_->arch->params().n_embed;
+    const int n_threads = resolve_n_threads(cfg.n_threads);
+    int limit = cfg.max_seq_len > 0 ? cfg.max_seq_len : impl_->arch->params().max_seq_len;
+    limit = std::min(limit, impl_->arch->params().max_seq_len);
+
+    const BatchPlan plan = make_batch_plan(
+        *impl_->tokenizer, texts, limit, cfg.max_batch);
+    ggml_backend_cpu_set_n_threads(sc.backend, n_threads);
+
+    for (size_t batch_index = 0; batch_index < plan.subbatch_count(); ++batch_index) {
+        const MaterializedBatch batch = materialize_batch(
+            plan, batch_index, impl_->tokenizer->padding_id(),
+            impl_->tokenizer->vocab_size());
+        ggml_context * gctx = sc.new_meta_ctx();
+        try {
+            const GraphIO io = impl_->build_graph(
+                gctx, batch.seq_len, batch.batch_size, batch.padded,
+                cfg.pooling, cfg.normalize, batch.lengths.data());
+            if (!ggml_gallocr_alloc_graph(sc.galloc, io.graph)) {
+                throw AllocationError("failed to allocate the batched graph buffer");
+            }
+
+            auto set = [](ggml_tensor * tensor, const void * data, size_t bytes) {
+                if (tensor != nullptr) ggml_backend_tensor_set(tensor, data, 0, bytes);
+            };
+            set(io.in.token_ids, batch.token_ids.data(),
+                batch.token_ids.size() * sizeof(int32_t));
+            set(io.in.learned_pos_ids, batch.learned_positions.data(),
+                batch.learned_positions.size() * sizeof(int32_t));
+            set(io.in.rope_pos_ids, batch.rope_positions.data(),
+                batch.rope_positions.size() * sizeof(int32_t));
+            set(io.in.type_ids, batch.type_ids.data(),
+                batch.type_ids.size() * sizeof(int32_t));
+            set(io.in.kq_mask, batch.attention_mask.data(),
+                batch.attention_mask.size() * sizeof(ggml_fp16_t));
+            set(io.pool.valid_mask, batch.valid_mask.data(),
+                batch.valid_mask.size() * sizeof(float));
+            set(io.pool.mean_scale, batch.mean_scale.data(),
+                batch.mean_scale.size() * sizeof(float));
+            set(io.pool.last_indices, batch.last_indices.data(),
+                batch.last_indices.size() * sizeof(int32_t));
+
+            if (ggml_backend_graph_compute(sc.backend, io.graph) != GGML_STATUS_SUCCESS) {
+                throw std::runtime_error("batched ggml graph compute failed");
+            }
+            const size_t B = static_cast<size_t>(batch.batch_size);
+            std::vector<float> sorted_output;
+            try {
+                if (B > std::numeric_limits<size_t>::max() / static_cast<size_t>(H)) {
+                    throw AllocationError("batched output staging size overflow");
+                }
+                sorted_output.resize(B * static_cast<size_t>(H));
+            } catch (const std::bad_alloc &) {
+                throw AllocationError("failed to allocate batched output staging");
+            }
+            ggml_backend_tensor_get(io.out, sorted_output.data(), 0,
+                                    sorted_output.size() * sizeof(float));
+            for (size_t b = 0; b < B; ++b) {
+                std::memcpy(out + batch.original_indices[b] * static_cast<size_t>(H),
+                            sorted_output.data() + b * static_cast<size_t>(H),
+                            static_cast<size_t>(H) * sizeof(float));
+            }
+        } catch (...) {
+            ggml_free(gctx);
+            throw;
+        }
+        ggml_free(gctx);
+    }
 }
 
 } // namespace nanoembed

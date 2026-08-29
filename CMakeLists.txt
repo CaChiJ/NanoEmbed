@@ -43,6 +43,7 @@ add_subdirectory(third_party/ggml EXCLUDE_FROM_ALL)
 # ---- Core library -----------------------------------------------------------
 add_library(nanoembed_core STATIC
     src/api/c_api.cpp
+    src/batch.cpp
     src/embedder.cpp
     src/gguf_util.cpp
     src/gguf_scanner.cpp
@@ -335,6 +336,14 @@ if(BUILD_TESTING)
     add_test(NAME context_concurrency COMMAND nanoembed_context_concurrency_test)
     set_tests_properties(context_concurrency PROPERTIES TIMEOUT 600)
 
+    add_executable(nanoembed_batch_test tests/integration/batch_test.cpp)
+    target_include_directories(nanoembed_batch_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(nanoembed_batch_test PRIVATE nanoembed_core)
+    target_compile_options(nanoembed_batch_test PRIVATE ${NANOEMBED_WARNING_FLAGS})
+    add_test(NAME batch COMMAND nanoembed_batch_test)
+    set_tests_properties(batch PROPERTIES TIMEOUT 1800)
+
     add_executable(nanoembed_mode_selection_test
         tests/integration/mode_selection_test.cpp)
     target_link_libraries(nanoembed_mode_selection_test
@@ -502,7 +511,7 @@ if(BUILD_TESTING)
     endif()
 
     # Model-only tests.
-    foreach(_t scanner seq_len limits context_concurrency mode_selection reserve_invariant streaming_integration)
+    foreach(_t scanner seq_len limits context_concurrency batch mode_selection reserve_invariant streaming_integration)
         set_tests_properties(${_t} PROPERTIES ENVIRONMENT "${_NE_MODELS}")
     endforeach()
 

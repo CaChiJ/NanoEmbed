@@ -1,4 +1,5 @@
 #include "gated_ffn.h"
+#include "linear.h"
 
 #include "ggml.h"
 
@@ -10,8 +11,8 @@ ggml_tensor * build_gated_ffn_gate_up(ggml_context *          ctx,
                                       ggml_tensor *           x,
                                       const GatedFfnWeights & w,
                                       GateActivation          act) {
-    ggml_tensor * gate = ggml_mul_mat(ctx, w.gate, x);   // [F, S, B]
-    ggml_tensor * up   = ggml_mul_mat(ctx, w.up,   x);   // [F, S, B]
+    ggml_tensor * gate = build_linear(ctx, w.gate, x);   // [F, S, B]
+    ggml_tensor * up   = build_linear(ctx, w.up,   x);   // [F, S, B]
 
     // The *_split forms take the two halves as separate tensors and apply the
     // activation to the first, matching act(gate) * up.
@@ -25,7 +26,7 @@ ggml_tensor * build_gated_ffn_gate_up(ggml_context *          ctx,
 ggml_tensor * build_gated_ffn_down(ggml_context *          ctx,
                                    ggml_tensor *           h,
                                    const GatedFfnWeights & w) {
-    return ggml_mul_mat(ctx, w.down, h);                 // [H, S, B]
+    return build_linear(ctx, w.down, h);                 // [H, S, B]
 }
 
 ggml_tensor * build_gated_ffn(ggml_context *          ctx,

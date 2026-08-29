@@ -56,21 +56,35 @@ struct ArchParams {
 
 enum class PoolType { Mean, Cls, Last };
 
-// Graph-time inputs. Which of these an architecture consumes varies: BERT
-// needs segment IDs, gemma3 does not. `pos_ids` is the plain 0..S-1 ramp and
-// serves both uses — BERT indexes its learned table with it, gemma3 feeds it
-// to RoPE. The embedder creates every tensor an arch declares it wants and
-// fills it after allocation.
+// Graph-time inputs. Learned absolute positions need one index per padded
+// [S,B] cell, while ggml RoPE requires a shared vector [S]. Keeping them
+// distinct prevents a B>1 graph from relying on an accidental B=1 shape.
 struct GraphInputs {
-    ggml_tensor * token_ids = nullptr;   // I32 [S, B]
-    ggml_tensor * pos_ids   = nullptr;   // I32 [S, B], null if unused
-    ggml_tensor * type_ids  = nullptr;   // I32 [S, B], null if unused
+    ggml_tensor * token_ids        = nullptr; // I32 [S,B]
+    ggml_tensor * learned_pos_ids  = nullptr; // I32 [S,B]
+    ggml_tensor * rope_pos_ids     = nullptr; // I32 [S]
+    ggml_tensor * type_ids         = nullptr; // I32 [S,B]
+    ggml_tensor * kq_mask          = nullptr; // F16 [S,S,1,B], optional
+
+    // Host-side true token counts, [B]. Present only for a padded sub-batch.
+    // These are read while the graph is built, not uploaded as a tensor,
+    // because they decide tensor shapes: with them an architecture can run one
+    // attention per sentence at that sentence's own length instead of one
+    // padded [S,S,1,B] attention plus a mask. Null keeps the masked path.
+    const int32_t * seq_lengths    = nullptr;
 };
 
 // What the embedder must supply for this family.
 struct InputRequirements {
-    bool needs_pos_ids  = false;
-    bool needs_type_ids = false;
+    bool needs_learned_pos_ids = false;
+    bool needs_rope_pos_ids    = false;
+    bool needs_type_ids        = false;
+    bool uses_kq_mask          = false;
+    // True when the architecture can run one attention per sentence from
+    // GraphInputs::seq_lengths. The embedder then skips the padding mask
+    // entirely. An architecture that does not set this keeps the masked path,
+    // so the two families can migrate independently.
+    bool consumes_seq_lengths  = false;
 };
 
 // A value that crosses a graph boundary in the streaming runner. Architectures

@@ -135,7 +135,10 @@ NANOEMBED_API int nanoembed_embed(
         const char *        text,
         float *             out);
 
-/* n_texts inputs. out must hold n_texts * n_embed floats. */
+/* n_texts inputs. out must hold n_texts * n_embed floats. Inputs are
+ * length-bucketed internally, split at max_batch, and returned in caller
+ * order. Invalid arguments leave out untouched; execution failures poison
+ * the entire output with NaN. */
 NANOEMBED_API int nanoembed_embed_batch(
         nanoembed_context * ctx,
         const char * const * texts,

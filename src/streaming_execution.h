@@ -178,6 +178,10 @@ struct InternalStreamingDiagnostics {
     // count differs from the last one, so a finer partition raises this from
     // ~3 per sentence to one per group. Measured before it is optimized.
     uint64_t graph_replans = 0;
+    uint64_t batches_processed = 0;
+    uint64_t items_processed = 0;
+    uint64_t valid_tokens_processed = 0;
+    uint64_t padding_tokens_processed = 0;
 };
 
 // How a model's layers are currently cut into graphs. A property of the model
@@ -195,6 +199,12 @@ public:
     ~InternalStreamingContext();
     InternalStreamingContext(const InternalStreamingContext &) = delete;
     InternalStreamingContext & operator=(const InternalStreamingContext &) = delete;
+
+    // Internal deterministic failure injection. After `successful_creations`
+    // graph metadata contexts have been created, the next creation fails once.
+    // This is deliberately outside the public C ABI and exists only to verify
+    // lease/output rollback at graph-construction boundaries.
+    void diagnostic_fail_graph_context_after(uint64_t successful_creations);
 
 private:
     struct Impl;
@@ -219,6 +229,10 @@ public:
                const std::string & text,
                const EmbedderConfig & config,
                float * output) const;
+    void embed_batch(InternalStreamingContext & context,
+                     const std::vector<std::string> & texts,
+                     const EmbedderConfig & config,
+                     float * output) const;
     InternalStreamingDiagnostics diagnostics(
         const InternalStreamingContext & context) const;
     StreamingPartitionInfo partition_info() const;
