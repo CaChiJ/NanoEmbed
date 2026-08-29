@@ -383,7 +383,10 @@ latency 통계와 같은 lower 규약이다. profile-off에서는 이 필드가 
 
 요청별 latency는 min/max/mean, p50/p90/p95/p99, population stddev와 MAD를 기록한다.
 percentile은 정렬한 표본에서 `floor(q * (count - 1))`인 lower 방식을 사용한다.
-`single_request_items_per_sec`는 canonical timed wall을 기준으로 한 전체 처리율이다.
+schema v3에서 `items_per_sec`와 `batches_per_sec`는 canonical timed wall을 기준으로 한
+전체 처리율이다. `batch_latency_*`는 API batch 한 번, `item_latency_*`는 해당 시간을
+그 batch의 item 수로 나눈 환산값이다. `single_request_items_per_sec`는 batch size 1의
+호환 필드로만 남는다.
 고정 10-item window throughput 통계는 표본 window가 충분할 때만 제공하며 canonical이
 아니다. 결과의 `collection_status`와 null을 0으로 해석하지 않는다.
 
@@ -476,7 +479,8 @@ rollup read duration을 갖는다. GO를 `elapsed_ms_from_go=0`으로 삼으므�
 
 ### 결과 contract와 한계
 
-schema v2는 run 수준 requested/resolved settings, UTC, full Git/ggml SHA와 dirty 상태,
+schema v3는 run 수준 requested/resolved settings, batch size/max_batch, UTC,
+full Git/ggml SHA와 dirty 상태,
 benchmark/model/manifest/scenario hash, build/compiler/CMake option, CPU governor·NUMA·RAM·
 filesystem fingerprint를 저장한다. scenario별 model과 selected-input identity도 있다.
 필수 artifact hash 실패는 native 실행 전에 실패하고, 지원되지 않는 optional host
@@ -498,7 +502,8 @@ null이다. 한 runner 결과는 `independent_runs: 1`, `confidence_interval: nu
 ```
 
 비교기는 unversioned M3/M3.5 결과를 schema v1로 읽고 v2의
-`single_request_items_per_sec`와 옛 `throughput_items_per_sec` alias를 연결한다. 먼저
+batch size 1에서는 `single_request_items_per_sec`와 옛 `throughput_items_per_sec`
+alias를 연결한다. 먼저
 다음 핵심 환경을 확인한다.
 
 - Linux 커널

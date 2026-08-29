@@ -39,15 +39,17 @@
 | M3 | 메모리 제한을 무시한 정확한 BERT 임베더와 기준값을 만든다 | 완료 |
 | M3.5 | 고정 256 MiB 계산 버퍼를 제거한다 | 완료 |
 | M3.6 | 모델을 교체할 수 있게 만들고 두 번째 모델을 추가한다 | 완료 (벤치 baseline 제외) |
-| M4 | 한 번에 한 레이어만 메모리에 두는 스트리밍을 만든다 | 미구현 |
-| M5 | 한 번 읽은 레이어를 여러 입력이 공유하는 실제 배치를 만든다 | 미구현 |
+| M4 | 한 번에 한 레이어만 메모리에 두는 스트리밍을 만든다 | 완료 |
+| M5 | 한 번 읽은 레이어를 여러 입력이 공유하는 실제 배치를 만든다 | 기능 완료·성능 gate 미달 |
 | M6 | 배치 활성값을 int8/int4로 압축한다 | 미구현·후순위 |
 | M7 | 설치 가능한 라이브러리와 C++ 래퍼를 제공한다 | 미구현 |
 | M8 | Node.js에서 비동기로 호출하게 한다 | 미구현 |
 
-현재 위치는 **두 모델 계열(BERT, Gemma 3)이 모두 정확하게 동작하는 M3.6 완료 직후**다.
+현재 위치는 **M5 실제 배치의 기능과 계측을 끝내고 성능 gate 실패를 확인한 시점**이다.
 두 번째 모델은 원래 후보였던 EuroBERT 대신 `microsoft/harrier-oss-v1-270m`(GGUF 태그
-`gemma3`)으로 바꿨다. 이유는 7장에서 설명한다. 핵심 기능인 레이어 스트리밍은 아직 없다.
+`gemma3`)으로 바꿨다. 이유는 7장에서 설명한다. Linux 레이어 스트리밍과
+eager/streaming 실제 batch가 모두 있으며, 다음 과제는 M5에서 관찰한
+padding·activation 비용을 줄이는 것이다.
 
 ---
 
@@ -202,7 +204,8 @@ M3의 목적은 최종 메모리 구조가 아니라 **수학적으로 맞는 �
 - [`encoder_block.cpp`](../src/forward/encoder_block.cpp): attention과 FFN 연결
 - [`pool.cpp`](../src/forward/pool.cpp): mean/CLS/LAST와 L2 normalization
 
-**상태와 제한.** BERT 단일 입력은 완료됐다. M3은 `B=1`이고 padding이 없어 attention mask가 null이다. padding-aware attention과 pooling은 M5에서 필요하다.
+**상태와 제한.** 단일 입력은 mask 없는 `B=1` 경로를 유지한다. M5 batch는 optional
+padding attention mask와 Mean/LAST용 mask/index를 전달한다.
 
 ### 5.3 `Embedder` façade와 소유권
 
@@ -226,9 +229,12 @@ M3의 목적은 최종 메모리 구조가 아니라 **수학적으로 맞는 �
 
 **선택과 이유.** 마지막 방식을 선택했다. 함수가 작고 서로 다른 스레드의 오류가 덮어써지지 않는다.
 
-**구현.** [`src/api/c_api.cpp`](../src/api/c_api.cpp)는 null/범위를 먼저 검사하고 예외를 잡아 음수 코드와 최대 512자 thread-local 메시지로 변환한다. free는 null-safe다. `nanoembed_embed_batch`는 API만 먼저 고정하고 현재 내부에서는 단일 `embed()`를 N번 호출한다. M5에서 호출 형태를 유지한 채 내부 전략만 바꾼다. 미구현 `use_streaming`은 무시하지 않고 context 생성에서 거부한다.
+**구현.** [`src/api/c_api.cpp`](../src/api/c_api.cpp)는 null/범위를 먼저 검사하고 예외를
+잡아 음수 코드와 최대 512자 thread-local 메시지로 변환한다. free는 null-safe다.
+`nanoembed_embed_batch`는 eager/Linux streaming의 실제 batch 경로를 호출하며
+invalid argument는 출력을 보존하고 실행 후 실패는 전체 출력을 NaN으로 만든다.
 
-**상태.** 단일과 반복형 배치는 작동한다. 진짜 배치는 아니다.
+**상태.** 단일과 실제 batch가 작동한다. 공개 ABI layout은 M1 때와 같다.
 
 ### 5.5 CLI
 
@@ -365,7 +371,9 @@ BERT는 CLS를, Harrier는 마지막 유효 token을 선택한다.
 
 **가능한 방법과 선택.** 모델 graph 안에 pooling을 중복 구현하거나 공통 builder에 종류를 추가할 수 있다. 수학을 공유할 수 있으므로 공통 builder에 `Last`를 추가하고 모델이 기본 종류를 고르게 했다.
 
-**구현.** [`build_last_pool`](../src/forward/pool.cpp)은 `[H,S,B]`의 마지막 S 위치를 view로 선택한다. 단일 입력은 padding이 없어 맞지만 실제 배치는 문장별 마지막 유효 위치가 다르므로 M5에서 mask-aware로 바꿔야 한다.
+**구현.** [`build_last_pool`](../src/forward/pool.cpp)은 단일 입력에서는 마지막 S 위치를
+선택한다. padded batch에서는 `[H,S*B]`로 flatten한 뒤 문장별 마지막 유효 index를
+`get_rows`로 gather한다.
 
 **상태.** 공개 C ABI의 `NANOEMBED_POOL_LAST`와 `NANOEMBED_POOL_MODEL_DEFAULT`까지
 완료됐다. 기본값은 모델이 학습된 pooling이며 호출자가 Mean/CLS/LAST로 덮어쓸 수 있다.
@@ -516,7 +524,7 @@ M4는 page fault/I/O를 의도적으로 바꾸므로 latency 증가만으로 실
 
 ### 9.1 무엇인가
 
-현재 배치 API는 다음처럼 문장마다 전체 모델을 돈다.
+M4까지의 배치 API는 다음처럼 문장마다 전체 모델을 돌았다.
 
 ```text
 문장 1: layer 0 → 1 → ... → 11
@@ -539,19 +547,30 @@ M4는 문장마다 레이어 page를 다시 읽을 수 있다. N개가 한 번 l
 
 단일 호출을 여러 thread에서 병렬 실행, 모두를 최대 길이로 padding, 비슷한 길이끼리 bucket한 layer-wise batch, token packing이 있다. 병렬 단일 호출은 같은 weight를 반복 읽고, 최대 길이 padding은 낭비가 크며, packing은 복잡하다. 첫 구현은 length bucketing + padding + layer-wise batch다.
 
-### 9.4 계획된 구현
+### 9.4 구현
 
-- `ActivationStore`: `[B,S,H]`, 유효 길이와 attention mask
-- `BatchedRunner`: layer-wise 외부 loop
-- length bucketing과 padding
+- 공통 `BatchPlan`/`MaterializedBatch`: `[S,B]` 입력, 유효 길이와 mask
+- 기존 streaming `SlotStore`: `[H,S,B]` activation 재사용
+- length stable sort와 right padding
 - PAD key를 큰 음수로 가리는 attention mask
 - mask-aware mean/LAST pooling
-- `max_batch`나 memory budget 초과 시 sub-batch
+- `max_batch` 초과 시 sub-batch. 별도 memory budget이나 숨은 retry 없음
 - 원래 입력 순서로 output 복원
 
-현재 builder가 batch 차원과 optional mask를 받는 것은 준비일 뿐, B=1 외 정합성은 아직 검증되지 않았다.
+eager는 sub-batch마다 한 graph를 만들고 gallocr를 관찰한 최대 shape까지 키운다.
+streaming은 embedding row lease, 각 layer/group, final pooling을 sub-batch당 한 번씩
+실행한다. diagnostics가 compute/lease 횟수, batch/item 및 valid/padding token 수를
+기록한다.
 
-**상태.** 미구현이다. 공개 batch 함수는 단일 경로를 N번 반복하고 `ActivationStore`/`BatchedRunner` 파일이 없다.
+**상태.** 기능과 실용 회귀 정확도 gate는 통과했다. 원 계획의 더 엄격한 정확도 gate는
+통과하지 못했다. padded BERT F16은 ARM의 softmax reduction 순서 때문에 sequential
+trimmed graph와 최대 `2.35e-4` 차이가 나서, 관측 근거에 따라 cosine
+`>=0.999998`와 max absolute `<=2.5e-4`를 회귀 gate로 적용했다. 같은 길이의
+mask-free batch는 차이가 0이다.
+
+성능 gate는 실패했다. Docker Desktop Ubuntu arm64의 Harrier Q8 streaming batch 32
+5회 중앙값은 순차 control 34.36 items/s, 실제 batch 16.30 items/s였다. batch 128도
+control 37.56 items/s보다 낮은 14.88 items/s였다. 상세 결과는 M5 CLOSEOUT에 있다.
 
 ---
 
@@ -573,7 +592,9 @@ F32 유지, F16/BF16, tensor 전체 scale int8/int4, row/token별 scale, TurboQu
 
 레이어 출력 직후 quantize해 값과 scale을 `ActivationStore`에 두고 다음 레이어 직전 dequantize한다. config는 `none/int8/int4`를 계획한다. cosine만이 아니라 STS-B Spearman 저하 0.01 이내, RSS와 round-trip overhead 15% 미만을 함께 본다.
 
-**상태.** 미구현이고 알고리즘도 최종 확정되지 않았다. M5 결과가 진입 조건이다.
+**상태.** 미구현이고 알고리즘도 최종 확정되지 않았다. M5 batch 32 streaming의
+profile에서 Pss_Anon이 46.75 MiB로 지배적이었고 batch 128 streaming lifetime RSS가
+176.61 MiB까지 증가했으므로 M6 진입 조건은 충족했다.
 
 ---
 

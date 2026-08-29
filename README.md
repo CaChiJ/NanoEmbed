@@ -19,7 +19,7 @@ GELU MLP 대 게이트형 GeGLU, 편향 유무, 양방향 대 causal 어텐션, 
 `gemma3`는 쿼리 헤드 4개가 KV 헤드 하나를 공유한다. 그래서 모델 계열 경계가
 개별 연산 빌더보다 위에 있다.
 
-- C API로 단일 문장과 여러 문장을 임베딩할 수 있다. 여러 문장 API는 아직 내부에서 한 문장씩 처리한다.
+- C API로 단일 문장과 여러 문장을 임베딩할 수 있다. eager와 Linux streaming의 여러 문장 API는 실제 B축 graph를 실행한다.
 - 풀링 기본값은 **모델이 학습된 방식**을 따른다. 마지막 토큰으로 풀링하는 모델에
   평균 풀링을 적용하면 겉보기에 멀쩡한 잘못된 벡터가 나오는데, 어느 쪽이 맞는지는
   호출자가 아니라 모델의 성질이기 때문이다.
@@ -221,8 +221,8 @@ profile-off는 timed path에서 `smaps_rollup`을 읽거나 sampler thread를 �
 있는 sampled lower bound다. cold 결과는 `mincore`로 eviction 뒤 resident page가
 0인지 기록하며 `--strict-cold`는 검증 실패 시 worker 시작 전에 종료한다.
 
-결과 schema v2에는 p50/p90/p95/p99, population 표준편차와 MAD,
-`single_request_items_per_sec`, 요청값/해결값, corpus·모델·binary·Git·build·host
+결과 schema v3에는 p50/p90/p95/p99, population 표준편차와 MAD, batch/item latency,
+`batches_per_sec`, `items_per_sec`, 요청값/해결값, corpus·모델·binary·Git·build·host
 fingerprint가 들어간다. `--raw-samples-out`은 요청별 latency를 별도 sidecar에 쓰고
 본문에는 경로·크기·SHA-256만 둔다. 현재 한 번의 runner 실행은
 `independent_runs: 1`, `confidence_interval: null`인 기술 통계다. 서로 독립적인 여러
@@ -278,5 +278,15 @@ diagnostic이다. F32 activation ping-pong과 요청 token row가 사용하는 e
 page는 streaming에서도 필요하다. 결과는 `independent_runs: 1`, null CI이고 golden
 provenance는 정확한 upstream revision을 복구하지 못한 `legacy_unverified`다. 기존 gate는
 변경하지 않았다.
+
+### 저장된 M5 측정 결과
+
+[M5 Docker Desktop arm64 closeout](bench/results/M5-docker-desktop-arm64/CLOSEOUT.md)은
+eager/Linux streaming true batch, batch 32/128, sequential control과 partition별 10 ms
+RSS/PSS/USS profile을 보존한다. 실용 회귀 정확도는 통과했지만 원 계획의 엄격한 정확도
+gate와 Harrier Q8 streaming 성능 gate는 실패했다. batch 32의 5회 중앙값은 control
+34.36 items/s보다 낮은 16.30 items/s였고, batch 128도 control 37.56 대비
+14.88 items/s였다. 이 결과는 padding 계산량과 F32 activation을 줄이는 M6의 근거이며,
+10배 목표 달성률은 item throughput 기준 4.7%다.
 
 측정 지표와 메모리 수치의 의미는 [테스트와 벤치마크 가이드](docs/guide/26080401/07-tests-bench-workflow.md)에서 설명한다.

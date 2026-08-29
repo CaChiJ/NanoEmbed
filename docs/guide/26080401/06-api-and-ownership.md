@@ -166,7 +166,7 @@ p.pooling = NANOEMBED_POOL_CLS;
 | 필드 | 기본값 | 의미 |
 |---|---:|---|
 | `n_threads` | 0 | 자동 선택. 양수면 해당 CPU 스레드 수 사용 |
-| `max_batch` | 64 | 양수여야 함. 실제 배치 분할은 M5 예정 |
+| `max_batch` | 64 | 양수여야 함. 실제 sub-batch의 최대 문장 수 |
 | `max_seq_len` | 512 | 2 이상. 토큰화 상한과 활성값 버퍼 예약 길이 |
 | `use_streaming` | 0 | 1은 아직 지원하지 않아 컨텍스트 생성 실패 |
 | `pooling` | Model default | 모델 기본값 또는 Mean/CLS/LAST |
@@ -218,14 +218,25 @@ int nanoembed_embed_batch(
     float * out);
 ```
 
-현재는 다음과 동일하게 한 문장 경로를 반복한다.
+현재 eager와 Linux streaming 모두 실제 B축 그래프를 실행한다.
 
 ```text
-for i in 0..n_texts-1:
-    embed(texts[i], out + i * H)
+모든 문장 토큰화
+  → 토큰 길이 stable sort
+  → 연속된 max_batch개씩 sub-batch
+  → sub-batch 최대 길이까지 right padding
+  → [H,S,B] forward와 mask-aware pooling
+  → original_index 위치로 출력 scatter
 ```
 
-한 그래프에 여러 문장을 넣는 실제 배치는 아니다. M5에서 내부 구현을 레이어 단위 배치로 바꿔도 공개 함수 모양과 출력 배치는 유지한다.
+PAD ID가 있으면 padding 값으로 쓰고 없으면 유효 token ID 0을 채움 전용으로 쓴다.
+padding key는 attention mask로, Mean/LAST 결과는 pooling mask/index로 제외된다. 모든
+길이가 같으면 padding mask를 만들지 않는다. `max_batch`보다 많은 입력은 자동
+분할하지만 allocation/실행 실패를 숨기기 위한 더 작은 batch 재시도는 하지 않는다.
+
+invalid argument는 출력을 건드리지 않는다. 실행이 시작된 뒤 실패하면 batch 출력
+전체를 NaN으로 만들고 tokenize/OOM/internal 상태 코드를 구분한다. `n_texts == 0`은
+아무 계산 없이 성공한다.
 
 `n_texts`가 음수이거나 배열 안에 `nullptr` 문장이 있으면 오류다. `n_texts == 0`은 아무 계산 없이 성공한다.
 

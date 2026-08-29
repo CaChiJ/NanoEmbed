@@ -254,11 +254,11 @@ M4의 목적은 모델 가중치 수명을 줄이는 것이다. 활성값 버퍼
 
 M3.5 기준 측정값을 유지한 채 가중치 영역만 바뀌는 시나리오를 비교해야 한다.
 
-## M5 실제 배치를 구현할 때
+## M5 실제 배치 구현
 
-현재 `nanoembed_embed_batch()`는 단일 경로 반복이다. 실제 배치는 텐서의 B축을 1보다 크게 만들고 패딩을 도입한다.
+`nanoembed_embed_batch()`는 텐서의 B축을 1보다 크게 만들고 패딩을 도입한다.
 
-필요한 변경은 다음과 같다.
+현재 고정된 규칙은 다음과 같다.
 
 - 길이가 비슷한 문장을 묶는 버킷팅
 - `[H,S,B]` 활성값
@@ -268,7 +268,15 @@ M3.5 기준 측정값을 유지한 채 가중치 영역만 바뀌는 시나리�
 - `max_batch` 초과 입력의 내부 분할
 - 출력이 원래 입력 순서로 돌아오는지 확인
 
-배치는 정확도뿐 아니라 메모리도 바꾼다. `B × S × H` 활성값이 늘어나므로 처리량만 보고 배치 크기를 정하지 않는다.
+공통 계획과 mask materialization은 `src/batch.{h,cpp}`, eager graph는
+`src/embedder.cpp`, Linux streaming sub-batch 실행은 `src/streaming_execution.cpp`에
+있다. shared 2-D weight projection은 `[S,B]`를 `[S*B]`로 view해 하나의 GEMM으로
+계산하고 다시 `[H,S,B]`로 되돌린다. 이 reshape는 문장 간 attention을 섞지 않는다.
+
+배치는 정확도뿐 아니라 메모리도 바꾼다. `B × S × H` 활성값과 padding 계산량이
+늘어나므로 처리량만 보고 배치 크기를 정하지 않는다. 실제 M5 arm64 측정에서는
+batch 32가 순차 control보다 느렸으므로, 호출 batch와 `max_batch`를 크게 잡는 것이
+자동으로 유리하다고 가정하면 안 된다.
 
 ## 변경 전후 체크리스트
 

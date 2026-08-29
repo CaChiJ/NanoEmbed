@@ -156,7 +156,7 @@ q8_0으로 유지하고 블록만 더 줄인다. 그래서 임베딩 표는 어�
 고정이고, q8_0에서 q4_k로 내려가도 파일 전체는 17%밖에 줄지 않는다. 임베딩 표를
 줄이는 방법은 정밀도를 낮추는 것이 아니라 **필요한 행의 페이지만 상주시키는 것**이다.
 
-### 3.3 레이어 단위 배치 — 예정, M5
+### 3.3 레이어 단위 배치 — 기능 구현 완료, 성능은 캐시 상태에 따라 갈림
 
 스트리밍은 레이어를 바꿀 때마다 파일 페이지를 읽는다. 문장마다 모든 레이어를 다시 읽으면 I/O 비용이 반복된다.
 
@@ -168,7 +168,29 @@ M5에서는 여러 문장을 같은 레이어에서 함께 계산한다.
 ...
 ```
 
-한 번 읽은 가중치를 여러 문장이 공유하므로 문장 하나당 I/O 비용이 줄어든다. 대신 문장 여러 개의 중간 활성값을 동시에 보관해야 하므로 배치 크기가 커질수록 활성값 메모리가 늘어난다.
+현재 eager와 Linux streaming 모두 실제 `[H,S,B]` 그래프를 사용한다. 모든 입력을
+토큰화해 길이순 stable sort하고 `max_batch` 단위로 나눈 뒤 right padding하며, key
+padding attention mask와 Mean/LAST pooling mask를 적용한 다음 원래 입력 순서로
+scatter한다. 같은 길이만 있는 sub-batch와 단일 `embed()`는 mask 없는 경로를 유지한다.
+
+한 번 읽은 가중치를 여러 문장이 공유하므로 I/O lease 횟수는 item 수가 아니라
+sub-batch 수에 비례한다. 이 성질은 측정으로 확인됐다 — cold 캐시에서 문장당
+major fault가 정확히 1/B로 준다 (263.7 → 25.9, 배치 10).
+
+**손익은 캐시 상태가 가른다.**
+
+| 조건 | 배치 1 → 10 처리량 | 문장당 major fault |
+|---|---:|---:|
+| warm + 길이 편차 큼 | −27% | 0 → 0 |
+| warm + 길이 균일 | **+56%** | 0 → 0 |
+| cold (길이 편차 큼) | **+356 ~ +523%** | 263.7 → 25.9 |
+
+warm + 길이 편차에서 지는 이유는 두 가지가 겹쳐서다. 디스크 읽기가 0회라 배치가
+아낄 I/O가 없는데, 길이가 섞여 패딩 비용은 그대로 낸다. 길이를 균일하게 하면 같은
+warm 조건에서도 +56%로 바뀐다.
+
+즉 지는 조건은 셋 중 하나뿐이며, 원인은 구현이 아니라 **입력 길이 편차**다.
+기능·정확도 구현은 완료됐고, 남은 과제는 sub-batch 분할 기준이다.
 
 ### 3.4 활성값 압축 — 예정, M6
 
@@ -286,14 +308,16 @@ nanoembed_load_model
 → nanoembed_free_model
 ```
 
-`nanoembed_embed_batch()`는 현재 실제 배치 그래프를 만들지 않는다. 같은 컨텍스트의 단일 문장 경로를 순서대로 반복한다. 공개 함수 모양은 유지하고 내부 구현을 M5에서 교체할 예정이다.
+`nanoembed_embed_batch()`는 실제 배치 그래프를 만든다. 길이순 정렬은 내부 계산
+순서만 바꾸며 출력은 호출자가 넘긴 순서로 복원한다. `max_batch`보다 많은 입력은
+여러 sub-batch로 나뉘고, 실패 시 더 작은 batch나 eager 경로로 재시도하지 않는다.
 
 기본 컨텍스트 설정은 다음과 같다.
 
 | 설정 | 기본값 | 현재 의미 |
 |---|---:|---|
 | `n_threads` | 0 | 자동 선택. macOS 하이브리드 CPU는 성능 코어 수를 우선 사용 |
-| `max_batch` | 64 | 유효성 검사에 사용. 실제 배치는 M5 예정 |
+| `max_batch` | 64 | 한 실제 sub-batch의 최대 문장 수. 초과 입력은 내부 분할 |
 | `max_seq_len` | 512 | 2 이상. 더 긴 입력은 자르고 모델 자체 상한도 넘지 않음 |
 | `use_streaming` | 0 | Linux에서 1은 strict mmap/layer streaming; 그 밖의 값과 비-Linux 1은 오류 |
 | `pooling` | Model default | 필요하면 Mean/CLS/LAST로 명시적 변경 가능 |
@@ -453,13 +477,30 @@ Docker Desktop 4.38.0 Ubuntu 24.04 arm64 VM과 bind mount 범위에만 해당한
 PSS/USS는 sampled lower bound이고 profile-on latency는 diagnostic이다. 1회 독립 실행,
 null confidence interval이며 통계적 유의성을 주장하지 않는다.
 
-### M5 — 실제 레이어 단위 배치: 예정
+### M5 — 실제 레이어 단위 배치: 기능 완료, 성능은 조건부
 
-- 길이가 비슷한 문장을 묶는 버킷팅
-- 한 번 읽은 레이어 가중치로 여러 문장 처리
-- 패딩을 제외하는 어텐션 마스크와 풀링
-- `max_batch`를 넘는 입력의 내부 분할
-- batch 32와 batch 128의 처리량·메모리 측정
+- 길이 stable sort, right padding, 원래 순서 복원 구현
+- eager와 Linux streaming의 실제 B축 graph 구현
+- padding-aware BERT/Gemma attention과 Mean/CLS/LAST pooling 구현
+- `max_batch` 초과 입력의 내부 분할과 batch 단위 streaming lease 구현
+- schema v3 batch 32/128 및 partition별 RSS/PSS/USS 측정 완료
+- 실용 회귀 정확도와 phase-count gate 통과; 원 계획의 더 엄격한 정확도 gate는 실패
+- warm 캐시 Harrier Q8 streaming batch 32 처리량 gate 실패: 34.36 → 16.30 items/s
+- cold 캐시에서는 같은 구현이 배치 1→10에서 +356~523%로 gate를 크게 통과
+
+상세 수치와 재현 명령은
+[`bench/results/M5-docker-desktop-arm64/CLOSEOUT.md`](bench/results/M5-docker-desktop-arm64/CLOSEOUT.md)에 있다.
+코드 리뷰 후 즉시 수정한 streaming lease 실패 경계와 사용자 결정이 필요한 잔여 항목은
+[`docs/m5-review-followups.md`](docs/m5-review-followups.md)에 정리했다.
+
+M5 전체를 요약한 문서는
+[`docs/m5-overview.ko.md`](docs/m5-overview.ko.md)다. 여기서 시작하는 것이 좋다.
+구현 자체에 대한 해설은
+[`docs/m5-implementation-explained.ko.md`](docs/m5-implementation-explained.ko.md)에 있다.
+배치 크기와 파티션 전략을 각각 독립 변인으로 놓은 24개 조합 측정은
+[`docs/m5-batch-partition-matrix.ko.md`](docs/m5-batch-partition-matrix.ko.md)에 있다.
+그 측정은 실제 배치가 B=2부터 이미 손해이며 B=10까지 단조롭게 나빠진다는 것,
+그리고 `unit` 파티션이 속도와 메모리 양쪽에서 열등하다는 것을 보인다.
 
 ### M6 — 활성값 압축: 예정, 후순위
 
@@ -514,8 +555,18 @@ python bench/compare.py \
 
 ## 11. 남은 설계 질문
 
-- M5 layer batching이 M4에서 관찰한 Q8_0의 21.7~38.0% warm throughput 비용과 반복
-  page fault를 얼마나 상쇄하는지 같은 환경에서 측정해야 한다.
+- M5 layer batching의 손익은 **캐시 상태가 가른다**. warm에서는 문장당 major fault가
+  0이라 아낄 I/O가 없어 배치 1→10에서 처리량이 27% 감소한다. cold에서는 같은 구현이
+  356~523% 증가하고 문장당 major fault가 정확히 1/B로 준다
+  ([매트릭스](docs/m5-batch-partition-matrix.ko.md) 6.5절). 어느 조건을 M5 판정
+  기준으로 삼을지는 배포 형태에 대한 결정이며 측정으로 답할 수 없다.
+- warm 손해의 원인은 **패딩으로 확정**됐다. 길이가 균일한 대조 코퍼스(`uniform_len`)
+  에서는 같은 조건의 배치 10이 오히려 +56%다. 활성값 캐시 압박이라는 잔여 원인은 없다.
+  따라서 남은 과제는 구현 최적화가 아니라 **sub-batch 분할 기준**이다. `max_batch`
+  하나로는 길이가 섞인 입력을 균일하게 나눌 수 없다. 토큰 예산 또는 길이 편차 기반
+  분할은 공개 계약 변경이라 사용자 결정이 필요하다.
+- sub-batch별 `S`, `B`, 패딩 토큰 수가 벤치마크 결과로 노출되지 않는다. 이 값 없이는
+  배치의 손익도, 메모리가 배치 크기에 대해 단조롭지 않은 이유도 정량 설명이 불가능하다.
 - Docker Desktop 결과를 물리 Linux target의 성능/저장장치 동작으로 일반화할 수 없다.
   자체 호스팅 target runner와 여러 independent run 운영 규칙이 필요하다.
 - Harrier token embedding table은 layer가 아니며 요청 token row가 계속 필요하다. 실제

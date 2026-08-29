@@ -38,11 +38,11 @@ nanoembed_embed(ctx, "hello world", out);
 | SentencePiece 계열 BPE 토크나이저 | 지원 |
 | 단일 문장 임베딩 | 지원 |
 | Mean / CLS / Last 풀링 | 지원. 기본값은 모델이 학습된 방식 |
-| 여러 문장 API | 지원하지만 내부에서는 한 문장씩 실행 |
+| 여러 문장 API | eager/Linux streaming 실제 B축 batch 지원 |
 | 컨텍스트별 그래프 버퍼 재사용 | 지원 |
 | `eurobert` 구조와 GPT-2 BPE | 종류만 식별, 실행은 아직 미지원 |
-| 레이어별 가중치 스트리밍 | M4 예정 |
-| 실제 레이어 단위 배치 | M5 예정 |
+| 레이어별 가중치 스트리밍 | Linux 지원 |
+| 실제 레이어 단위 배치 | 지원. M5 성능 gate는 미달 |
 
 현재 구현은 모델 가중치를 모두 메모리에 올린다. 한 번의 추론에서 생기는 중간 결과는 `nanoembed_context`마다 별도 버퍼에 저장하고 다음 호출에서 재사용한다.
 
