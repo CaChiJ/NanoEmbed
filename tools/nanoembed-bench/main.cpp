@@ -72,6 +72,7 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -95,9 +96,8 @@ constexpr char kMsgGo    = 'G';
 constexpr char kMsgDone  = 'D';
 constexpr char kMsgExit  = 'X';
 
-// Version 1 is the unversioned M3/M3.5 shape. Version 2 adds an explicit
-// requested/resolved contract, nullable measurements, and richer statistics.
-constexpr int    kResultSchemaVersion          = 2;
+// Version 3 separates API-batch latency/throughput from per-item equivalents.
+constexpr int    kResultSchemaVersion          = 3;
 constexpr size_t kThroughputWindowSizeItems    = 10;
 constexpr size_t kMinThroughputWindowsForStats = 2;
 
@@ -110,11 +110,13 @@ struct WorkerReport {
     long long          page_faults_minor = 0;
     unsigned long long io_read_bytes     = 0;
     unsigned long long total_items       = 0;
+    unsigned long long total_batches     = 0;
     double             wall_sec          = 0.0;
     unsigned long long n_latencies       = 0;
     int                resolved_pooling  = NANOEMBED_POOL_MODEL_DEFAULT;
     int                resolved_threads  = -1; // -1 = public API cannot expose auto result
     int                resolved_max_seq_len = 0;
+    int                resolved_max_batch = 0;
     int                resolved_normalize   = 0;
     int                requested_execution_mode = -1; // 0=eager, 1=streaming
     int                resolved_execution_mode  = -1;
@@ -163,6 +165,9 @@ struct Args {
     int  iter               = 50;
     int  threads            = 0;       // 0 = auto
     int  max_seq_len        = 0;       // 0 = no CLI override (library default)
+    int  batch_size         = 1;       // items per measured API batch
+    int  max_batch          = 64;      // context subdivision limit
+    bool batch_control      = false;   // M4-style sequential calls, one timed batch window
     // Unset means the model's own pooling, matching the library default.
     // Naming one here would mean-pool a last-token model and time a graph the
     // library never builds.
@@ -189,6 +194,7 @@ void print_usage(const char * prog) {
         "usage: %s --model PATH --inputs FILE [--scenario NAME] [--warmup N]\n"
         "       [--iter N] [--cls] [--no-normalize] [--threads N]\n"
         "       [--streaming] [--partition PRESET]\n"
+        "       [--batch-size N] [--max-batch N] [--batch-control]\n"
         "       [--max-seq-len N] [--out PATH]\n"
         "       [--cache-state cold|warm] [--strict-cold]\n"
         "       [--memory-profile] [--memory-profile-interval-ms N]\n"
@@ -244,6 +250,8 @@ bool parse_args(int argc, char ** argv, Args & a) {
         }
         else if (int_opt("--threads",            a.threads))            { }
         else if (int_opt("--max-seq-len",        a.max_seq_len))        { }
+        else if (int_opt("--batch-size",         a.batch_size))         { }
+        else if (int_opt("--max-batch",          a.max_batch))          { }
         else if (int_opt("--memory-profile-interval-ms",
                          a.memory_profile_interval_ms))                  { }
         // Backward-compatible alias for pre-A3 invocations. It configures the
@@ -257,6 +265,7 @@ bool parse_args(int argc, char ** argv, Args & a) {
         else if (std::strcmp(t, "--last")         == 0) { a.pooling = NANOEMBED_POOL_LAST; }
         else if (std::strcmp(t, "--no-normalize") == 0) { a.normalize = false; }
         else if (std::strcmp(t, "--streaming")      == 0) { a.streaming = true; }
+        else if (std::strcmp(t, "--batch-control")  == 0) { a.batch_control = true; }
         else if (std::strcmp(t, "--partition")      == 0 && i + 1 < argc) { a.partition = argv[++i]; }
         else if (std::strcmp(t, "--memory-profile") == 0) { a.memory_profile = true; }
         else if (std::strcmp(t, "--strict-cold")    == 0) { a.strict_cold = true; }
@@ -292,7 +301,7 @@ bool parse_args(int argc, char ** argv, Args & a) {
     }
 
     if (a.memory_profile_interval_ms <= 0 || a.timeout_sec <= 0 ||
-        a.warmup < 0 || a.iter <= 0) {
+        a.warmup < 0 || a.iter <= 0 || a.batch_size <= 0 || a.max_batch <= 0) {
         std::fprintf(stderr,
                      "error: interval, timeout and iter must be positive; "
                      "warmup must be non-negative\n");
@@ -305,6 +314,11 @@ bool parse_args(int argc, char ** argv, Args & a) {
                      "the runner creates one fresh worker per selected input\n");
         return false;
     }
+    // Cold execution measures first use. One fresh worker still performs
+    // exactly one timed request, but that request may be a batch: the runner
+    // hands each worker one sub-batch worth of inputs. Later items in the
+    // batch legitimately reuse pages the first item faulted in -- that reuse
+    // is the effect layer batching exists to produce, not measurement bleed.
     if (a.strict_cold && a.cache_state != CacheState::Cold) {
         std::fprintf(stderr,
                      "error: --strict-cold requires --cache-state cold\n");
@@ -392,6 +406,7 @@ std::vector<std::string> read_lines(const std::string & path) {
 
 int run_worker(const Args & a) {
     std::vector<double> latencies;
+    std::vector<uint32_t> batch_item_counts;
     std::vector<std::string> inputs;
     std::vector<float> out_buf(a.selftest_alloc_mb > 0 ? 1u : 0u);
 
@@ -401,6 +416,7 @@ int run_worker(const Args & a) {
     nanoembed_pool_type resolved_pooling = NANOEMBED_POOL_MODEL_DEFAULT;
     int resolved_threads    = -1;
     int resolved_max_seq_len = 0;
+    int resolved_max_batch = 0;
     int resolved_normalize   = 0;
 
     const bool synthetic = a.selftest_alloc_mb > 0;
@@ -412,10 +428,11 @@ int run_worker(const Args & a) {
             std::fprintf(stderr, "worker: empty inputs file\n");
             return 1;
         }
-        if (cold && inputs.size() != 1) {
+        if (cold && inputs.size() > static_cast<size_t>(a.batch_size)) {
             std::fprintf(stderr,
-                         "worker: cold execution requires exactly one non-empty input; "
-                         "got %zu\n", inputs.size());
+                         "worker: cold execution runs exactly one batch; got %zu "
+                         "inputs for batch size %d\n",
+                         inputs.size(), a.batch_size);
             return 1;
         }
     }
@@ -443,6 +460,7 @@ int run_worker(const Args & a) {
         p.pooling   = a.pooling;
         p.normalize = a.normalize ? 1 : 0;
         p.use_streaming = a.streaming ? 1 : 0;
+        p.max_batch = a.max_batch;
         if (a.threads     > 0) p.n_threads   = a.threads;
         if (a.max_seq_len > 0) p.max_seq_len = a.max_seq_len;
 
@@ -479,32 +497,65 @@ int run_worker(const Args & a) {
 
         resolved_threads     = p.n_threads > 0 ? p.n_threads : -1;
         resolved_max_seq_len = std::min(p.max_seq_len, model_max_seq_len);
+        resolved_max_batch   = p.max_batch;
         resolved_normalize   = p.normalize != 0 ? 1 : 0;
         return true;
     };
 
-    const size_t n_expected = synthetic
+    const size_t batches_per_iteration = synthetic || cold
         ? 1u
-        : (cold ? 1u : static_cast<size_t>(a.iter) * inputs.size());
+        : 1u + (inputs.size() - 1u) / static_cast<size_t>(a.batch_size);
+    const size_t n_expected = synthetic || cold
+        ? 1u
+        : static_cast<size_t>(a.iter) * batches_per_iteration;
     latencies.assign(n_expected, 0.0);
+    batch_item_counts.assign(n_expected, 0);
     unsigned long long warmup_items = 0;
+
+    std::vector<const char *> batch_ptrs;
+    batch_ptrs.reserve(static_cast<size_t>(a.batch_size));
+    auto prepare_output = [&] {
+        const size_t H = static_cast<size_t>(nanoembed_n_embed(model));
+        if (H == 0 || static_cast<size_t>(a.batch_size) >
+                          std::numeric_limits<size_t>::max() / H) {
+            throw std::runtime_error("benchmark batch output size overflow");
+        }
+        out_buf.resize(H * static_cast<size_t>(a.batch_size));
+    };
+    auto execute_batch = [&](size_t begin, size_t end) -> int {
+        batch_ptrs.clear();
+        for (size_t i = begin; i < end; ++i) batch_ptrs.push_back(inputs[i].c_str());
+        if (!a.batch_control) {
+            return nanoembed_embed_batch(
+                ctx, batch_ptrs.data(), static_cast<int>(batch_ptrs.size()), out_buf.data());
+        }
+        const size_t H = static_cast<size_t>(nanoembed_n_embed(model));
+        for (size_t i = 0; i < batch_ptrs.size(); ++i) {
+            const int rc = nanoembed_embed(ctx, batch_ptrs[i], out_buf.data() + i * H);
+            if (rc != NANOEMBED_OK) return rc;
+        }
+        return NANOEMBED_OK;
+    };
 
     // Warm mode deliberately loads, creates the context, and runs every
     // selected warmup input before READY. Cold mode sends READY first: GO then
     // scopes counters, memory profiling and VmHWM across load through result.
     if (!synthetic && !cold) {
         if (!load_model_and_context()) return 1;
-        out_buf.resize(static_cast<size_t>(nanoembed_n_embed(model)));
+        prepare_output();
         for (int w = 0; w < a.warmup; ++w) {
-            for (const auto & t : inputs) {
-                if (nanoembed_embed(ctx, t.c_str(), out_buf.data()) != NANOEMBED_OK) {
+            for (size_t begin = 0; begin < inputs.size();
+                 begin += static_cast<size_t>(a.batch_size)) {
+                const size_t end = std::min(
+                    begin + static_cast<size_t>(a.batch_size), inputs.size());
+                if (execute_batch(begin, end) != NANOEMBED_OK) {
                     std::fprintf(stderr, "worker: warmup embed failed: %s\n",
                                  nanoembed_last_error());
                     nanoembed_free_context(ctx);
                     nanoembed_free_model(model);
                     return 1;
                 }
-                ++warmup_items;
+                warmup_items += end - begin;
             }
         }
     }
@@ -521,6 +572,7 @@ int run_worker(const Args & a) {
 
     size_t n_lat = 0;
     unsigned long long total_items = 0;
+    unsigned long long total_batches = 0;
 
     double first_request_latency_ms = -1.0;
     if (synthetic) {
@@ -535,12 +587,16 @@ int run_worker(const Args & a) {
         // Defeat any chance the optimizer elides the allocation.
         if (block[n / 2] != 1u) std::fprintf(stderr, "unreachable\n");
         latencies[n_lat++] = 0.0;
+        batch_item_counts[0] = 1;
         total_items = 1;
+        total_batches = 1;
     } else if (cold) {
         if (!load_model_and_context()) return 1;
-        out_buf.resize(static_cast<size_t>(nanoembed_n_embed(model)));
+        prepare_output();
+        // One timed request over every input this worker was given. At batch
+        // size 1 that is the historical single-item cold measurement.
         const auto t0 = Clock::now();
-        const int rc = nanoembed_embed(ctx, inputs.front().c_str(), out_buf.data());
+        const int rc = execute_batch(0, inputs.size());
         const auto t1 = Clock::now();
         if (rc != NANOEMBED_OK) {
             std::fprintf(stderr, "worker: first cold embed failed: %s\n",
@@ -552,12 +608,17 @@ int run_worker(const Args & a) {
         first_request_latency_ms =
             std::chrono::duration<double, std::milli>(t1 - t0).count();
         latencies[n_lat++] = first_request_latency_ms;
-        total_items = 1;
+        batch_item_counts[0] = static_cast<uint32_t>(inputs.size());
+        total_items = inputs.size();
+        total_batches = 1;
     } else {
         for (int it = 0; it < a.iter; ++it) {
-            for (const auto & t : inputs) {
+            for (size_t begin = 0; begin < inputs.size();
+                 begin += static_cast<size_t>(a.batch_size)) {
+                const size_t end = std::min(
+                    begin + static_cast<size_t>(a.batch_size), inputs.size());
                 const auto t0 = Clock::now();
-                const int  rc = nanoembed_embed(ctx, t.c_str(), out_buf.data());
+                const int  rc = execute_batch(begin, end);
                 const auto t1 = Clock::now();
                 if (rc != NANOEMBED_OK) {
                     std::fprintf(stderr, "worker: embed failed: %s\n",
@@ -568,7 +629,9 @@ int run_worker(const Args & a) {
                 }
                 latencies[n_lat++] =
                     std::chrono::duration<double, std::milli>(t1 - t0).count();
-                ++total_items;
+                batch_item_counts[n_lat - 1] = static_cast<uint32_t>(end - begin);
+                total_items += end - begin;
+                ++total_batches;
             }
         }
     }
@@ -584,11 +647,13 @@ int run_worker(const Args & a) {
     rep.page_faults_minor = c1.page_faults_minor - c0.page_faults_minor;
     rep.io_read_bytes     = c1.io_read_bytes - c0.io_read_bytes;
     rep.total_items       = total_items;
+    rep.total_batches     = total_batches;
     rep.wall_sec          = std::chrono::duration<double>(t_end - t_start).count();
     rep.n_latencies       = n_lat;
     rep.resolved_pooling  = resolved_pooling;
     rep.resolved_threads  = resolved_threads;
     rep.resolved_max_seq_len = resolved_max_seq_len;
+    rep.resolved_max_batch = resolved_max_batch;
     rep.resolved_normalize   = resolved_normalize;
     if (!synthetic) {
         rep.requested_execution_mode = a.streaming ? 1 : 0;
@@ -611,7 +676,8 @@ int run_worker(const Args & a) {
 
     bool ok = write_all(kRepFd, &kMsgDone, 1) &&
               write_all(kRepFd, &rep, sizeof(rep)) &&
-              write_all(kRepFd, latencies.data(), n_lat * sizeof(double));
+              write_all(kRepFd, latencies.data(), n_lat * sizeof(double)) &&
+              write_all(kRepFd, batch_item_counts.data(), n_lat * sizeof(uint32_t));
 
     // Stay alive until the parent has finished reading /proc/<us>/... — those
     // entries vanish the moment we exit.
@@ -663,6 +729,7 @@ struct Measurement {
 
     WorkerReport        report;
     std::vector<double> latencies;
+    std::vector<uint32_t> batch_item_counts;
 };
 
 MemSample read_current_rss_sample(int pid) {
@@ -690,6 +757,8 @@ std::vector<std::string> worker_argv(const Args & a) {
     add("--warmup",      std::to_string(a.warmup));
     add("--iter",        std::to_string(a.iter));
     add("--threads",     std::to_string(a.threads));
+    add("--batch-size",  std::to_string(a.batch_size));
+    add("--max-batch",   std::to_string(a.max_batch));
     add("--cache-state", cache_state_name(a.cache_state));
     if (a.max_seq_len > 0) add("--max-seq-len", std::to_string(a.max_seq_len));
     switch (a.pooling) {
@@ -700,6 +769,7 @@ std::vector<std::string> worker_argv(const Args & a) {
     }
     if (!a.normalize) v.push_back("--no-normalize");
     if (a.streaming) v.push_back("--streaming");
+    if (a.batch_control) v.push_back("--batch-control");
     // The worker is exec'd and inherits no memory, so a knob missing here is
     // silently the default rather than an error.
     if (!a.partition.empty()) add("--partition", a.partition);
@@ -896,6 +966,13 @@ bool run_parent(const Args & a, Measurement & m) {
         stop_sampler();
         return fail("truncated latency payload");
     }
+    m.batch_item_counts.resize(static_cast<size_t>(m.report.n_latencies));
+    if (!m.batch_item_counts.empty() &&
+        !read_all(rep[0], m.batch_item_counts.data(),
+                  m.batch_item_counts.size() * sizeof(uint32_t))) {
+        stop_sampler();
+        return fail("truncated batch-item-count payload");
+    }
 
     stop_sampler();
 
@@ -1052,10 +1129,26 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
         : "not-applicable";
 
     const DistributionStats latency = describe_samples(m.latencies);
+    std::vector<double> item_latencies;
+    if (m.batch_item_counts.size() == m.latencies.size()) {
+        item_latencies.reserve(m.latencies.size());
+        for (size_t i = 0; i < m.latencies.size(); ++i) {
+            if (m.batch_item_counts[i] != 0) {
+                item_latencies.push_back(
+                    m.latencies[i] / static_cast<double>(m.batch_item_counts[i]));
+            }
+        }
+    }
+    const DistributionStats item_latency = describe_samples(item_latencies);
     const bool throughput_available =
         m.report.wall_sec > 0.0 && m.report.total_items > 0;
     const double throughput = throughput_available
         ? static_cast<double>(m.report.total_items) / m.report.wall_sec
+        : 0.0;
+    const bool batch_throughput_available =
+        m.report.wall_sec > 0.0 && m.report.total_batches > 0;
+    const double batch_throughput = batch_throughput_available
+        ? static_cast<double>(m.report.total_batches) / m.report.wall_sec
         : 0.0;
     const std::vector<double> window_rates = fixed_item_window_throughputs(
         m.latencies, kThroughputWindowSizeItems);
@@ -1063,7 +1156,8 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
     const size_t complete_window_count =
         m.latencies.size() / kThroughputWindowSizeItems;
     const bool window_input_valid =
-        latency.available && window_rates.size() == complete_window_count;
+        a.batch_size == 1 && latency.available &&
+        window_rates.size() == complete_window_count;
     const bool window_stats_available =
         window_input_valid &&
         window_rates.size() >= kMinThroughputWindowsForStats;
@@ -1131,6 +1225,9 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
     w.num_i("warmup",      a.warmup,     true);
     w.num_i("iter",        a.iter,       true);
     w.num_i("total_items", static_cast<long long>(m.report.total_items), true);
+    w.num_i("total_batches", static_cast<long long>(m.report.total_batches), true);
+    w.num_i("batch_size", a.batch_size, true);
+    w.num_i("max_batch", a.max_batch, true);
     w.num_i("threads",     a.threads,    true);
     w.str  ("pooling",     pool_name(a.pooling), true);
     w.num_i("normalize",   a.normalize ? 1 : 0, true);
@@ -1144,6 +1241,9 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
     w.num_i("warmup",    a.warmup, true);
     w.num_i("iter",      a.iter, true);
     w.num_i("threads",   a.threads, true);
+    w.num_i("batch_size", a.batch_size, true);
+    w.num_i("max_batch", a.max_batch, true);
+    w.num_b("batch_control", a.batch_control, true);
     w.str  ("pooling",   pool_name(a.pooling), true);
     w.num_b("normalize", a.normalize, true);
     w.str  ("execution_mode", requested_execution_mode, true);
@@ -1164,6 +1264,7 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
     w.open("resolved");
     w.num_i_or_null("threads", m.report.resolved_threads > 0,
                     m.report.resolved_threads, true);
+    w.num_i("max_batch", m.report.resolved_max_batch, true);
     w.str("threads_collection_status",
           m.report.resolved_threads > 0 ? "collected" : "unavailable", true);
     w.str("pooling", pool_name(static_cast<nanoembed_pool_type>(
@@ -1474,8 +1575,28 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
     w.num_f_or_null("latency_p99_ms",    latency.available, latency.p99, true);
     w.num_f_or_null("latency_stddev_ms", latency.available, latency.stddev, true);
     w.num_f_or_null("latency_mad_ms",    latency.available, latency.mad, true);
-    w.num_f_or_null("single_request_items_per_sec", throughput_available,
-                    throughput, true);
+    w.num_f_or_null("batch_latency_p50_ms", latency.available, latency.p50, true);
+    w.num_f_or_null("batch_latency_p90_ms", latency.available, latency.p90, true);
+    w.num_f_or_null("batch_latency_p95_ms", latency.available, latency.p95, true);
+    w.num_f_or_null("batch_latency_p99_ms", latency.available, latency.p99, true);
+    w.num_f_or_null("item_latency_p50_ms", item_latency.available, item_latency.p50, true);
+    w.num_f_or_null("item_latency_p90_ms", item_latency.available, item_latency.p90, true);
+    w.num_f_or_null("item_latency_p95_ms", item_latency.available, item_latency.p95, true);
+    w.num_f_or_null("item_latency_p99_ms", item_latency.available, item_latency.p99, true);
+    w.num_f_or_null("batches_per_sec", batch_throughput_available,
+                    batch_throughput, true);
+    w.num_f_or_null("items_per_sec", throughput_available, throughput, true);
+    w.num_f_or_null("single_request_items_per_sec",
+                    throughput_available && a.batch_size == 1, throughput, true);
+    w.num_f_or_null("page_faults_major_per_item", throughput_available,
+                    static_cast<double>(m.report.page_faults_major) /
+                        static_cast<double>(m.report.total_items), true);
+    w.num_f_or_null("page_faults_minor_per_item", throughput_available,
+                    static_cast<double>(m.report.page_faults_minor) /
+                        static_cast<double>(m.report.total_items), true);
+    w.num_f_or_null("io_read_bytes_per_item", throughput_available,
+                    static_cast<double>(m.report.io_read_bytes) /
+                        static_cast<double>(m.report.total_items), true);
 
     const bool cold_phases_available =
         a.cache_state == CacheState::Cold &&
@@ -1550,14 +1671,21 @@ std::string build_raw_samples_json(const Args & a, const Measurement & m) {
     std::string escaped_scenario;
     escape_json_string(a.scenario, escaped_scenario);
     f << "{\n"
-      << "  \"schema_version\": 1,\n"
+      << "  \"schema_version\": 2,\n"
       << "  \"scenario\": " << escaped_scenario << ",\n"
       << "  \"latency_unit\": \"ms\",\n"
+      << "  \"latency_scope\": \"one requested API batch\",\n"
       << "  \"latency_ms\": [";
     f << std::setprecision(17);
     for (size_t i = 0; i < m.latencies.size(); ++i) {
         if (i != 0) f << ", ";
         f << m.latencies[i];
+    }
+    f << "],\n"
+      << "  \"batch_item_counts\": [";
+    for (size_t i = 0; i < m.batch_item_counts.size(); ++i) {
+        if (i != 0) f << ", ";
+        f << m.batch_item_counts[i];
     }
     f << "],\n"
       << "  \"memory_profile\": {\n"

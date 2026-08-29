@@ -42,7 +42,8 @@ def raw_memory_profile(start_mb: int) -> dict[str, object]:
     }
 
 
-def cold_native_result(index: int, verified: bool = True) -> dict[str, object]:
+def cold_native_result(index: int, verified: bool = True,
+                       total_items: int = 1) -> dict[str, object]:
     phase_values = {
         "model_load_ms": 100.0 + index,
         "context_create_ms": 20.0 + index,
@@ -72,12 +73,12 @@ def cold_native_result(index: int, verified: bool = True) -> dict[str, object]:
         "after_worker_load_and_first_result": {"resident_percent": 100.0},
     }
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "scenario": "scenario",
         "inputs": "temporary",
         "warmup": 0,
         "iter": 1,
-        "total_items": 1,
+        "total_items": total_items,
         "settings": {
             "requested": {"execution_mode": "eager"},
             "resolved": {"execution_mode": "eager"},
@@ -188,7 +189,7 @@ class BenchRunnerColdTest(unittest.TestCase):
 
     def test_cold_aggregation_uses_one_sample_per_worker(self) -> None:
         results = [cold_native_result(0), cold_native_result(1, verified=False)]
-        aggregated = runner.aggregate_cold_results(results, ["id-0", "id-1"])
+        aggregated = runner.aggregate_cold_results(results, [["id-0"], ["id-1"]])
         self.assertEqual(aggregated["total_items"], 2)
         self.assertEqual(aggregated["metrics"]["latency_count"], 2)
         self.assertEqual(aggregated["metrics"]["latency_p50_ms"], 10.0)
@@ -208,6 +209,131 @@ class BenchRunnerColdTest(unittest.TestCase):
         self.assertFalse(cache["cold_cache_verified"])
         self.assertEqual(cache["verified_worker_count"], 1)
         self.assertEqual(len(cache["per_worker"]), 2)
+
+    def test_cold_runner_gives_each_worker_one_sub_batch(self) -> None:
+        # Five inputs at batch_size 2 must become three workers holding
+        # 2, 2 and 1 inputs -- never five workers, and never one worker
+        # holding all five.
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / "group.txt").write_text(
+                "a\nb\nc\nd\ne\n", encoding="utf-8")
+            (root / "manifest.json").write_text(json.dumps({
+                "schema_version": 1,
+                "duplicate_policy": corpus_selection.EXPECTED_DUPLICATE_POLICY,
+                "groups": {"example": {"sources": ["group.txt"]}},
+            }), encoding="utf-8")
+            (root / "scenarios.yaml").write_text("fake\n", encoding="utf-8")
+            (root / "model.gguf").write_bytes(b"model")
+            (root / "fake-bench").write_text("x\n", encoding="utf-8")
+            output = root / "result.json"
+            config = {"scenarios": [{
+                "name": "scenario",
+                "model": "model.gguf",
+                "corpus_group": "example",
+                "batch_size": 2,
+                "max_batch": 2,
+                "milestones": ["M-test"],
+            }]}
+            per_worker_lines: list[list[str]] = []
+
+            def fake_run(cmd: list[str], **_: object) -> types.SimpleNamespace:
+                input_path = pathlib.Path(cmd[cmd.index("--inputs") + 1])
+                lines = input_path.read_text(encoding="utf-8").splitlines()
+                per_worker_lines.append(lines)
+                self.assertEqual(cmd[cmd.index("--batch-size") + 1], "2")
+                return types.SimpleNamespace(
+                    returncode=0,
+                    stdout=json.dumps(cold_native_result(
+                        len(per_worker_lines) - 1, total_items=len(lines))),
+                    stderr="",
+                )
+
+            argv = [
+                "runner.py", "--milestone", "M-test",
+                "--scenarios", "scenarios.yaml",
+                "--corpus-manifest", "manifest.json",
+                "--bench", "fake-bench",
+                "--samples-per-group", "5",
+                "--cache-state", "cold",
+                "--out", str(output),
+            ]
+            fake_yaml = types.SimpleNamespace(safe_load=lambda _: config)
+            with (
+                mock.patch.object(runner, "repo_root", return_value=root),
+                mock.patch.object(runner, "git_sha", return_value="test-sha"),
+                mock.patch.object(
+                    runner.fingerprint, "collect_git_identity",
+                    return_value={"collection_status": "collected",
+                                  "sha": "full-test-sha", "dirty": False},
+                ),
+                mock.patch.object(
+                    runner.fingerprint, "collect_ggml_identity",
+                    return_value={"collection_status": "collected",
+                                  "sha": "ggml-test-sha"},
+                ),
+                mock.patch.object(runner.subprocess, "run", side_effect=fake_run),
+                mock.patch.object(runner.sys, "argv", argv),
+                mock.patch.dict(runner.sys.modules, {"yaml": fake_yaml}),
+            ):
+                self.assertEqual(runner.main(), 0)
+
+            self.assertEqual(
+                [len(lines) for lines in per_worker_lines], [2, 2, 1])
+            self.assertCountEqual(
+                [line for lines in per_worker_lines for line in lines],
+                ["a", "b", "c", "d", "e"],
+            )
+            scenario = json.loads(output.read_text(encoding="utf-8"))[
+                "scenarios"]["scenario"]
+            self.assertEqual(scenario["total_items"], 5)
+            self.assertEqual(scenario["total_batches"], 3)
+            self.assertEqual(
+                scenario["measurement"]["cold_worker_invocations"], 3)
+
+    def test_cold_aggregation_divides_batch_latency_by_items(self) -> None:
+        # One fresh cold worker per sub-batch. Its single timed request covers
+        # every item it was given, so throughput and per-item counters must use
+        # the item total while batch counters keep using the worker count.
+        results = [
+            cold_native_result(0, total_items=3),
+            cold_native_result(1, total_items=2),
+        ]
+        aggregated = runner.aggregate_cold_results(
+            results, [["id-0", "id-1", "id-2"], ["id-3", "id-4"]]
+        )
+        metrics = aggregated["metrics"]
+        self.assertEqual(aggregated["total_items"], 5)
+        self.assertEqual(aggregated["total_batches"], 2)
+        # Batch latency stays the raw first-request duration.
+        self.assertEqual(metrics["batch_latency_p50_ms"], 10.0)
+        # Item latency divides each worker by its own item count:
+        # 10.0/3 = 3.333... and 11.0/2 = 5.5. The harness uses lower
+        # percentiles (floor(q * (count - 1))), so with two samples every
+        # quantile below 1.0 selects the smaller value.
+        self.assertAlmostEqual(metrics["item_latency_p50_ms"], 10.0 / 3.0)
+        self.assertAlmostEqual(metrics["item_latency_p99_ms"], 10.0 / 3.0)
+        # 5 items and 2 batches over the same wall clock.
+        startup_total_ms = 140.0 + 141.0
+        self.assertAlmostEqual(
+            metrics["items_per_sec"], 1000.0 * 5 / startup_total_ms
+        )
+        self.assertAlmostEqual(
+            metrics["batches_per_sec"], 1000.0 * 2 / startup_total_ms
+        )
+        # page_faults_major is 2 per worker in the fixture.
+        self.assertEqual(metrics["page_faults_major"], 4)
+        self.assertAlmostEqual(metrics["page_faults_major_per_item"], 4 / 5)
+        self.assertAlmostEqual(metrics["page_faults_major_per_batch"], 4 / 2)
+        self.assertEqual(
+            aggregated["measurement"]["cold_aggregation"]["items_per_worker"],
+            [3, 2],
+        )
+
+    def test_cold_aggregation_rejects_worker_item_count_mismatch(self) -> None:
+        results = [cold_native_result(0, total_items=2)]
+        with self.assertRaisesRegex(ValueError, "was given 3"):
+            runner.aggregate_cold_results(results, [["a", "b", "c"]])
 
     def test_cold_profile_aggregation_uses_means_peaks_and_summed_samples(self) -> None:
         results = [cold_native_result(0), cold_native_result(1)]
@@ -250,7 +376,7 @@ class BenchRunnerColdTest(unittest.TestCase):
         invalid.update({"valid": False, "rss_bytes": 999 << 20})
         profiles[0]["samples"].insert(2, invalid)
         aggregated = runner.aggregate_cold_results(
-            results, ["id-0", "id-1"], profiles
+            results, [["id-0"], ["id-1"]], profiles
         )
         measurement = aggregated["measurement"]
         metrics = aggregated["metrics"]

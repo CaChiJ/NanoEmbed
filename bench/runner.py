@@ -28,11 +28,12 @@ else:
     import model_source  # type: ignore  # noqa: E402
 
 
-RESULT_SCHEMA_VERSION = 2
+RESULT_SCHEMA_VERSION = 3
 AB_CONTROLLED_FIELDS = (
     "model", "corpus_group", "pooling", "normalize", "threads",
     "cache_state", "warmup", "iter", "max_seq_len", "memory_profile",
-    "memory_profile_interval_ms", "partition",
+    "memory_profile_interval_ms", "partition", "batch_size", "max_batch",
+    "batch_control", "samples",
 )
 
 
@@ -78,6 +79,16 @@ def build_cmd(
         raise SystemExit(
             f"scenario {sc['name']}: strict_cold requires cache_state cold"
         )
+    for field, default in (("batch_size", 1), ("max_batch", 64)):
+        value = sc.get(field, default)
+        if (not isinstance(value, int) or isinstance(value, bool) or value <= 0):
+            raise SystemExit(
+                f"scenario {sc['name']}: {field} must be a positive integer"
+            )
+    if not isinstance(sc.get("batch_control", False), bool):
+        raise SystemExit(
+            f"scenario {sc['name']}: batch_control must be true or false"
+        )
 
     cmd: List[str] = [
         str(bench),
@@ -93,6 +104,8 @@ def build_cmd(
         "--iter",      str(1 if resolved_cache_state == "cold"
                             else sc.get("iter", 50)),
         "--threads",   str(sc.get("threads", 0)),
+        "--batch-size", str(sc.get("batch_size", 1)),
+        "--max-batch", str(sc.get("max_batch", 64)),
         "--cache-state", resolved_cache_state,
     ]
     if strict_cold:
@@ -117,6 +130,8 @@ def build_cmd(
         )
     if streaming:
         cmd.append("--streaming")
+    if sc.get("batch_control", False):
+        cmd.append("--batch-control")
 
     partition = sc.get("partition")
     if partition is not None:
@@ -164,6 +179,7 @@ def _aggregate_result_bucket(
     entries: Sequence[Tuple[str, Dict[str, Any]]],
 ) -> Dict[str, Any]:
     total_items = 0
+    total_batches = 0
     total_wall_sec = 0.0
     latency_count = 0
     weighted_latency_sum = 0.0
@@ -178,6 +194,7 @@ def _aggregate_result_bucket(
     for _, result in entries:
         metrics = result.get("metrics", {})
         items = result.get("total_items")
+        batches = result.get("total_batches")
         wall = _numeric(metrics.get("wall_sec"))
         count = metrics.get("latency_count")
         mean = _numeric(metrics.get("latency_mean_ms"))
@@ -185,6 +202,8 @@ def _aggregate_result_bucket(
         maximum = _numeric(metrics.get("latency_max_ms"))
         if isinstance(items, int) and not isinstance(items, bool) and items >= 0:
             total_items += items
+        if isinstance(batches, int) and not isinstance(batches, bool) and batches >= 0:
+            total_batches += batches
         if wall is not None and wall >= 0.0:
             total_wall_sec += wall
         if (isinstance(count, int) and not isinstance(count, bool) and count > 0
@@ -228,10 +247,19 @@ def _aggregate_result_bucket(
         "homogeneous_dimensions": homogeneous,
         "dimensions": dimensions,
         "total_items": total_items,
+        "total_batches": total_batches,
         "total_timed_wall_sec": total_wall_sec,
         "single_request_items_per_sec": (
             total_items / total_wall_sec if total_items > 0 and total_wall_sec > 0.0
             else None
+        ),
+        "items_per_sec": (
+            total_items / total_wall_sec if total_items > 0 and total_wall_sec > 0.0
+            else None
+        ),
+        "batches_per_sec": (
+            total_batches / total_wall_sec
+            if total_batches > 0 and total_wall_sec > 0.0 else None
         ),
         "latency_count": latency_count,
         "latency_min_ms": min(latency_mins) if latency_mins else None,
@@ -289,13 +317,14 @@ _MEMORY_PERCENTILES = (
 
 
 def _load_native_raw_payload(path: pathlib.Path, label: str) -> Dict[str, Any]:
-    """Validate native schema 1 plus its optional memory-profile extension."""
+    """Validate native raw schema 1/2 and its memory-profile extension."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"{label}: cannot read native raw samples: {exc}") from exc
     values = payload.get("latency_ms") if isinstance(payload, dict) else None
-    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+    if (not isinstance(payload, dict) or
+            payload.get("schema_version") not in (1, 2)):
         raise ValueError(f"{label}: native raw samples have an unsupported schema")
     if payload.get("latency_unit") != "ms":
         raise ValueError(f"{label}: native raw samples have an unexpected unit")
@@ -307,6 +336,12 @@ def _load_native_raw_payload(path: pathlib.Path, label: str) -> Dict[str, Any]:
         if sample is None or sample < 0.0:
             raise ValueError(f"{label}: native raw samples contain an invalid value")
         latency_samples.append(sample)
+    if payload.get("schema_version") == 2:
+        counts = payload.get("batch_item_counts")
+        if (not isinstance(counts, list) or len(counts) != len(latency_samples) or
+                any(not isinstance(value, int) or isinstance(value, bool) or value <= 0
+                    for value in counts)):
+            raise ValueError(f"{label}: native raw samples contain invalid batch counts")
 
     memory = payload.get("memory_profile")
     if memory is None:
@@ -588,12 +623,18 @@ def _max_available(results: Sequence[Dict[str, Any]], key: str) -> Optional[floa
 
 def aggregate_cold_results(
     results: Sequence[Dict[str, Any]],
-    selected_ids: Sequence[str],
+    selected_ids: Sequence[Sequence[str]],
     memory_profiles: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Aggregate N one-input/one-worker cold runs without hiding provenance."""
+    """Aggregate N one-batch/one-worker cold runs without hiding provenance.
+
+    Each worker is a fresh process against a verified-cold page cache that
+    performs exactly one timed request. That request carries one sub-batch of
+    inputs, so `selected_ids` is one id list per worker. At batch size 1 every
+    list holds a single id and this is the historical per-item cold shape.
+    """
     if not results or len(results) != len(selected_ids):
-        raise ValueError("cold aggregation requires one result per selected input")
+        raise ValueError("cold aggregation requires one result per cold worker")
 
     phase_names = (
         "model_load_ms",
@@ -610,9 +651,15 @@ def aggregate_cold_results(
             raise ValueError(
                 f"cold worker {index} did not report a cold cache regime"
             )
-        if metrics.get("latency_count") != 1 or result.get("total_items") != 1:
+        expected_items = len(selected_ids[index])
+        if metrics.get("latency_count") != 1:
             raise ValueError(
                 f"cold worker {index} must report exactly one timed first request"
+            )
+        if result.get("total_items") != expected_items:
+            raise ValueError(
+                f"cold worker {index} ran {result.get('total_items')} items but "
+                f"was given {expected_items}"
             )
         for name in phase_names:
             value = phases.get(name, {}).get("mean_ms")
@@ -620,20 +667,30 @@ def aggregate_cold_results(
                 raise ValueError(f"cold worker {index} omitted {name}")
             phase_values[name].append(float(value))
 
+    worker_item_counts = [len(ids) for ids in selected_ids]
+    total_cold_items = sum(worker_item_counts)
+
     out = copy.deepcopy(results[0])
-    out["total_items"] = len(results)
+    out["total_items"] = total_cold_items
+    out["total_batches"] = len(results)
     out["warmup"] = 0
     out["iter"] = 1
 
     measurement = out["measurement"]
     measurement["execution_shape"] = (
-        "selected-inputs-each-use-one-fresh-native-and-worker-process"
+        "selected-inputs-split-into-sub-batches-each-using-one-fresh-"
+        "native-and-worker-process"
     )
     measurement["cold_worker_invocations"] = len(results)
     measurement["warmup_items_executed"] = 0
     measurement["cold_aggregation"] = {
         "worker_count": len(results),
+        "items_per_worker": worker_item_counts,
         "latency_population": "one first inference from each fresh worker",
+        "latency_unit": (
+            "one sub-batch; item latency divides each worker's batch latency "
+            "by that worker's item count"
+        ),
         "throughput_denominator": (
             "sum of worker GO-to-first-result durations; excludes cache eviction "
             "and process launch"
@@ -653,9 +710,9 @@ def aggregate_cold_results(
 
     cache_controls = [result["measurement"]["cache_control"] for result in results]
     per_worker_cache = []
-    for selected_id, cache in zip(selected_ids, cache_controls):
+    for worker_ids, cache in zip(selected_ids, cache_controls):
         per_worker_cache.append({
-            "selected_id": selected_id,
+            "selected_ids": list(worker_ids),
             "eviction_call_succeeded": cache.get("eviction_call_succeeded"),
             "cold_cache_verified": cache.get("cold_cache_verified"),
             "verification_status": cache.get("verification_status"),
@@ -750,10 +807,31 @@ def aggregate_cold_results(
         ("latency_mad_ms", "mad_ms"),
     ):
         metrics[target] = first_request_stats[source]
+    for percentile in ("p50", "p90", "p95", "p99"):
+        metrics[f"batch_latency_{percentile}_ms"] = first_request_stats[
+            f"{percentile}_ms"
+        ]
+    # Each worker's timed request covers that worker's whole sub-batch, so the
+    # per-item view divides by the items that worker actually ran.
+    item_latency_stats = _describe_samples([
+        latency / count
+        for latency, count in zip(
+            phase_values["first_request_latency_ms"], worker_item_counts
+        )
+    ])
+    for percentile in ("p50", "p90", "p95", "p99"):
+        metrics[f"item_latency_{percentile}_ms"] = item_latency_stats[
+            f"{percentile}_ms"
+        ]
 
     startup_total_ms = math.fsum(phase_values["startup_to_first_result_ms"])
     metrics["wall_sec"] = startup_total_ms / 1000.0
     metrics["single_request_items_per_sec"] = (
+        1000.0 * total_cold_items / startup_total_ms
+        if startup_total_ms > 0.0 else None
+    )
+    metrics["items_per_sec"] = metrics["single_request_items_per_sec"]
+    metrics["batches_per_sec"] = (
         1000.0 * len(results) / startup_total_ms
         if startup_total_ms > 0.0 else None
     )
@@ -789,6 +867,9 @@ def aggregate_cold_results(
     for key in ("cpu_user_sec", "cpu_sys_sec", "page_faults_major",
                 "page_faults_minor", "io_read_bytes"):
         metrics[key] = sum(result["metrics"].get(key, 0) for result in results)
+    for key in ("page_faults_major", "page_faults_minor", "io_read_bytes"):
+        metrics[f"{key}_per_item"] = metrics[key] / total_cold_items
+        metrics[f"{key}_per_batch"] = metrics[key] / len(results)
 
     peak_keys = (
         "rss_peak_lifetime_mb", "rss_peak_window_mb", "rss_max_sampled_mb",
@@ -836,7 +917,8 @@ def aggregate_cold_results(
 
     metrics["cold_worker_runs"] = [
         {
-            "selected_id": selected_id,
+            "selected_ids": list(worker_ids),
+            "item_count": len(worker_ids),
             "cold_cache_verified": result["measurement"]["cache_control"].get(
                 "cold_cache_verified"
             ),
@@ -852,7 +934,7 @@ def aggregate_cold_results(
             "page_faults_minor": result["metrics"].get("page_faults_minor"),
             "io_read_bytes": result["metrics"].get("io_read_bytes"),
         }
-        for selected_id, result in zip(selected_ids, results)
+        for worker_ids, result in zip(selected_ids, results)
     ]
     return out
 
@@ -954,10 +1036,21 @@ def prepare_runs(
                 f"scenario {scenario_name!r} must name a corpus_group"
             )
 
+        scenario_samples = sc.get("samples")
+        if scenario_samples is not None and (
+            not isinstance(scenario_samples, int) or isinstance(scenario_samples, bool)
+            or scenario_samples <= 0
+        ):
+            raise corpus_selection.CorpusSelectionError(
+                f"scenario {scenario_name!r} samples must be a positive integer"
+            )
+        default_count = samples_per_group
+        if not requested_groups and default_count is None:
+            default_count = scenario_samples
         resolved = corpus_selection.resolve_group_requests(
             requested_groups,
             default_group,
-            samples_per_group,
+            default_count,
             groups,
         )
         for group_name, count in resolved:
@@ -1351,11 +1444,21 @@ def main() -> int:
                 cold_results: List[Dict[str, Any]] = []
                 cold_raw_workers: List[Dict[str, Any]] = []
                 cold_memory_profiles: List[Dict[str, Any]] = []
-                for item_index, item in enumerate(selection.items):
+                # One fresh worker per sub-batch. Batch size 1 reproduces the
+                # historical one-item-per-worker cold shape exactly.
+                cold_batch_size = int(run.scenario.get("batch_size", 1) or 1)
+                cold_chunks = [
+                    list(selection.items[begin:begin + cold_batch_size])
+                    for begin in range(0, len(selection.items), cold_batch_size)
+                ]
+                for item_index, chunk in enumerate(cold_chunks):
                     input_path = temp_root / (
                         f"cold-{index:04d}-{item_index:04d}-{selection.group}.txt"
                     )
-                    input_path.write_text(item.text + "\n", encoding="utf-8")
+                    input_path.write_text(
+                        "".join(entry.text + "\n" for entry in chunk),
+                        encoding="utf-8",
+                    )
                     native_raw_path = (
                         temp_root / f"raw-cold-{index:04d}-{item_index:04d}.json"
                         if raw_sidecar is not None or run_profile_enabled else None
@@ -1376,7 +1479,7 @@ def main() -> int:
                     result = execute_native(
                         cmd,
                         f"{run.result_key} cold worker {item_index + 1}/"
-                        f"{selection.selected_size}",
+                        f"{len(cold_chunks)}",
                         requested_mode,
                     )
                     if result is None:
@@ -1412,7 +1515,7 @@ def main() -> int:
                             print(f"FAIL: {exc}", file=sys.stderr)
                             return 1
                         cold_raw_workers.append({
-                            "selected_id": item.text_id,
+                            "selected_ids": [entry.text_id for entry in chunk],
                             "latency_ms": worker_samples,
                             "memory_profile": worker_payload["memory_profile"],
                         })
@@ -1422,7 +1525,8 @@ def main() -> int:
                 try:
                     result = aggregate_cold_results(
                         cold_results,
-                        [item.text_id for item in selection.items],
+                        [[entry.text_id for entry in chunk]
+                         for chunk in cold_chunks],
                         cold_memory_profiles,
                     )
                 except ValueError as exc:
