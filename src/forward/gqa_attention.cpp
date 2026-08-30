@@ -77,6 +77,9 @@ ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
         // token axis without moving anything.
         const bool packed = seq_offsets != nullptr;
         const int64_t count = packed ? n_seq : B;
+        // In packed form the token axis is the sum of the lengths, which the
+        // offset table already ends with.
+        const int64_t S_total = packed ? seq_offsets[count] : S;
         std::vector<ggml_tensor *> parts;
         parts.reserve(static_cast<size_t>(count));
         for (int64_t b = 0; b < count; ++b) {
@@ -117,22 +120,28 @@ ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
             }
             parts.push_back(a_b);
         }
-        // Fold pairwise rather than left to right. ggml_concat copies both
-        // inputs into a fresh tensor, so a left fold re-copies the whole
-        // accumulated result every step and moves O(B^2) bytes; balanced
-        // merging moves O(B log B). At B=10 the difference is buried, but it
-        // decides whether large batches are usable at all.
-        const int concat_dim = packed ? 1 : 3;
-        while (parts.size() > 1) {
-            std::vector<ggml_tensor *> merged;
-            merged.reserve((parts.size() + 1) / 2);
-            for (size_t i = 0; i + 1 < parts.size(); i += 2) {
-                merged.push_back(ggml_concat(ctx, parts[i], parts[i + 1], concat_dim));
-            }
-            if (parts.size() % 2 != 0) merged.push_back(parts.back());
-            parts.swap(merged);
+
+        // Write each slice straight into its place in one destination. Any
+        // concat-based assembly re-copies what it has already merged --
+        // O(B^2) bytes folding left to right, O(B log B) folding pairwise --
+        // whereas ggml_set_inplace touches each element exactly once. Each
+        // call returns the destination it wrote, so chaining them is also
+        // what orders the writes.
+        //
+        // The destination starts uninitialized on purpose: packed slices tile
+        // the token axis exactly, and padded ones were just extended to the
+        // full window, so every element is written before it is read.
+        ggml_tensor * dst = packed
+            ? ggml_new_tensor_4d(ctx, GGML_TYPE_F32, D, S_total, p.n_head, 1)
+            : ggml_new_tensor_4d(ctx, GGML_TYPE_F32, D, S, p.n_head, B);
+        for (int64_t b = 0; b < count; ++b) {
+            const size_t offset = packed
+                ? static_cast<size_t>(seq_offsets[b]) * dst->nb[1]
+                : static_cast<size_t>(b) * dst->nb[3];
+            dst = ggml_set_inplace(ctx, dst, parts[static_cast<size_t>(b)],
+                                   dst->nb[1], dst->nb[2], dst->nb[3], offset);
         }
-        attn = parts[0];
+        attn = dst;
     } else {
         ggml_tensor * scores = ggml_mul_mat(ctx, k, q);     // [S_k, S_q, n_head, B]
 
