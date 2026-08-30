@@ -1,0 +1,50 @@
+# 배치 크기를 키울 때 어디서 꺾이는지 확인하는 eager 측정 (macOS 실행용).
+# streaming 은 Linux 전용이므로 여기서는 eager 로만 잰다. 어텐션 조립 방식은
+# 두 모드가 같은 코드를 쓰므로 concat 접기 비용은 그대로 드러난다.
+sweep_base: &sweep_base
+  model: models/harrier-270m-q8_0.gguf
+  corpus_group: mixed_short
+  samples: 132
+  normalize: true
+  threads: 4
+  streaming: false
+  cache_state: warm
+  warmup: 1
+  iter: 3
+  milestones: [M5-SWEEP-EAGER]
+
+scenarios:
+  - <<: *sweep_base
+    name: m5_eager_b001
+    batch_size: 1
+    max_batch: 1
+
+  - <<: *sweep_base
+    name: m5_eager_b002
+    batch_size: 2
+    max_batch: 2
+
+  - <<: *sweep_base
+    name: m5_eager_b005
+    batch_size: 5
+    max_batch: 5
+
+  - <<: *sweep_base
+    name: m5_eager_b010
+    batch_size: 10
+    max_batch: 10
+
+  - <<: *sweep_base
+    name: m5_eager_b016
+    batch_size: 16
+    max_batch: 16
+
+  - <<: *sweep_base
+    name: m5_eager_b032
+    batch_size: 32
+    max_batch: 32
+
+  - <<: *sweep_base
+    name: m5_eager_b064
+    batch_size: 64
+    max_batch: 64

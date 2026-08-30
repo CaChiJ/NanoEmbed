@@ -117,10 +117,22 @@ ggml_tensor * build_gqa_attention_core(ggml_context *              ctx,
             }
             parts.push_back(a_b);
         }
-        attn = parts[0];
-        for (size_t i = 1; i < parts.size(); ++i) {
-            attn = ggml_concat(ctx, attn, parts[i], packed ? 1 : 3);
+        // Fold pairwise rather than left to right. ggml_concat copies both
+        // inputs into a fresh tensor, so a left fold re-copies the whole
+        // accumulated result every step and moves O(B^2) bytes; balanced
+        // merging moves O(B log B). At B=10 the difference is buried, but it
+        // decides whether large batches are usable at all.
+        const int concat_dim = packed ? 1 : 3;
+        while (parts.size() > 1) {
+            std::vector<ggml_tensor *> merged;
+            merged.reserve((parts.size() + 1) / 2);
+            for (size_t i = 0; i + 1 < parts.size(); i += 2) {
+                merged.push_back(ggml_concat(ctx, parts[i], parts[i + 1], concat_dim));
+            }
+            if (parts.size() % 2 != 0) merged.push_back(parts.back());
+            parts.swap(merged);
         }
+        attn = parts[0];
     } else {
         ggml_tensor * scores = ggml_mul_mat(ctx, k, q);     // [S_k, S_q, n_head, B]
 
