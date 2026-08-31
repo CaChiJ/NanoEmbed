@@ -40,16 +40,16 @@
 | M3.5 | 고정 256 MiB 계산 버퍼를 제거한다 | 완료 |
 | M3.6 | 모델을 교체할 수 있게 만들고 두 번째 모델을 추가한다 | 완료 (벤치 baseline 제외) |
 | M4 | 한 번에 한 레이어만 메모리에 두는 스트리밍을 만든다 | 완료 |
-| M5 | 한 번 읽은 레이어를 여러 입력이 공유하는 실제 배치를 만든다 | 기능 완료·성능 gate 미달 |
+| M5 | 한 번 읽은 레이어를 여러 입력이 공유하는 실제 배치를 만든다 | 완료 (Harrier, BERT 패킹 제외) |
 | M6 | 배치 활성값을 int8/int4로 압축한다 | 미구현·후순위 |
 | M7 | 설치 가능한 라이브러리와 C++ 래퍼를 제공한다 | 미구현 |
 | M8 | Node.js에서 비동기로 호출하게 한다 | 미구현 |
 
-현재 위치는 **M5 실제 배치의 기능과 계측을 끝내고 성능 gate 실패를 확인한 시점**이다.
+현재 위치는 **Harrier의 M5 실제 배치, 패딩 제거와 최종 파티션 판정을 끝낸 시점**이다.
 두 번째 모델은 원래 후보였던 EuroBERT 대신 `microsoft/harrier-oss-v1-270m`(GGUF 태그
 `gemma3`)으로 바꿨다. 이유는 7장에서 설명한다. Linux 레이어 스트리밍과
-eager/streaming 실제 batch가 모두 있으며, 다음 과제는 M5에서 관찰한
-padding·activation 비용을 줄이는 것이다.
+eager/streaming 실제 batch가 모두 있다. 다음 과제는 M5에서 확인한 그래프 경계
+활성값과 `SlotStore` 메모리를 계측하고 줄이는 것이다.
 
 ---
 
@@ -545,15 +545,17 @@ M4는 문장마다 레이어 page를 다시 읽을 수 있다. N개가 한 번 l
 
 ### 9.3 가능한 방법과 선택
 
-단일 호출을 여러 thread에서 병렬 실행, 모두를 최대 길이로 padding, 비슷한 길이끼리 bucket한 layer-wise batch, token packing이 있다. 병렬 단일 호출은 같은 weight를 반복 읽고, 최대 길이 padding은 낭비가 크며, packing은 복잡하다. 첫 구현은 length bucketing + padding + layer-wise batch다.
+단일 호출을 여러 thread에서 병렬 실행, 모두를 최대 길이로 padding, 비슷한 길이끼리
+bucket한 layer-wise batch, token packing이 있다. 첫 구현은 length bucketing +
+padding이었지만 warm·혼합 길이에서 패딩 비용이 더 컸다. 최종 Harrier 경로는 실제
+토큰을 이어 붙이고 문장별 offset으로 어텐션과 풀링 경계를 복원한다.
 
 ### 9.4 구현
 
-- 공통 `BatchPlan`/`MaterializedBatch`: `[S,B]` 입력, 유효 길이와 mask
-- 기존 streaming `SlotStore`: `[H,S,B]` activation 재사용
-- length stable sort와 right padding
-- PAD key를 큰 음수로 가리는 attention mask
-- mask-aware mean/LAST pooling
+- 공통 `BatchPlan`/`MaterializedBatch`: padded 배열과 packed 실제 토큰 배열, 길이·offset
+- Harrier의 문장별 실제 길이 어텐션과 문장 구간별 mean/LAST pooling
+- 임베딩, 선형변환, Norm과 FFN은 packed 실제 토큰만 처리
+- BERT는 기존 right padding, attention mask와 mask-aware pooling 유지
 - `max_batch` 초과 시 sub-batch. 별도 memory budget이나 숨은 retry 없음
 - 원래 입력 순서로 output 복원
 
@@ -562,15 +564,16 @@ streaming은 embedding row lease, 각 layer/group, final pooling을 sub-batch당
 실행한다. diagnostics가 compute/lease 횟수, batch/item 및 valid/padding token 수를
 기록한다.
 
-**상태.** 기능과 실용 회귀 정확도 gate는 통과했다. 원 계획의 더 엄격한 정확도 gate는
-통과하지 못했다. padded BERT F16은 ARM의 softmax reduction 순서 때문에 sequential
-trimmed graph와 최대 `2.35e-4` 차이가 나서, 관측 근거에 따라 cosine
-`>=0.999998`와 max absolute `<=2.5e-4`를 회귀 gate로 적용했다. 같은 길이의
-mask-free batch는 차이가 0이다.
+**상태.** Harrier는 완료됐다. 문장별 어텐션 이후 F32/Q8 모두 sequential 결과와
+최대 절대 오차 0으로 일치한다. BERT F16은 패딩 경로를 유지해 최대 `2.35e-4` 차이가
+남아 있고 패킹 성능 이득도 받지 못한다.
 
-성능 gate는 실패했다. Docker Desktop Ubuntu arm64의 Harrier Q8 streaming batch 32
-5회 중앙값은 순차 control 34.36 items/s, 실제 batch 16.30 items/s였다. batch 128도
-control 37.56 items/s보다 낮은 14.88 items/s였다. 상세 결과는 M5 CLOSEOUT에 있다.
+초기 Docker Desktop 측정의 성능 gate 실패는 패딩 계산이 원인이었다. 패딩을 제거한
+홈서버 x86_64 측정에서 Harrier Q8 warm·혼합 길이 처리량은 배치 1의 45.52에서 배치
+10의 69.15문장/초로 51.9% 증가했고, 배치 64에서는 기존 패딩 방식보다 156% 높았다.
+최종 `A문장별/F패킹/N패킹`의 파티션 비교는 `layer` 유지로 끝났다. `attn-ffn`은
+차이를 구분할 수 없었고 `unit`은 모든 배치에서 4.5~8.4% 느리며 큰 배치의 전체
+PSS도 더 컸다. 용어부터 재현 명령까지 [M5 최종 보고서](m5-overview.ko.md)에 있다.
 
 ---
 
@@ -582,7 +585,10 @@ README의 과거 체크리스트에는 KV cache compression이라고 적혔지�
 
 ### 10.2 왜 필요한가와 목표
 
-M4까지는 weight가 크지만 M5에서 batch가 커지면 `[B,S,H]` F32 activation이 병목이 된다. 동일 RSS에서 예를 들어 batch 64 대신 128을 수용하는 것이 목표다. 단, M5 계측으로 실제 병목임을 확인한 뒤에만 들어간다.
+M4까지는 weight가 크지만 M5에서 batch가 커지면 F32 activation과 그래프 경계 버퍼가
+커진다. 특히 `unit` 파티션은 가중치 임대량을 줄이고도 배치 64 PSS가 `layer`의
+62.54 MiB보다 큰 89.95 MiB였다. 동일 RSS에서 더 큰 배치를 수용하는 것이 목표지만,
+압축 전에 어떤 버퍼가 얼마나 차지하는지 같은 실행에서 분해해야 한다.
 
 ### 10.3 가능한 방법과 선택
 
@@ -592,9 +598,10 @@ F32 유지, F16/BF16, tensor 전체 scale int8/int4, row/token별 scale, TurboQu
 
 레이어 출력 직후 quantize해 값과 scale을 `ActivationStore`에 두고 다음 레이어 직전 dequantize한다. config는 `none/int8/int4`를 계획한다. cosine만이 아니라 STS-B Spearman 저하 0.01 이내, RSS와 round-trip overhead 15% 미만을 함께 본다.
 
-**상태.** 미구현이고 알고리즘도 최종 확정되지 않았다. M5 batch 32 streaming의
-profile에서 Pss_Anon이 46.75 MiB로 지배적이었고 batch 128 streaming lifetime RSS가
-176.61 MiB까지 증가했으므로 M6 진입 조건은 충족했다.
+**상태.** 미구현이고 알고리즘도 최종 확정되지 않았다. M5에서 큰 배치의 익명
+메모리와 `unit` 경계 비용을 확인해 진입 근거는 생겼다. 다음 단계는 먼저
+`slot_resident_bytes`, activation copy, graph replan과 가중치 lease high-water를
+벤치 결과에 노출한 뒤, 공유 arena·backend 직접 전달·활성값 압축을 각각 비교한다.
 
 ---
 

@@ -168,10 +168,10 @@ M5에서는 여러 문장을 같은 레이어에서 함께 계산한다.
 ...
 ```
 
-현재 eager와 Linux streaming 모두 실제 `[H,S,B]` 그래프를 사용한다. 모든 입력을
-토큰화해 길이순 stable sort하고 `max_batch` 단위로 나눈 뒤 right padding하며, key
-padding attention mask와 Mean/LAST pooling mask를 적용한 다음 원래 입력 순서로
-scatter한다. 같은 길이만 있는 sub-batch와 단일 `embed()`는 mask 없는 경로를 유지한다.
+현재 eager와 Linux streaming 모두 실제 배치 그래프를 사용한다. 모든 입력을 토큰화해
+길이순 stable sort하고 `max_batch` 단위로 나눈 뒤, Harrier는 실제 토큰만 이어 붙인
+배열과 문장별 offset을 사용한다. 어텐션과 풀링은 문장 경계를 따르고 결과는 원래 입력
+순서로 복원한다. BERT는 아직 right padding과 attention/pooling mask 경로를 유지한다.
 
 한 번 읽은 가중치를 여러 문장이 공유하므로 I/O lease 횟수는 item 수가 아니라
 sub-batch 수에 비례한다. 이 성질은 측정으로 확인됐다 — cold 캐시에서 문장당
@@ -196,8 +196,8 @@ warm 조건에서 길이가 섞이면 아낄 I/O는 없는데 패딩 비용만 �
 통과한다.
 
 남은 것은 BERT다. 아직 마스크 경로를 쓰므로 최대 오차 2.345e-4가 그대로이고 성능
-이득도 받지 못한다. 측정과 구현은
-[`docs/m5-padding-removal.ko.md`](docs/m5-padding-removal.ko.md)에 있다.
+이득도 받지 못한다. 측정, 구현과 최종 결정은
+[`docs/m5-overview.ko.md`](docs/m5-overview.ko.md)에 있다.
 
 ### 3.4 활성값 압축 — 예정, M6
 
@@ -496,21 +496,16 @@ null confidence interval이며 통계적 유의성을 주장하지 않는다.
 - 원인을 패딩으로 확정하고 제거: 어텐션 문장별 분리 후 토큰 단위 연산 패킹
 - 패딩 제거 후 warm·혼합 길이 **+44%**, cold **+607%**로 gate 통과
 - harrier 정확도가 순차 처리와 완전히 일치해 원 기준(1e-5) 통과
+- 최종 `A문장별/F패킹/N패킹`에서 `layer`/`attn-ffn`/`unit` 재측정 완료
+- `layer`를 유지: `attn-ffn`은 사실상 동률, `unit`은 4.5~8.4% 느리고 큰 배치에서 메모리 증가
 - BERT는 아직 마스크 경로 유지 — 최대 오차 2.345e-4, 성능 이득 미적용
 
-상세 수치와 재현 명령은
-[`bench/results/M5-docker-desktop-arm64/CLOSEOUT.md`](bench/results/M5-docker-desktop-arm64/CLOSEOUT.md)에 있다.
-코드 리뷰 후 즉시 수정한 streaming lease 실패 경계와 사용자 결정이 필요한 잔여 항목은
-[`docs/m5-review-followups.md`](docs/m5-review-followups.md)에 정리했다.
-
-M5 전체를 요약한 문서는
-[`docs/m5-overview.ko.md`](docs/m5-overview.ko.md)다. 여기서 시작하는 것이 좋다.
-구현 자체에 대한 해설은
-[`docs/m5-implementation-explained.ko.md`](docs/m5-implementation-explained.ko.md)에 있다.
-배치 크기와 파티션 전략을 각각 독립 변인으로 놓은 24개 조합 측정은
-[`docs/m5-batch-partition-matrix.ko.md`](docs/m5-batch-partition-matrix.ko.md)에 있다.
-그 측정은 실제 배치가 B=2부터 이미 손해이며 B=10까지 단조롭게 나빠진다는 것,
-그리고 `unit` 파티션이 속도와 메모리 양쪽에서 열등하다는 것을 보인다.
+용어, 구현, 정확도, 초기 실패, 패딩 제거, 홈서버 반복 측정, 파티션과 메모리 해석,
+재현 명령은 단일 정본인
+[`docs/m5-overview.ko.md`](docs/m5-overview.ko.md)에 있다. 초기 Docker Desktop 측정
+원본과 당시 판정은
+[`bench/results/M5-docker-desktop-arm64/CLOSEOUT.md`](bench/results/M5-docker-desktop-arm64/CLOSEOUT.md)에
+보존한다.
 
 ### M6 — 활성값 압축: 예정, 후순위
 
@@ -565,16 +560,12 @@ python bench/compare.py \
 
 ## 11. 남은 설계 질문
 
-- M5 layer batching의 손익은 **캐시 상태가 가른다**. warm에서는 문장당 major fault가
-  0이라 아낄 I/O가 없어 배치 1→10에서 처리량이 27% 감소한다. cold에서는 같은 구현이
-  356~523% 증가하고 문장당 major fault가 정확히 1/B로 준다
-  ([매트릭스](docs/m5-batch-partition-matrix.ko.md) 6.5절). 어느 조건을 M5 판정
-  기준으로 삼을지는 배포 형태에 대한 결정이며 측정으로 답할 수 없다.
-- warm 손해의 원인은 **패딩으로 확정**됐다. 길이가 균일한 대조 코퍼스(`uniform_len`)
-  에서는 같은 조건의 배치 10이 오히려 +56%다. 활성값 캐시 압박이라는 잔여 원인은 없다.
-  따라서 남은 과제는 구현 최적화가 아니라 **sub-batch 분할 기준**이다. `max_batch`
-  하나로는 길이가 섞인 입력을 균일하게 나눌 수 없다. 토큰 예산 또는 길이 편차 기반
-  분할은 공개 계약 변경이라 사용자 결정이 필요하다.
+- M5의 warm 손해 원인이던 패딩은 Harrier에서 제거됐다. 최종
+  `A문장별/F패킹/N패킹/P레이어`는 warm·혼합 길이 배치 1→10에서 +51.9%였고,
+  배치 10부터 처리량이 거의 포화했다. BERT에는 같은 경로가 아직 적용되지 않았다.
+- `unit`은 동시 가중치 임대량을 줄이지만 큰 배치의 경계 활성값을 F32 `SlotStore`에
+  유지해 전체 PSS가 늘었다. 다음 메모리 단계에서는 lease와 slot 진단을 같은 실행에서
+  노출하고 생존 구간 기반 공유 버퍼 또는 backend 직접 전달을 먼저 검토한다.
 - sub-batch별 `S`, `B`, 패딩 토큰 수가 벤치마크 결과로 노출되지 않는다. 이 값 없이는
   배치의 손익도, 메모리가 배치 크기에 대해 단조롭지 않은 이유도 정량 설명이 불가능하다.
 - Docker Desktop 결과를 물리 Linux target의 성능/저장장치 동작으로 일반화할 수 없다.

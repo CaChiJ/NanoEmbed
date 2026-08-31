@@ -9,8 +9,9 @@ M5의 실제 B축 기능 구현과 측정은 끝났지만, **warm 캐시 기준 
 > 같은 구현을 cold 캐시에서 재측정하면 배치 1 → 10에서 처리량이 356~523% 오르고
 > 문장당 디스크 읽기가 정확히 1/B로 준다. 또한 warm이라도 입력 길이가 균일하면
 > 같은 배치 10이 +56%다. 즉 gate를 못 넘는 조건은 **warm + 길이 편차 큼** 하나이고,
-> 원인은 구현이 아니라 입력 길이 편차(패딩)로 확정됐다. 수치와 방법은
-> [`docs/m5-batch-partition-matrix.ko.md`](../../../docs/m5-batch-partition-matrix.ko.md) 6.5절에 있다.
+> 원인은 입력 길이 편차에 따른 패딩으로 확정됐고 이후 Harrier의 패딩 계산을
+> 제거했다. 초기·최종 수치와 방법은
+> [`docs/m5-overview.ko.md`](../../../docs/m5-overview.ko.md)에 통합돼 있다.
 
 - eager와 Linux streaming 모두 실제 `[H,S,B]` graph를 실행한다.
 - stable length sort, `max_batch` 분할, right padding, attention/pooling mask,
@@ -155,6 +156,6 @@ context 생성 실패 시 active lease와 poisoned coordinator가 남을 수 있
 첫 group context의 deterministic failure injection을 추가했다. 실패 output 전체 NaN,
 active lease 0, 비-poison 상태와 같은 context의 후속 성공을 검사한다.
 
-공개 동작 또는 정책 결정이 필요한 나머지 항목은
-[`docs/m5-review-followups.md`](../../../docs/m5-review-followups.md)에 보존한다. 이 교정은
-기존 성능·정확도 측정 판정을 바꾸지 않는다.
+공개 동작 또는 정책 결정이 필요한 나머지 항목과 이후 처리 결과는
+[`docs/m5-overview.ko.md`](../../../docs/m5-overview.ko.md)에 통합했다. 이 교정은
+이 문서가 보존하는 당시 성능·정확도 측정 판정을 바꾸지 않는다.

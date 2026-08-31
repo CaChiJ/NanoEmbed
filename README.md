@@ -289,10 +289,9 @@ gate와 Harrier Q8 streaming 성능 gate는 실패했다. batch 32의 5회 중�
 14.88 items/s였다. 이 결과는 padding 계산량과 F32 activation을 줄이는 M6의 근거이며,
 10배 목표 달성률은 item throughput 기준 4.7%다.
 
-패딩 제거 뒤 홈서버 x86_64에서 다시 측정한 결과는
-[M5 배치 방식 비교](docs/m5-variant-sweep-homeserver.ko.md)와
-[최종 패킹 × 파티션 비교](docs/m5-packed-partition-sweep-homeserver.ko.md)에 있다.
-최종 설정에서는 `layer`와 `attn-ffn`의 처리량 차이를 구분할 수 없었고,
-`unit`은 4.5~8.4% 느려 기본 `layer`를 유지한다.
+패딩 제거 뒤 홈서버 x86_64에서 A·F·N 조합과 최종 파티션을 반복 측정했다.
+[M5 최종 보고서](docs/m5-overview.ko.md)에 용어, 구현, 정확도, 성능·메모리 결과와
+종료 결정을 한곳에 정리했다. 최종 설정은
+`A문장별/F패킹/N패킹/P레이어`다.
 
 측정 지표와 메모리 수치의 의미는 [테스트와 벤치마크 가이드](docs/guide/26080401/07-tests-bench-workflow.md)에서 설명한다.
