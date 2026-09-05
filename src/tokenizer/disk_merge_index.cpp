@@ -287,12 +287,57 @@ std::filesystem::path unique_temp_path(const std::filesystem::path & target) {
 #endif
 }
 
+#ifdef _WIN32
+// Names the file a replacement displaces. It has to be distinct from the
+// creation temp so a directory listing says which role a leftover file had.
+std::filesystem::path displaced_path(const std::filesystem::path & target) {
+    static std::atomic<uint64_t> serial{0};
+    const uint64_t pid = static_cast<uint64_t>(_getpid());
+    return std::filesystem::path(target.wstring() + L".old." + std::to_wstring(pid) + L"." +
+                                 std::to_wstring(serial.fetch_add(1, std::memory_order_relaxed)));
+}
+#endif
+
 void atomic_replace(const std::filesystem::path & temp, const std::filesystem::path & target) {
 #ifdef _WIN32
-    if (!MoveFileExW(temp.c_str(), target.c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    if (MoveFileExW(temp.c_str(), target.c_str(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        return;
+    }
+    const DWORD replace_error = GetLastError();
+    if (replace_error != ERROR_ACCESS_DENIED && replace_error != ERROR_SHARING_VIOLATION) {
+        SetLastError(replace_error);
         throw TokenizerError(system_message("replace BPE merge cache", target));
     }
+
+    // Windows cannot rename onto a name another handle still holds open. The
+    // readers share delete, so the old file can be deleted, but the delete
+    // stays pending until the last reader closes and the directory entry keeps
+    // the name until then, which is what fails the replacement above. Move the
+    // old file aside to a free name first, rename into the name it vacated,
+    // and then delete the displaced file: readers that still hold it keep
+    // reading the bytes they opened, and the file disappears when they close.
+    const std::filesystem::path displaced = displaced_path(target);
+    bool displaced_exists = true;
+    if (!MoveFileExW(target.c_str(), displaced.c_str(), MOVEFILE_WRITE_THROUGH)) {
+        const DWORD displace_error = GetLastError();
+        if (displace_error != ERROR_FILE_NOT_FOUND && displace_error != ERROR_PATH_NOT_FOUND) {
+            SetLastError(displace_error);
+            throw TokenizerError(system_message("displace BPE merge cache", target));
+        }
+        // Someone else replaced or removed it in between; the name is free.
+        displaced_exists = false;
+    }
+    if (!MoveFileExW(temp.c_str(), target.c_str(), MOVEFILE_WRITE_THROUGH)) {
+        const DWORD move_error = GetLastError();
+        // Leave a valid cache behind rather than a missing one.
+        if (displaced_exists) {
+            (void) MoveFileExW(displaced.c_str(), target.c_str(), MOVEFILE_WRITE_THROUGH);
+        }
+        SetLastError(move_error);
+        throw TokenizerError(system_message("replace BPE merge cache", target));
+    }
+    if (displaced_exists) (void) DeleteFileW(displaced.c_str());
 #else
     if (rename(temp.c_str(), target.c_str()) != 0) {
         throw TokenizerError(system_message("replace BPE merge cache", target));
