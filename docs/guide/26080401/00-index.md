@@ -42,7 +42,7 @@ nanoembed_embed(ctx, "hello world", out);
 | 컨텍스트별 그래프 버퍼 재사용 | 지원 |
 | `eurobert` 구조와 GPT-2 BPE | 종류만 식별, 실행은 아직 미지원 |
 | 레이어별 가중치 스트리밍 | Linux 지원 |
-| 실제 레이어 단위 배치 | 지원. M5 성능 gate는 미달 |
+| 실제 레이어 단위 배치 | 지원. Harrier 패킹 후 M5 종료, BERT는 padded/masked 유지 |
 
 현재 구현은 모델 가중치를 모두 메모리에 올린다. 한 번의 추론에서 생기는 중간 결과는 `nanoembed_context`마다 별도 버퍼에 저장하고 다음 호출에서 재사용한다.
 

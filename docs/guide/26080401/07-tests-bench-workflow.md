@@ -477,9 +477,15 @@ rollup read duration을 갖는다. GO를 `elapsed_ms_from_go=0`으로 삼으므�
 않는다. native raw schema 1에서 `memory_profile`은 하위호환 optional extension이어서
 이 필드가 없는 옛 sidecar는 `unavailable_legacy`로 읽는다.
 
+`batch_layout`은 scenario에서 `default` 또는 `padded`로 지정하고 native tool의
+`--batch-layout`으로 전달된다. `default`는 모델 계열이 지원하는 최적화 layout이고,
+`padded`는 unequal-length batch에 right padding과 attention mask를 강제하는 호환
+경로다. 값은 run의 requested/resolved settings에 함께 기록되므로 두 layout을 비교한
+결과를 나중에도 구분할 수 있다. streaming A/B pair는 이 필드도 서로 같아야 한다.
+
 ### 결과 contract와 한계
 
-schema v3는 run 수준 requested/resolved settings, batch size/max_batch, UTC,
+schema v3는 run 수준 requested/resolved settings, batch size/max_batch/batch layout, UTC,
 full Git/ggml SHA와 dirty 상태,
 benchmark/model/manifest/scenario hash, build/compiler/CMake option, CPU governor·NUMA·RAM·
 filesystem fingerprint를 저장한다. scenario별 model과 selected-input identity도 있다.

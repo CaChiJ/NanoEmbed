@@ -256,13 +256,15 @@ M3.5 기준 측정값을 유지한 채 가중치 영역만 바뀌는 시나리�
 
 ## M5 실제 배치 구현
 
-`nanoembed_embed_batch()`는 텐서의 B축을 1보다 크게 만들고 패딩을 도입한다.
+`nanoembed_embed_batch()`는 여러 문장을 실제 sub-batch graph로 실행한다. Harrier의
+기본 unequal-length 경로는 실제 token을 pack하고 attention과 pooling만 문장 경계를
+따른다. BERT와 명시적 padded 호환 layout은 `[H,S,B]`와 mask를 사용한다.
 
 현재 고정된 규칙은 다음과 같다.
 
 - 길이가 비슷한 문장을 묶는 버킷팅
-- `[H,S,B]` 활성값
-- 패딩 위치를 막는 어텐션 마스크
+- Harrier 기본값은 문장별 어텐션과 packed token-wise 연산
+- `nanoembed_context_set_batch_layout()`의 padded/masked 호환 옵션
 - Mean 풀링에서 패딩 제외
 - Last 풀링에서 문장별 마지막 유효 위치 선택
 - `max_batch` 초과 입력의 내부 분할
@@ -273,10 +275,10 @@ M3.5 기준 측정값을 유지한 채 가중치 영역만 바뀌는 시나리�
 있다. shared 2-D weight projection은 `[S,B]`를 `[S*B]`로 view해 하나의 GEMM으로
 계산하고 다시 `[H,S,B]`로 되돌린다. 이 reshape는 문장 간 attention을 섞지 않는다.
 
-배치는 정확도뿐 아니라 메모리도 바꾼다. `B × S × H` 활성값과 padding 계산량이
-늘어나므로 처리량만 보고 배치 크기를 정하지 않는다. 실제 M5 arm64 측정에서는
-batch 32가 순차 control보다 느렸으므로, 호출 batch와 `max_batch`를 크게 잡는 것이
-자동으로 유리하다고 가정하면 안 된다.
+배치는 정확도뿐 아니라 메모리도 바꾼다. packed 경로에서도 실제 token 수에 비례한
+활성값이 늘어나므로 처리량만 보고 배치 크기를 정하지 않는다. 최종 홈서버 측정은
+batch 10부터 처리량이 거의 포화하고 이후 PSS가 늘었다. 보편적인 최적값은 없으며
+호출자가 workload와 메모리 예산에 맞춰 `max_batch`를 선택한다.
 
 ## 변경 전후 체크리스트
 

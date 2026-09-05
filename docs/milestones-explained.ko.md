@@ -558,6 +558,9 @@ padding이었지만 warm·혼합 길이에서 패딩 비용이 더 컸다. 최�
 - BERT는 기존 right padding, attention mask와 mask-aware pooling 유지
 - `max_batch` 초과 시 sub-batch. 별도 memory budget이나 숨은 retry 없음
 - 원래 입력 순서로 output 복원
+- 기본은 Harrier의 문장별 어텐션과 packed token-wise 연산. 공개 layout setter로
+  기존 padded attention-mask 경로를 명시적으로 선택 가능
+- `max_batch`는 자동 튜닝하지 않고 호출자가 workload와 메모리 예산에 맞춰 선택
 
 eager는 sub-batch마다 한 graph를 만들고 gallocr를 관찰한 최대 shape까지 키운다.
 streaming은 embedding row lease, 각 layer/group, final pooling을 sub-batch당 한 번씩

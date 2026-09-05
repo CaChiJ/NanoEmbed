@@ -20,6 +20,10 @@ GELU MLP 대 게이트형 GeGLU, 편향 유무, 양방향 대 causal 어텐션, 
 개별 연산 빌더보다 위에 있다.
 
 - C API로 단일 문장과 여러 문장을 임베딩할 수 있다. eager와 Linux streaming의 여러 문장 API는 실제 B축 graph를 실행한다.
+- Harrier의 unequal-length batch는 기본적으로 문장별 어텐션과 패킹된 token-wise
+  연산을 사용한다. `nanoembed_context_set_batch_layout()`으로 이전의 padded/masked
+  호환 경로를 명시적으로 선택할 수 있고, 실제 sub-batch 상한은 context의
+  `max_batch`로 호출자가 정한다.
 - 풀링 기본값은 **모델이 학습된 방식**을 따른다. 마지막 토큰으로 풀링하는 모델에
   평균 풀링을 적용하면 겉보기에 멀쩡한 잘못된 벡터가 나오는데, 어느 쪽이 맞는지는
   호출자가 아니라 모델의 성질이기 때문이다.
@@ -293,5 +297,8 @@ gate와 Harrier Q8 streaming 성능 gate는 실패했다. batch 32의 5회 중�
 [M5 최종 보고서](docs/m5-overview.ko.md)에 용어, 구현, 정확도, 성능·메모리 결과와
 종료 결정을 한곳에 정리했다. 최종 설정은
 `A문장별/F패킹/N패킹/P레이어`다.
+이 구성은 Harrier의 기본 batch layout이며, 특정 길이·커널 조합에서 dense 연산이
+더 유리한 경우를 위해 `NANOEMBED_BATCH_LAYOUT_PADDED`도 유지한다. 보편적인 최적
+배치 크기는 정하지 않으며 호출자가 `max_batch`를 workload와 메모리 예산에 맞춘다.
 
 측정 지표와 메모리 수치의 의미는 [테스트와 벤치마크 가이드](docs/guide/26080401/07-tests-bench-workflow.md)에서 설명한다.

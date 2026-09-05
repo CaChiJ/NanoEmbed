@@ -187,7 +187,7 @@ warm 조건에서 길이가 섞이면 아낄 I/O는 없는데 패딩 비용만 �
 
 | 조건 | 패딩 제거 전 | 패딩 제거 후 |
 |---|---:|---:|
-| warm + 길이 편차 큼 | −27% | **+44%** |
+| warm + 길이 편차 큼 | −27% | **+51.9%** |
 | warm + 길이 균일 | +56% | +56% (경로 미변경) |
 | cold | +523% | **+607%** |
 
@@ -318,6 +318,10 @@ nanoembed_load_model
 `nanoembed_embed_batch()`는 실제 배치 그래프를 만든다. 길이순 정렬은 내부 계산
 순서만 바꾸며 출력은 호출자가 넘긴 순서로 복원한다. `max_batch`보다 많은 입력은
 여러 sub-batch로 나뉘고, 실패 시 더 작은 batch나 eager 경로로 재시도하지 않는다.
+Harrier는 기본적으로 `A문장별/F패킹/N패킹`을 사용한다. dense padded kernel이 더
+유리한 workload를 위해 `nanoembed_context_set_batch_layout()`으로
+`NANOEMBED_BATCH_LAYOUT_PADDED`를 선택할 수 있다. 보편적인 최적 batch size를
+가정하지 않으며 호출자가 `max_batch`를 workload와 메모리 예산에 맞춘다.
 
 기본 컨텍스트 설정은 다음과 같다.
 
@@ -329,6 +333,10 @@ nanoembed_load_model
 | `use_streaming` | 0 | Linux에서 1은 strict mmap/layer streaming; 그 밖의 값과 비-Linux 1은 오류 |
 | `pooling` | Model default | 필요하면 Mean/CLS/LAST로 명시적 변경 가능 |
 | `normalize` | 1 | 결과에 L2 정규화 적용 |
+
+`batch_layout`은 frozen context parameter 구조체에 필드를 추가하지 않고 별도 setter로
+고른다. 기본값은 모델이 지원하는 최적화 경로이며 `PADDED`는 right padding, attention
+mask와 padded token-wise 연산을 강제한다.
 
 내부 C++ 예외는 C API 경계에서 잡아 상태 코드와 `nanoembed_last_error()` 문자열로 바꾼다. 예외가 C ABI 밖으로 나가지 않는다.
 
@@ -484,7 +492,7 @@ Docker Desktop 4.38.0 Ubuntu 24.04 arm64 VM과 bind mount 범위에만 해당한
 PSS/USS는 sampled lower bound이고 profile-on latency는 diagnostic이다. 1회 독립 실행,
 null confidence interval이며 통계적 유의성을 주장하지 않는다.
 
-### M5 — 실제 레이어 단위 배치: 완료 (BERT 적용은 미완)
+### M5 — 실제 레이어 단위 배치: 완료 (Harrier 범위, BERT 패킹 제외)
 
 - 길이 stable sort, right padding, 원래 순서 복원 구현
 - eager와 Linux streaming의 실제 B축 graph 구현
@@ -494,9 +502,11 @@ null confidence interval이며 통계적 유의성을 주장하지 않는다.
 - 실용 회귀 정확도와 phase-count gate 통과; 원 계획의 더 엄격한 정확도 gate는 실패
 - 최초 측정에서 warm·혼합 길이 처리량 gate 실패 (배치 1→10 −27%)
 - 원인을 패딩으로 확정하고 제거: 어텐션 문장별 분리 후 토큰 단위 연산 패킹
-- 패딩 제거 후 warm·혼합 길이 **+44%**, cold **+607%**로 gate 통과
+- 패딩 제거 후 최종 반복 측정에서 warm·혼합 길이 **+51.9%**로 gate 통과
 - harrier 정확도가 순차 처리와 완전히 일치해 원 기준(1e-5) 통과
 - 최종 `A문장별/F패킹/N패킹`에서 `layer`/`attn-ffn`/`unit` 재측정 완료
+- Harrier 기본값을 위 구성으로 확정하고 padded/masked 호환 layout은 공개 옵션으로 유지
+- batch size는 자동 최적화하지 않고 공개 `max_batch`로 호출자가 선택
 - `layer`를 유지: `attn-ffn`은 사실상 동률, `unit`은 4.5~8.4% 느리고 큰 배치에서 메모리 증가
 - BERT는 아직 마스크 경로 유지 — 최대 오차 2.345e-4, 성능 이득 미적용
 

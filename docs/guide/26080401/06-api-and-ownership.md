@@ -158,6 +158,7 @@ model 생성
 nanoembed_context_params p = nanoembed_context_default_params();
 p.n_threads = 4;
 p.max_seq_len = 256;
+p.max_batch = 10; /* workload와 메모리 예산에 맞춰 호출자가 선택 */
 p.pooling = NANOEMBED_POOL_CLS;
 ```
 
@@ -168,7 +169,7 @@ p.pooling = NANOEMBED_POOL_CLS;
 | `n_threads` | 0 | 자동 선택. 양수면 해당 CPU 스레드 수 사용 |
 | `max_batch` | 64 | 양수여야 함. 실제 sub-batch의 최대 문장 수 |
 | `max_seq_len` | 512 | 2 이상. 토큰화 상한과 활성값 버퍼 예약 길이 |
-| `use_streaming` | 0 | 1은 아직 지원하지 않아 컨텍스트 생성 실패 |
+| `use_streaming` | 0 | Linux에서 1은 strict mmap/layer streaming; 비-Linux에서는 오류 |
 | `pooling` | Model default | 모델 기본값 또는 Mean/CLS/LAST |
 | `normalize` | 1 | 0이면 L2 정규화 생략 |
 
@@ -218,14 +219,15 @@ int nanoembed_embed_batch(
     float * out);
 ```
 
-현재 eager와 Linux streaming 모두 실제 B축 그래프를 실행한다.
+현재 eager와 Linux streaming 모두 실제 B축 그래프를 실행한다. Harrier의 기본 경로는
+`A문장별/F패킹/N패킹`이고 BERT는 padded/masked 경로를 유지한다.
 
 ```text
 모든 문장 토큰화
   → 토큰 길이 stable sort
   → 연속된 max_batch개씩 sub-batch
-  → sub-batch 최대 길이까지 right padding
-  → [H,S,B] forward와 mask-aware pooling
+  → Harrier는 실제 token packing과 문장별 attention/pooling
+  → BERT 또는 명시적 padded layout은 [H,S,B]와 mask-aware pooling
   → original_index 위치로 출력 scatter
 ```
 
@@ -233,6 +235,17 @@ PAD ID가 있으면 padding 값으로 쓰고 없으면 유효 token ID 0을 채�
 padding key는 attention mask로, Mean/LAST 결과는 pooling mask/index로 제외된다. 모든
 길이가 같으면 padding mask를 만들지 않는다. `max_batch`보다 많은 입력은 자동
 분할하지만 allocation/실행 실패를 숨기기 위한 더 작은 batch 재시도는 하지 않는다.
+
+특정 workload에서 dense padded kernel이 더 빠르면 context 생성 뒤 다음과 같이
+호환 layout을 선택한다. 같은 context에서 추론과 동시에 setter를 호출하면 안 된다.
+
+```c
+nanoembed_context_set_batch_layout(
+    ctx, NANOEMBED_BATCH_LAYOUT_PADDED);
+```
+
+`NANOEMBED_BATCH_LAYOUT_DEFAULT`로 되돌리면 Harrier는 다시 문장별 어텐션과 패킹을
+사용한다. batch size는 자동으로 정하지 않으며 `max_batch`를 호출자가 선택한다.
 
 invalid argument는 출력을 건드리지 않는다. 실행이 시작된 뒤 실패하면 batch 출력
 전체를 NaN으로 만들고 tokenize/OOM/internal 상태 코드를 구분한다. `n_texts == 0`은
