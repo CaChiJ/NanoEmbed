@@ -654,25 +654,58 @@ const ModelUnderTest kModels[] = {
 
 } // namespace
 
+// The cache tests reach the filesystem through platform-specific code, and an
+// escaping exception used to end the process with no output at all: on Windows
+// that surfaces only as ctest reporting exit code 0xc0000409. Name the stage
+// before running it and report what escaped, so a platform-specific failure
+// says where it happened.
+template <typename Stage>
+bool run_stage(const char * name, Stage stage) {
+    std::printf("tokenizer_test: running %s\n", name);
+    std::fflush(stdout);
+    g_failures = 0;
+    try {
+        return stage();
+    } catch (const std::exception & error) {
+        std::fprintf(stderr, "FAIL: %s threw: %s\n", name, error.what());
+        return false;
+    } catch (...) {
+        std::fprintf(stderr, "FAIL: %s threw a non-std exception\n", name);
+        return false;
+    }
+}
+
 int main() {
-    TemporaryCacheDirectory cache;
     int rc = 0;
-    g_failures = 0;
-    if (!test_sha256_vectors()) rc = 1;
-    g_failures = 0;
-    if (!test_bpe_disk_cache_lifecycle()) rc = 1;
-    g_failures = 0;
-    if (!test_bpe_concurrent_cache_creation()) rc = 1;
-    g_failures = 0;
-    if (!test_wordpiece_rejects_out_of_vocab_special_id()) rc = 1;
-    g_failures = 0;
-    if (!test_bpe_rejects_wrong_optional_type()) rc = 1;
-    g_failures = 0;
-    if (!test_discard_consumed_tokenizer_metadata()) rc = 1;
-    for (const ModelUnderTest & m : kModels) {
-        g_failures = 0; if (!test_metadata(m))  rc = 1;
-        g_failures = 0; if (!test_hf_parity(m)) rc = 1;
-        g_failures = 0; if (!test_truncation(m)) rc = 1;
+    try {
+        TemporaryCacheDirectory cache;
+        if (!run_stage("sha256_vectors",
+                       [] { return test_sha256_vectors(); })) rc = 1;
+        if (!run_stage("bpe_disk_cache_lifecycle",
+                       [] { return test_bpe_disk_cache_lifecycle(); })) rc = 1;
+        if (!run_stage("bpe_concurrent_cache_creation",
+                       [] { return test_bpe_concurrent_cache_creation(); })) rc = 1;
+        if (!run_stage("wordpiece_rejects_out_of_vocab_special_id",
+                       [] { return test_wordpiece_rejects_out_of_vocab_special_id(); })) rc = 1;
+        if (!run_stage("bpe_rejects_wrong_optional_type",
+                       [] { return test_bpe_rejects_wrong_optional_type(); })) rc = 1;
+        if (!run_stage("discard_consumed_tokenizer_metadata",
+                       [] { return test_discard_consumed_tokenizer_metadata(); })) rc = 1;
+        for (const ModelUnderTest & m : kModels) {
+            const std::string label(m.label);
+            if (!run_stage((label + " metadata").c_str(),
+                           [&] { return test_metadata(m); })) rc = 1;
+            if (!run_stage((label + " hf_parity").c_str(),
+                           [&] { return test_hf_parity(m); })) rc = 1;
+            if (!run_stage((label + " truncation").c_str(),
+                           [&] { return test_truncation(m); })) rc = 1;
+        }
+    } catch (const std::exception & error) {
+        std::fprintf(stderr, "FAIL: tokenizer test setup threw: %s\n", error.what());
+        rc = 1;
+    } catch (...) {
+        std::fprintf(stderr, "FAIL: tokenizer test setup threw a non-std exception\n");
+        rc = 1;
     }
     std::printf("tokenizer_test: %s\n", rc == 0 ? "ok" : "FAIL");
     return rc;
