@@ -30,6 +30,20 @@ jobs:
         with:
           submodules: recursive
 
+      # bench/runner.py parses YAML scenarios, so bench_harness_integration
+      # needs pyyaml. The ubuntu image happens to ship it and the macOS one
+      # does not, which let the same test pass on one runner and fail on the
+      # other. Pin the interpreter CMake tests against instead of taking
+      # whichever python each image ranks highest.
+      - name: Set up Python
+        id: python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python test dependencies
+        run: python -m pip install --disable-pip-version-check pyyaml
+
       # Every accuracy test skips itself without a model, which would make a
       # green CI run meaningless. Both families plus the Q8_0 regression file
       # are fetched here and the
@@ -62,7 +76,8 @@ jobs:
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DNANOEMBED_REQUIRE_MODEL=ON
+            -DNANOEMBED_REQUIRE_MODEL=ON \
+            -DPython3_EXECUTABLE=${{ steps.python.outputs.python-path }}
 
       - name: Build
         run: cmake --build build -j
