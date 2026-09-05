@@ -1,0 +1,244 @@
+[
+    {
+        "Id": "146ae2ed297658fce4737c6ef975aa6bdd226e93b3eb06d58aae40f4bda7fc08",
+        "Created": "2026-08-24T06:55:44.810449958Z",
+        "Path": "sleep",
+        "Args": [
+            "infinity"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 13797,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-08-24T06:55:44.888054541Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:5b8c0c14690ed170da4e663fe0bae0d58efe59661e791296ffab28ed2113b650",
+        "ResolvConfPath": "/var/lib/docker/containers/146ae2ed297658fce4737c6ef975aa6bdd226e93b3eb06d58aae40f4bda7fc08/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/146ae2ed297658fce4737c6ef975aa6bdd226e93b3eb06d58aae40f4bda7fc08/hostname",
+        "HostsPath": "/var/lib/docker/containers/146ae2ed297658fce4737c6ef975aa6bdd226e93b3eb06d58aae40f4bda7fc08/hosts",
+        "LogPath": "/var/lib/docker/containers/146ae2ed297658fce4737c6ef975aa6bdd226e93b3eb06d58aae40f4bda7fc08/146ae2ed297658fce4737c6ef975aa6bdd226e93b3eb06d58aae40f4bda7fc08-json.log",
+        "Name": "/nanoembed-a8-m36-20260824",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "bridge",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": [],
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/Users/cachij/Documents/Repos/NanoEmbed",
+                    "Target": "/src",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/private/tmp/nanoembed-a8-build.JucGHh",
+                    "Target": "/build"
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/private/tmp/nanoembed-a8-output.2i2PmY",
+                    "Target": "/out"
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/asound",
+                "/proc/acpi",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/sys/firmware",
+                "/sys/devices/virtual/powercap"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/1e7b10e2cad35733c286d871ccbc5d55d2b5db853a4b9805e83e3ae7ff80cf6c-init/diff:/var/lib/docker/overlay2/9a8a2d61770cc87580f531ca58fdcd3f40f2409898ebd8d9ee4e3e9c5e15af1a/diff",
+                "MergedDir": "/var/lib/docker/overlay2/1e7b10e2cad35733c286d871ccbc5d55d2b5db853a4b9805e83e3ae7ff80cf6c/merged",
+                "UpperDir": "/var/lib/docker/overlay2/1e7b10e2cad35733c286d871ccbc5d55d2b5db853a4b9805e83e3ae7ff80cf6c/diff",
+                "WorkDir": "/var/lib/docker/overlay2/1e7b10e2cad35733c286d871ccbc5d55d2b5db853a4b9805e83e3ae7ff80cf6c/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/private/tmp/nanoembed-a8-output.2i2PmY",
+                "Destination": "/out",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/Users/cachij/Documents/Repos/NanoEmbed",
+                "Destination": "/src",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/private/tmp/nanoembed-a8-build.JucGHh",
+                "Destination": "/build",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "146ae2ed2976",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": [
+                "sleep",
+                "infinity"
+            ],
+            "Image": "ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
+            "Volumes": null,
+            "WorkingDir": "",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "org.opencontainers.image.version": "24.04"
+            }
+        },
+        "NetworkSettings": {
+            "Bridge": "",
+            "SandboxID": "1f99a510119a771484d403877fe5deb8675560c32ebdbdf509cbc9127f4d85c5",
+            "SandboxKey": "/var/run/docker/netns/1f99a510119a",
+            "Ports": {},
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "SecondaryIPAddresses": null,
+            "SecondaryIPv6Addresses": null,
+            "EndpointID": "54e979d709132b66de6f1385235de8f9ae0ad8193be09e8239769c852cd6ab32",
+            "Gateway": "172.17.0.1",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "IPAddress": "172.17.0.8",
+            "IPPrefixLen": 16,
+            "IPv6Gateway": "",
+            "MacAddress": "02:42:ac:11:00:08",
+            "Networks": {
+                "bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "MacAddress": "02:42:ac:11:00:08",
+                    "DriverOpts": null,
+                    "NetworkID": "7eb4f623245061dc0eee2db4f2909b7345141fc5ee5b66c2b41a2c7c82c7fecc",
+                    "EndpointID": "54e979d709132b66de6f1385235de8f9ae0ad8193be09e8239769c852cd6ab32",
+                    "Gateway": "172.17.0.1",
+                    "IPAddress": "172.17.0.8",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        }
+    }
+]

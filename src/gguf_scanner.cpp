@@ -3,120 +3,18 @@
 #include "ggml.h"
 #include "gguf.h"
 
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <string>
 
 namespace nanoembed {
 
-namespace {
-
-// ---- Cleanup helpers ---------------------------------------------------
-
-struct GgufDeleter {
-    void operator()(gguf_context * p) const noexcept { if (p) gguf_free(p); }
-};
-struct GgmlDeleter {
-    void operator()(ggml_context * p) const noexcept { if (p) ggml_free(p); }
-};
-
-using GgufPtr = std::unique_ptr<gguf_context, GgufDeleter>;
-using GgmlPtr = std::unique_ptr<ggml_context, GgmlDeleter>;
-
-[[noreturn]] void fail(const std::string & msg) {
-    throw ScanError(msg);
-}
-
-// ---- KV helpers --------------------------------------------------------
-
-int64_t require_kv(gguf_context * ctx, const char * key) {
-    int64_t i = gguf_find_key(ctx, key);
-    if (i < 0) fail(std::string("missing required metadata key: ") + key);
-    return i;
-}
-
-int read_u32_as_int(gguf_context * ctx, const char * key) {
-    int64_t i = require_kv(ctx, key);
-    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_UINT32) {
-        fail(std::string("metadata key has wrong type (expected u32): ") + key);
-    }
-    return static_cast<int>(gguf_get_val_u32(ctx, i));
-}
-
-float read_f32_or(gguf_context * ctx, const char * key, float fallback) {
-    int64_t i = gguf_find_key(ctx, key);
-    if (i < 0) return fallback;
-    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_FLOAT32) return fallback;
-    return gguf_get_val_f32(ctx, i);
-}
-
-std::string read_str(gguf_context * ctx, const char * key) {
-    int64_t i = require_kv(ctx, key);
-    if (gguf_get_kv_type(ctx, i) != GGUF_TYPE_STRING) {
-        fail(std::string("metadata key has wrong type (expected string): ") + key);
-    }
-    return std::string(gguf_get_val_str(ctx, i));
-}
-
-// ---- Tensor helpers ----------------------------------------------------
-
-TensorRef require_tensor(gguf_context * gguf,
-                         ggml_context * meta,
-                         const std::string & name) {
-    const int64_t idx = gguf_find_tensor(gguf, name.c_str());
-    if (idx < 0) fail("missing required tensor: " + name);
-
-    ggml_tensor * t = ggml_get_tensor(meta, name.c_str());
-    if (t == nullptr) {
-        fail("tensor present in gguf but not in ggml meta: " + name);
-    }
-
-    TensorRef r;
-    r.gguf_index  = idx;
-    r.ggml_type   = static_cast<int>(gguf_get_tensor_type(gguf, idx));
-    r.size_bytes  = gguf_get_tensor_size(gguf, idx);
-    r.data_offset = gguf_get_tensor_offset(gguf, idx);
-    for (int d = 0; d < 4; ++d) {
-        r.ne[d] = t->ne[d];
-    }
-    return r;
-}
-
-std::string layer_tensor_name(int layer_idx, const char * suffix) {
-    std::ostringstream s;
-    s << "blk." << layer_idx << "." << suffix;
-    return s.str();
-}
-
-void validate_shape_2d(const TensorRef & r,
-                       int64_t expected_rows,
-                       int64_t expected_cols,
-                       const std::string & name) {
-    // ggml stores a 2D matrix W of shape [in, out] with ne = {in, out, 1, 1}.
-    // We pass (rows, cols) in the matmul-natural order; convert here.
-    if (r.ne[0] != expected_rows || r.ne[1] != expected_cols ||
-        r.ne[2] != 1 || r.ne[3] != 1) {
-        std::ostringstream s;
-        s << "tensor shape mismatch for " << name
-          << ": expected ne=[" << expected_rows << "," << expected_cols << ",1,1]"
-          << " got ne=[" << r.ne[0] << "," << r.ne[1] << "," << r.ne[2] << "," << r.ne[3] << "]";
-        fail(s.str());
-    }
-}
-
-void validate_shape_1d(const TensorRef & r,
-                       int64_t expected,
-                       const std::string & name) {
-    if (r.ne[0] != expected || r.ne[1] != 1 || r.ne[2] != 1 || r.ne[3] != 1) {
-        std::ostringstream s;
-        s << "tensor shape mismatch for " << name
-          << ": expected ne=[" << expected << ",1,1,1]"
-          << " got ne=[" << r.ne[0] << "," << r.ne[1] << "," << r.ne[2] << "," << r.ne[3] << "]";
-        fail(s.str());
-    }
-}
-
-} // namespace
+// The KV readers, tensor lookup and shape validators used below are
+// architecture-agnostic and now live in gguf_util.h, so gemma3 (and any
+// later family) gets the same error text without depending on this file.
+using namespace gguf_util;
 
 // ---- ScanResult --------------------------------------------------------
 
@@ -161,21 +59,12 @@ void ScanResult::reset(gguf_context * gguf,
 
 // ---- scan_gguf ---------------------------------------------------------
 
-ScanResult scan_gguf(const std::string & path) {
-    ggml_context * meta_raw = nullptr;
-    gguf_init_params params;
-    params.no_alloc = true;
-    params.ctx      = &meta_raw;
-
-    gguf_context * gguf_raw = gguf_init_from_file(path.c_str(), params);
-    if (gguf_raw == nullptr) {
-        fail("failed to open GGUF file: " + path);
+ModelManifest scan_bert(gguf_context * gguf, ggml_context * meta) {
+    if (gguf == nullptr || meta == nullptr) {
+        fail("BERT scan requires GGUF and ggml metadata contexts");
     }
-    GgufPtr gguf_owner(gguf_raw);
-    GgmlPtr meta_owner(meta_raw);
-
     // Architecture must be BERT in v0.
-    const std::string arch_name = read_str(gguf_owner.get(), "general.architecture");
+    const std::string arch_name = read_str(gguf, "general.architecture");
     if (arch_name != "bert") {
         fail("unsupported architecture (expected 'bert', got '" + arch_name + "')");
     }
@@ -183,17 +72,24 @@ ScanResult scan_gguf(const std::string & path) {
     ModelManifest m;
 
     // Hyperparameters
-    m.arch.n_layer        = read_u32_as_int(gguf_owner.get(), "bert.block_count");
-    m.arch.n_embed        = read_u32_as_int(gguf_owner.get(), "bert.embedding_length");
-    m.arch.n_head         = read_u32_as_int(gguf_owner.get(), "bert.attention.head_count");
-    m.arch.n_ff           = read_u32_as_int(gguf_owner.get(), "bert.feed_forward_length");
-    m.arch.max_seq_len    = read_u32_as_int(gguf_owner.get(), "bert.context_length");
-    m.arch.layer_norm_eps = read_f32_or   (gguf_owner.get(), "bert.attention.layer_norm_epsilon", 1e-12f);
+    m.arch.n_layer        = read_u32_as_int(gguf, "bert.block_count");
+    m.arch.n_embed        = read_u32_as_int(gguf, "bert.embedding_length");
+    m.arch.n_head         = read_u32_as_int(gguf, "bert.attention.head_count");
+    m.arch.n_ff           = read_u32_as_int(gguf, "bert.feed_forward_length");
+    m.arch.max_seq_len    = read_u32_as_int(gguf, "bert.context_length");
+    m.arch.layer_norm_eps = read_f32_or   (gguf, "bert.attention.layer_norm_epsilon", 1e-12f);
+    m.arch.pooling_type   = read_u32_or   (gguf, "bert.pooling_type", 1);
 
     if (m.arch.n_layer <= 0 || m.arch.n_embed <= 0 ||
         m.arch.n_head <= 0  || m.arch.n_ff    <= 0 ||
         m.arch.max_seq_len <= 0) {
         fail("BERT hyperparameters out of range (got non-positive value)");
+    }
+    if (!(m.arch.layer_norm_eps > 0.0f) || !std::isfinite(m.arch.layer_norm_eps)) {
+        fail("bert.attention.layer_norm_epsilon must be finite and positive");
+    }
+    if (m.arch.pooling_type < 1 || m.arch.pooling_type > 3) {
+        fail("bert.pooling_type must be mean(1), cls(2), or last(3)");
     }
     if (m.arch.n_embed % m.arch.n_head != 0) {
         fail("hidden size is not divisible by head count");
@@ -201,11 +97,15 @@ ScanResult scan_gguf(const std::string & path) {
 
     // Vocab size = length of tokenizer.ggml.tokens array
     {
-        const int64_t tk = require_kv(gguf_owner.get(), "tokenizer.ggml.tokens");
-        if (gguf_get_kv_type(gguf_owner.get(), tk) != GGUF_TYPE_ARRAY) {
+        const int64_t tk = require_kv(gguf, "tokenizer.ggml.tokens");
+        if (gguf_get_kv_type(gguf, tk) != GGUF_TYPE_ARRAY) {
             fail("tokenizer.ggml.tokens is not an array");
         }
-        m.arch.n_vocab = static_cast<int>(gguf_get_arr_n(gguf_owner.get(), tk));
+        const size_t n_vocab = gguf_get_arr_n(gguf, tk);
+        if (n_vocab > static_cast<size_t>(std::numeric_limits<int>::max())) {
+            fail("tokenizer vocabulary is too large");
+        }
+        m.arch.n_vocab = static_cast<int>(n_vocab);
         if (m.arch.n_vocab <= 0) fail("vocab size is non-positive");
     }
 
@@ -215,26 +115,26 @@ ScanResult scan_gguf(const std::string & path) {
     const int64_t S = m.arch.max_seq_len;
 
     // Embedding-stage tensors
-    m.tok_embed_w  = require_tensor(gguf_owner.get(), meta_owner.get(), "token_embd.weight");
+    m.tok_embed_w  = require_tensor(gguf, meta, "token_embd.weight");
     validate_shape_2d(m.tok_embed_w, H, V, "token_embd.weight");
-    m.pos_embed_w  = require_tensor(gguf_owner.get(), meta_owner.get(), "position_embd.weight");
+    m.pos_embed_w  = require_tensor(gguf, meta, "position_embd.weight");
     validate_shape_2d(m.pos_embed_w, H, S, "position_embd.weight");
-    m.type_embed_w = require_tensor(gguf_owner.get(), meta_owner.get(), "token_types.weight");
+    m.type_embed_w = require_tensor(gguf, meta, "token_types.weight");
     // token_types.weight has shape [H, n_types] where n_types is typically 2.
     if (m.type_embed_w.ne[0] != H || m.type_embed_w.ne[1] < 1) {
         fail("token_types.weight has unexpected shape");
     }
-    m.embed_norm_w = require_tensor(gguf_owner.get(), meta_owner.get(), "token_embd_norm.weight");
+    m.embed_norm_w = require_tensor(gguf, meta, "token_embd_norm.weight");
     validate_shape_1d(m.embed_norm_w, H, "token_embd_norm.weight");
-    m.embed_norm_b = require_tensor(gguf_owner.get(), meta_owner.get(), "token_embd_norm.bias");
+    m.embed_norm_b = require_tensor(gguf, meta, "token_embd_norm.bias");
     validate_shape_1d(m.embed_norm_b, H, "token_embd_norm.bias");
 
     // Optional sentence-bert pooler dense layer.
     {
-        const int64_t pw = gguf_find_tensor(gguf_owner.get(), "pooler.dense.weight");
+        const int64_t pw = gguf_find_tensor(gguf, "pooler.dense.weight");
         if (pw >= 0) {
-            m.pooler_w = require_tensor(gguf_owner.get(), meta_owner.get(), "pooler.dense.weight");
-            m.pooler_b = require_tensor(gguf_owner.get(), meta_owner.get(), "pooler.dense.bias");
+            m.pooler_w = require_tensor(gguf, meta, "pooler.dense.weight");
+            m.pooler_b = require_tensor(gguf, meta, "pooler.dense.bias");
         }
     }
 
@@ -260,22 +160,22 @@ ScanResult scan_gguf(const std::string & path) {
         const std::string nfn_w = layer_tensor_name(i, "layer_output_norm.weight");
         const std::string nfn_b = layer_tensor_name(i, "layer_output_norm.bias");
 
-        s.attn_q_w    = require_tensor(gguf_owner.get(), meta_owner.get(), nq_w);
-        s.attn_q_b    = require_tensor(gguf_owner.get(), meta_owner.get(), nq_b);
-        s.attn_k_w    = require_tensor(gguf_owner.get(), meta_owner.get(), nk_w);
-        s.attn_k_b    = require_tensor(gguf_owner.get(), meta_owner.get(), nk_b);
-        s.attn_v_w    = require_tensor(gguf_owner.get(), meta_owner.get(), nv_w);
-        s.attn_v_b    = require_tensor(gguf_owner.get(), meta_owner.get(), nv_b);
-        s.attn_o_w    = require_tensor(gguf_owner.get(), meta_owner.get(), no_w);
-        s.attn_o_b    = require_tensor(gguf_owner.get(), meta_owner.get(), no_b);
-        s.attn_norm_w = require_tensor(gguf_owner.get(), meta_owner.get(), nan_w);
-        s.attn_norm_b = require_tensor(gguf_owner.get(), meta_owner.get(), nan_b);
-        s.ffn_up_w    = require_tensor(gguf_owner.get(), meta_owner.get(), nfu_w);
-        s.ffn_up_b    = require_tensor(gguf_owner.get(), meta_owner.get(), nfu_b);
-        s.ffn_down_w  = require_tensor(gguf_owner.get(), meta_owner.get(), nfd_w);
-        s.ffn_down_b  = require_tensor(gguf_owner.get(), meta_owner.get(), nfd_b);
-        s.ffn_norm_w  = require_tensor(gguf_owner.get(), meta_owner.get(), nfn_w);
-        s.ffn_norm_b  = require_tensor(gguf_owner.get(), meta_owner.get(), nfn_b);
+        s.attn_q_w    = require_tensor(gguf, meta, nq_w);
+        s.attn_q_b    = require_tensor(gguf, meta, nq_b);
+        s.attn_k_w    = require_tensor(gguf, meta, nk_w);
+        s.attn_k_b    = require_tensor(gguf, meta, nk_b);
+        s.attn_v_w    = require_tensor(gguf, meta, nv_w);
+        s.attn_v_b    = require_tensor(gguf, meta, nv_b);
+        s.attn_o_w    = require_tensor(gguf, meta, no_w);
+        s.attn_o_b    = require_tensor(gguf, meta, no_b);
+        s.attn_norm_w = require_tensor(gguf, meta, nan_w);
+        s.attn_norm_b = require_tensor(gguf, meta, nan_b);
+        s.ffn_up_w    = require_tensor(gguf, meta, nfu_w);
+        s.ffn_up_b    = require_tensor(gguf, meta, nfu_b);
+        s.ffn_down_w  = require_tensor(gguf, meta, nfd_w);
+        s.ffn_down_b  = require_tensor(gguf, meta, nfd_b);
+        s.ffn_norm_w  = require_tensor(gguf, meta, nfn_w);
+        s.ffn_norm_b  = require_tensor(gguf, meta, nfn_b);
 
         // Shape spot-checks. Q/K/V/O are square H x H, FFN_up is H x F,
         // FFN_down is F x H, biases are 1D.
@@ -297,8 +197,25 @@ ScanResult scan_gguf(const std::string & path) {
         validate_shape_1d(s.ffn_norm_b, H, nfn_b);
     }
 
+    return m;
+}
+
+ScanResult scan_gguf(const std::string & path) {
+    ggml_context * meta_raw = nullptr;
+    gguf_init_params params;
+    params.no_alloc = true;
+    params.ctx      = &meta_raw;
+
+    gguf_context * gguf_raw = gguf_init_from_file(path.c_str(), params);
+    if (gguf_raw == nullptr) {
+        fail("failed to open GGUF file: " + path);
+    }
+    GgufPtr gguf_owner(gguf_raw);
+    GgmlPtr meta_owner(meta_raw);
+
+    ModelManifest manifest = scan_bert(gguf_owner.get(), meta_owner.get());
     ScanResult result;
-    result.reset(gguf_owner.release(), meta_owner.release(), std::move(m));
+    result.reset(gguf_owner.release(), meta_owner.release(), std::move(manifest));
     return result;
 }
 

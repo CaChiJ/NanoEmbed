@@ -1,0 +1,131 @@
+# Final packed M5 configuration: independent sweep of batch size and the three
+# distinct streaming partition layouts for Harrier Q8.
+#
+# A/F/N are fixed to A=per-sentence attention, F=packed, N=packed by the
+# currently built Gemma3 implementation. P and batch size are the only varying
+# scenario fields. budget:10M is omitted because this model's whole layer fits
+# below 10 MiB, so that preset resolves to the same grouping as layer.
+packed_partition_base: &packed_partition_base
+  model: models/harrier-270m-q8_0.gguf
+  corpus_group: mixed_short
+  samples: 132
+  normalize: true
+  threads: 4
+  streaming: true
+  cache_state: warm
+  warmup: 1
+  iter: 5
+  milestones: [M5-PACKED-PARTITION]
+
+scenarios:
+  - <<: *packed_partition_base
+    name: m5_packed_p_layer_b001
+    batch_size: 1
+    max_batch: 1
+    partition: layer
+  - <<: *packed_partition_base
+    name: m5_packed_p_attn_ffn_b001
+    batch_size: 1
+    max_batch: 1
+    partition: attn-ffn
+  - <<: *packed_partition_base
+    name: m5_packed_p_unit_b001
+    batch_size: 1
+    max_batch: 1
+    partition: unit
+
+  - <<: *packed_partition_base
+    name: m5_packed_p_layer_b002
+    batch_size: 2
+    max_batch: 2
+    partition: layer
+  - <<: *packed_partition_base
+    name: m5_packed_p_attn_ffn_b002
+    batch_size: 2
+    max_batch: 2
+    partition: attn-ffn
+  - <<: *packed_partition_base
+    name: m5_packed_p_unit_b002
+    batch_size: 2
+    max_batch: 2
+    partition: unit
+
+  - <<: *packed_partition_base
+    name: m5_packed_p_layer_b005
+    batch_size: 5
+    max_batch: 5
+    partition: layer
+  - <<: *packed_partition_base
+    name: m5_packed_p_attn_ffn_b005
+    batch_size: 5
+    max_batch: 5
+    partition: attn-ffn
+  - <<: *packed_partition_base
+    name: m5_packed_p_unit_b005
+    batch_size: 5
+    max_batch: 5
+    partition: unit
+
+  - <<: *packed_partition_base
+    name: m5_packed_p_layer_b010
+    batch_size: 10
+    max_batch: 10
+    partition: layer
+  - <<: *packed_partition_base
+    name: m5_packed_p_attn_ffn_b010
+    batch_size: 10
+    max_batch: 10
+    partition: attn-ffn
+  - <<: *packed_partition_base
+    name: m5_packed_p_unit_b010
+    batch_size: 10
+    max_batch: 10
+    partition: unit
+
+  - <<: *packed_partition_base
+    name: m5_packed_p_layer_b016
+    batch_size: 16
+    max_batch: 16
+    partition: layer
+  - <<: *packed_partition_base
+    name: m5_packed_p_attn_ffn_b016
+    batch_size: 16
+    max_batch: 16
+    partition: attn-ffn
+  - <<: *packed_partition_base
+    name: m5_packed_p_unit_b016
+    batch_size: 16
+    max_batch: 16
+    partition: unit
+
+  - <<: *packed_partition_base
+    name: m5_packed_p_layer_b032
+    batch_size: 32
+    max_batch: 32
+    partition: layer
+  - <<: *packed_partition_base
+    name: m5_packed_p_attn_ffn_b032
+    batch_size: 32
+    max_batch: 32
+    partition: attn-ffn
+  - <<: *packed_partition_base
+    name: m5_packed_p_unit_b032
+    batch_size: 32
+    max_batch: 32
+    partition: unit
+
+  - <<: *packed_partition_base
+    name: m5_packed_p_layer_b064
+    batch_size: 64
+    max_batch: 64
+    partition: layer
+  - <<: *packed_partition_base
+    name: m5_packed_p_attn_ffn_b064
+    batch_size: 64
+    max_batch: 64
+    partition: attn-ffn
+  - <<: *packed_partition_base
+    name: m5_packed_p_unit_b064
+    batch_size: 64
+    max_batch: 64
+    partition: unit

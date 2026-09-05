@@ -1,20 +1,24 @@
 // GGUF scanner: turn ggml's flat tensor list into a typed BERT manifest.
 //
-// Scope (M2):
+// Scope:
 //   - Open a GGUF file (header only, no_alloc=true).
 //   - Validate general.architecture == "bert".
 //   - Read BERT hyperparameters from metadata KV.
 //   - Map every required tensor name to a TensorRef slot.
 //   - Fail fast at scan time if anything is missing or shaped wrong.
 //
-// The resulting ScanResult owns the gguf_context. M3+ inference code
-// borrows it to read tensor data via ggml.
+// Everything here is BERT-specific by design — it is this family's private
+// detail, not a shared contract. The family-agnostic parts (TensorRef,
+// ScanError, the KV and tensor-lookup helpers) live in gguf_util.h so other
+// architectures can reuse them without inheriting BERT's assumptions.
+//
+// The resulting ScanResult owns the gguf_context. Inference code borrows it
+// to read tensor data via ggml.
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-#include <stdexcept>
+#include "gguf_util.h"
+
 #include <string>
 #include <vector>
 
@@ -23,19 +27,6 @@ struct gguf_context;
 struct ggml_context;
 
 namespace nanoembed {
-
-// Reference to one tensor in the GGUF file. The data itself is not
-// loaded yet; M3+ code uses (gguf_index, offset, ne, ggml_type) to
-// pull bytes via ggml/mmap.
-struct TensorRef {
-    int64_t gguf_index = -1;            // -1 if slot unfilled
-    int     ggml_type  = 0;             // ggml_type enum (F32/F16/Q8_0/...)
-    int64_t ne[4]      = {0, 0, 0, 0};  // tensor shape (ggml is up to 4D)
-    size_t  size_bytes = 0;
-    size_t  data_offset = 0;            // byte offset within tensor data blob
-
-    bool valid() const noexcept { return gguf_index >= 0; }
-};
 
 // One BERT encoder block. v0 assumes post-LN BERT:
 //   x_attn = LN_attn(x + Attn(x))
@@ -60,6 +51,12 @@ struct BertArch {
     int   n_vocab        = 0;     // tokenizer vocab size
     int   max_seq_len    = 0;     // bert.context_length
     float layer_norm_eps = 1e-12f;
+
+    // bert.pooling_type, in llama.cpp's numbering (1=mean, 2=cls, 3=last).
+    // Defaults to mean when the file does not say: that is both the more
+    // common BERT convention and what the public API returned before pooling
+    // began following the model.
+    int   pooling_type   = 1;
 };
 
 struct ModelManifest {
@@ -108,14 +105,13 @@ private:
     ModelManifest  manifest_ = {};
 };
 
-// Domain exception thrown on any scan failure. Inherits std::runtime_error
-// so it can be caught generically at the C ABI boundary.
-class ScanError : public std::runtime_error {
-public:
-    explicit ScanError(const std::string & what) : std::runtime_error(what) {}
-};
-
 // Scan a GGUF file into a typed BERT manifest. Throws ScanError on failure.
 ScanResult scan_gguf(const std::string & path);
+
+// Validate BERT metadata and required tensor names/shapes in an already-open
+// metadata-only GGUF context.  The caller retains both contexts.  The mapped
+// weight loader uses this overload so architecture validation and the later
+// tensor-data borrows refer to one opened file identity.
+ModelManifest scan_bert(gguf_context * gguf, ggml_context * meta);
 
 } // namespace nanoembed

@@ -3,6 +3,7 @@
 #include <sys/resource.h>
 #include <sys/utsname.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -52,7 +53,12 @@ size_t parse_leading_number(std::string_view s) {
 namespace {
 
 // Value following "Key:" on a line that starts with Key, unscaled.
-size_t parse_value_line(std::string_view text, std::string_view key) {
+struct ParsedValue {
+    size_t value = 0;
+    bool found = false;
+};
+
+ParsedValue find_value_line(std::string_view text, std::string_view key) {
     for (size_t pos = 0; pos < text.size(); pos = next_line(text, pos)) {
         if (text.compare(pos, key.size(), key) != 0) continue;
         const size_t eol  = text.find('\n', pos);
@@ -60,9 +66,19 @@ size_t parse_value_line(std::string_view text, std::string_view key) {
                                         (eol == std::string_view::npos)
                                             ? std::string_view::npos
                                             : eol - pos - key.size());
-        return parse_leading_number(line);
+        return {parse_leading_number(line), true};
     }
-    return 0;
+    return {};
+}
+
+size_t parse_value_line(std::string_view text, std::string_view key) {
+    return find_value_line(text, key).value;
+}
+
+ParsedValue find_kb_line(std::string_view text, std::string_view key) {
+    ParsedValue result = find_value_line(text, key);
+    result.value *= 1024;
+    return result;
 }
 
 } // namespace
@@ -75,14 +91,92 @@ MemSample parse_smaps_rollup(std::string_view rollup) {
     MemSample s;
     if (rollup.empty()) return s;
 
-    s.rss_bytes = parse_kb_line(rollup, "Rss:");
-    s.pss_bytes = parse_kb_line(rollup, "Pss:");
-    s.uss_bytes = parse_kb_line(rollup, "Private_Clean:") +
-                  parse_kb_line(rollup, "Private_Dirty:");
+    const ParsedValue rss           = find_kb_line(rollup, "Rss:");
+    const ParsedValue pss           = find_kb_line(rollup, "Pss:");
+    const ParsedValue pss_anon      = find_kb_line(rollup, "Pss_Anon:");
+    const ParsedValue pss_file      = find_kb_line(rollup, "Pss_File:");
+    const ParsedValue anonymous     = find_kb_line(rollup, "Anonymous:");
+    const ParsedValue private_clean = find_kb_line(rollup, "Private_Clean:");
+    const ParsedValue private_dirty = find_kb_line(rollup, "Private_Dirty:");
+    const ParsedValue shared_clean  = find_kb_line(rollup, "Shared_Clean:");
+    const ParsedValue shared_dirty  = find_kb_line(rollup, "Shared_Dirty:");
+
+    s.rss_bytes           = rss.value;
+    s.pss_bytes           = pss.value;
+    s.pss_anon_bytes      = pss_anon.value;
+    s.pss_file_bytes      = pss_file.value;
+    s.anonymous_bytes     = anonymous.value;
+    s.private_clean_bytes = private_clean.value;
+    s.private_dirty_bytes = private_dirty.value;
+    s.shared_clean_bytes  = shared_clean.value;
+    s.shared_dirty_bytes  = shared_dirty.value;
+    s.uss_bytes           = private_clean.value + private_dirty.value;
+    s.has_rss           = rss.found;
+    s.has_pss           = pss.found;
+    s.has_pss_anon      = pss_anon.found;
+    s.has_pss_file      = pss_file.found;
+    s.has_anonymous     = anonymous.found;
+    s.has_private_clean = private_clean.found;
+    s.has_private_dirty = private_dirty.found;
+    s.has_shared_clean  = shared_clean.found;
+    s.has_shared_dirty  = shared_dirty.found;
+    s.has_uss           = private_clean.found && private_dirty.found;
     // Rss is the only field guaranteed non-zero for a live process; treat its
     // absence as "the file was not in the shape we expect".
-    s.valid = s.rss_bytes > 0;
+    s.valid = s.has_rss && s.rss_bytes > 0;
     return s;
+}
+
+MemSampleSummary summarize_mem_samples(const std::vector<MemSample> & samples) {
+    MemSampleSummary out;
+    out.total_samples = samples.size();
+    std::vector<size_t> rss, pss, uss, pss_anon, pss_file, anonymous;
+    std::vector<size_t> private_clean, private_dirty, shared_clean, shared_dirty;
+
+    auto add = [](SampledSizeSummary & dst, std::vector<size_t> & values,
+                  size_t bytes, bool available) {
+        if (!available) return;
+        ++dst.valid_samples;
+        dst.average_bytes += static_cast<double>(bytes);
+        dst.peak_bytes = std::max(dst.peak_bytes, bytes);
+        values.push_back(bytes);
+    };
+    for (const MemSample & sample : samples) {
+        if (!sample.valid) continue;
+        add(out.rss, rss, sample.rss_bytes, sample.has_rss);
+        add(out.pss, pss, sample.pss_bytes, sample.has_pss);
+        add(out.uss, uss, sample.uss_bytes, sample.has_uss);
+        add(out.pss_anon, pss_anon, sample.pss_anon_bytes, sample.has_pss_anon);
+        add(out.pss_file, pss_file, sample.pss_file_bytes, sample.has_pss_file);
+        add(out.anonymous, anonymous, sample.anonymous_bytes, sample.has_anonymous);
+        add(out.private_clean, private_clean, sample.private_clean_bytes,
+            sample.has_private_clean);
+        add(out.private_dirty, private_dirty, sample.private_dirty_bytes,
+            sample.has_private_dirty);
+        add(out.shared_clean, shared_clean, sample.shared_clean_bytes,
+            sample.has_shared_clean);
+        add(out.shared_dirty, shared_dirty, sample.shared_dirty_bytes,
+            sample.has_shared_dirty);
+    }
+    auto finish = [](SampledSizeSummary & summary, std::vector<size_t> & values) {
+        if (values.empty()) return;
+        summary.average_bytes /= static_cast<double>(values.size());
+        std::sort(values.begin(), values.end());
+        const auto lower = [&](double q) {
+            return values[static_cast<size_t>(q * static_cast<double>(values.size() - 1))];
+        };
+        summary.p50_bytes = lower(0.50);
+        summary.p75_bytes = lower(0.75);
+        summary.p90_bytes = lower(0.90);
+        summary.p95_bytes = lower(0.95);
+        summary.p99_bytes = lower(0.99);
+    };
+    finish(out.rss, rss); finish(out.pss, pss); finish(out.uss, uss);
+    finish(out.pss_anon, pss_anon); finish(out.pss_file, pss_file);
+    finish(out.anonymous, anonymous); finish(out.private_clean, private_clean);
+    finish(out.private_dirty, private_dirty); finish(out.shared_clean, shared_clean);
+    finish(out.shared_dirty, shared_dirty);
+    return out;
 }
 
 std::string read_proc_file(int pid, const char * name) {

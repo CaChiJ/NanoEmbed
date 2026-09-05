@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "result_schema_version": 2,
+  "started_at_utc": "2026-08-24T09:22:59.122087Z",
+  "latency_unit": "ms",
+  "scenarios": {
+    "single_long_f16_streaming": {
+      "corpus_group": "long_context",
+      "cache_state": "cold",
+      "selected_ids": [
+        "sha256:fa088c808bfe49b649647117592c9e9791f41872984cb187c6ba25a94579444a"
+      ],
+      "latency_ms": [
+        2657.604168
+      ],
+      "cold_workers": [
+        {
+          "selected_id": "sha256:fa088c808bfe49b649647117592c9e9791f41872984cb187c6ba25a94579444a",
+          "latency_ms": [
+            2657.604168
+          ]
+        }
+      ]
+    }
+  }
+}

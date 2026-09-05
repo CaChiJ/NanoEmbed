@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "result_schema_version": 2,
+  "started_at_utc": "2026-08-24T09:22:18.329926Z",
+  "latency_unit": "ms",
+  "scenarios": {
+    "single_short_harrier_q8_streaming": {
+      "corpus_group": "english_short",
+      "cache_state": "warm",
+      "selected_ids": [
+        "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec"
+      ],
+      "latency_ms": [
+        269.265875,
+        239.031417,
+        62.357167,
+        42.649417,
+        34.584209,
+        37.648833,
+        32.787208,
+        29.735,
+        19.854166,
+        19.432625
+      ]
+    },
+    "single_short_harrier_q8_streaming::multilingual_short": {
+      "corpus_group": "multilingual_short",
+      "cache_state": "warm",
+      "selected_ids": [
+        "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43"
+      ],
+      "latency_ms": [
+        13.115125,
+        12.97825,
+        12.939208,
+        12.994,
+        13.269375,
+        12.70275,
+        13.175292,
+        12.310375,
+        12.534417,
+        12.480541
+      ]
+    },
+    "single_short_harrier_q8_streaming::vocab_spread": {
+      "corpus_group": "vocab_spread",
+      "cache_state": "warm",
+      "selected_ids": [
+        "sha256:4811a411d71b12f363fb793c434b3354aae071b1c57adb5b1b2229057a173685"
+      ],
+      "latency_ms": [
+        36.606167,
+        35.084166,
+        33.564042,
+        38.556458,
+        46.444,
+        43.943292,
+        40.256125,
+        44.921083,
+        34.723958,
+        66.457541
+      ]
+    }
+  }
+}

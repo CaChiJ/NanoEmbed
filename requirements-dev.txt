@@ -11,5 +11,12 @@ numpy>=1.26.0
 datasets>=2.18.0
 pyyaml>=6.0          # for bench/scenarios.yaml
 
-# M3c (golden vectors) and beyond:
+# tools/dump_hf_activations.py runs the reference model to capture per-layer
+# activations, and pins float32 so the oracle differs from our graph by
+# implementation rather than precision.
+torch>=2.2.0
+
+# Golden vectors (tools/dump_golden.py). Use requirements-golden.lock rather
+# than this lower-bound development environment when regenerating committed
+# golden fixtures; the generator rejects version drift.
 sentence-transformers>=2.7.0

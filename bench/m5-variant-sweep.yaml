@@ -1,0 +1,53 @@
+# 세 어텐션 조립 방식을 같은 환경에서 비교하기 위한 배치 스윕.
+#
+# Docker 재시작으로 실행 환경이 바뀌었으므로 이전 측정값과 비교하지 않는다.
+# ① 마스크 ② 문장별 어텐션 ③ 패킹을 연속으로 재고, 배치 1이 세 방식에서
+# 일치하는지로 환경 안정성을 확인한다 (배치 1은 어느 방식에서도 경로가 같다).
+sweep_base: &sweep_base
+  model: models/harrier-270m-q8_0.gguf
+  corpus_group: mixed_short
+  samples: 132
+  normalize: true
+  threads: 4
+  streaming: true
+  cache_state: warm
+  warmup: 1
+  iter: 5
+  partition: layer
+  milestones: [M5-VARIANT]
+
+scenarios:
+  - <<: *sweep_base
+    name: m5_var_b001
+    batch_size: 1
+    max_batch: 1
+
+  - <<: *sweep_base
+    name: m5_var_b002
+    batch_size: 2
+    max_batch: 2
+
+  - <<: *sweep_base
+    name: m5_var_b005
+    batch_size: 5
+    max_batch: 5
+
+  - <<: *sweep_base
+    name: m5_var_b010
+    batch_size: 10
+    max_batch: 10
+
+  - <<: *sweep_base
+    name: m5_var_b016
+    batch_size: 16
+    max_batch: 16
+
+  - <<: *sweep_base
+    name: m5_var_b032
+    batch_size: 32
+    max_batch: 32
+
+  - <<: *sweep_base
+    name: m5_var_b064
+    batch_size: 64
+    max_batch: 64

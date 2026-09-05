@@ -1,0 +1,867 @@
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-off-bert-short.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-off-eager-bert-short.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-off-bert-short.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-off-eager-bert-short.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_f16 requested settings: {'warmup': 5, 'iter': 50, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 3, 'selection_seed': 0} -> {'warmup': 5, 'iter': 50, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 3, 'selection_seed': 0}
+  - scenario single_short_f16 requested execution mode: None -> 'eager'
+  - scenario single_short_f16 resolved execution mode: None -> 'eager'
+  - scenario single_short_f16 execution-mode contract version: None -> 1
+  - scenario single_short_f16 strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_f16             rss_peak_lifetime_mb                             79          79.07      +0.1%
+single_short_f16             rss_peak_window_mb                               79          79.07      +0.1%
+single_short_f16             rss_baseline_mb                                  79          79.07      +0.1%
+single_short_f16             rss_avg_mb                                        —              —          —
+single_short_f16             pss_avg_mb                                        —              —          —
+single_short_f16             pss_peak_sampled_mb                               —              —          —
+single_short_f16             uss_avg_mb                                        —              —          —
+single_short_f16             uss_peak_sampled_mb                               —              —          —
+single_short_f16             latency_p50_ms                                34.86          35.96      +3.2%
+single_short_f16             latency_p90_ms                                49.53           50.2      +1.4%
+single_short_f16             latency_p99_ms                                63.34          61.24      -3.3%
+single_short_f16             single_request_items_per_sec                  24.54          24.41      -0.5%
+single_short_f16             page_faults_major                                 0              0          —
+single_short_f16             page_faults_minor                                 0              0          —
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-off-bert-long.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-off-eager-bert-long.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-off-bert-long.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-off-eager-bert-long.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_long_f16 requested settings: {'warmup': 2, 'iter': 10, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'long_context', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 2, 'iter': 10, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'long_context', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_long_f16 requested execution mode: None -> 'eager'
+  - scenario single_long_f16 resolved execution mode: None -> 'eager'
+  - scenario single_long_f16 execution-mode contract version: None -> 1
+  - scenario single_long_f16 strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_long_f16              rss_peak_lifetime_mb                          92.11          91.94      -0.2%
+single_long_f16              rss_peak_window_mb                            92.11          91.94      -0.2%
+single_long_f16              rss_baseline_mb                               92.11          91.94      -0.2%
+single_long_f16              rss_avg_mb                                        —              —          —
+single_long_f16              pss_avg_mb                                        —              —          —
+single_long_f16              pss_peak_sampled_mb                               —              —          —
+single_long_f16              uss_avg_mb                                        —              —          —
+single_long_f16              uss_peak_sampled_mb                               —              —          —
+single_long_f16              latency_p50_ms                                 2531           2562      +1.2%
+single_long_f16              latency_p90_ms                                 2553           2580      +1.1%
+single_long_f16              latency_p99_ms                                 2553           2580      +1.1%
+single_long_f16              single_request_items_per_sec                 0.3937         0.3902      -0.9%
+single_long_f16              page_faults_major                                 0              0          —
+single_long_f16              page_faults_minor                                 0              0          —
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-off-harrier-f32.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-off-eager-harrier-f32.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-off-harrier-f32.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-off-eager-harrier-f32.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_harrier_f32 requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32 requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32 resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32 execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32 strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_f32::multilingual_short requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32::multilingual_short requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::multilingual_short resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::multilingual_short execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32::multilingual_short strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_f32::vocab_spread requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32::vocab_spread requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::vocab_spread resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::vocab_spread execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32::vocab_spread strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_harrier_f32     rss_peak_lifetime_mb                           1110           1112      +0.1%
+single_short_harrier_f32     rss_peak_window_mb                             1110           1112      +0.1%
+single_short_harrier_f32     rss_baseline_mb                                1110           1112      +0.1%
+single_short_harrier_f32     rss_avg_mb                                        —              —          —
+single_short_harrier_f32     pss_avg_mb                                        —              —          —
+single_short_harrier_f32     pss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32     uss_avg_mb                                        —              —          —
+single_short_harrier_f32     uss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32     latency_p50_ms                                302.7          310.7      +2.6%
+single_short_harrier_f32     latency_p90_ms                                306.6          318.7      +3.9%
+single_short_harrier_f32     latency_p99_ms                                306.6          318.7      +3.9%
+single_short_harrier_f32     single_request_items_per_sec                  3.288          3.187      -3.1%
+single_short_harrier_f32     page_faults_major                                 0              0          —
+single_short_harrier_f32     page_faults_minor                                 0              0          —
+single_short_harrier_f32::multilingual_short rss_peak_lifetime_mb                           1110           1114      +0.3%
+single_short_harrier_f32::multilingual_short rss_peak_window_mb                             1110           1114      +0.3%
+single_short_harrier_f32::multilingual_short rss_baseline_mb                                1110           1114      +0.3%
+single_short_harrier_f32::multilingual_short rss_avg_mb                                        —              —          —
+single_short_harrier_f32::multilingual_short pss_avg_mb                                        —              —          —
+single_short_harrier_f32::multilingual_short pss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32::multilingual_short uss_avg_mb                                        —              —          —
+single_short_harrier_f32::multilingual_short uss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32::multilingual_short latency_p50_ms                                  151          151.8      +0.5%
+single_short_harrier_f32::multilingual_short latency_p90_ms                                154.4          154.4      -0.0%
+single_short_harrier_f32::multilingual_short latency_p99_ms                                154.4          154.4      -0.0%
+single_short_harrier_f32::multilingual_short single_request_items_per_sec                  6.585          6.587      +0.0%
+single_short_harrier_f32::multilingual_short page_faults_major                                 0              0          —
+single_short_harrier_f32::multilingual_short page_faults_minor                                 0              0          —
+single_short_harrier_f32::vocab_spread rss_peak_lifetime_mb                           1110           1112      +0.1%
+single_short_harrier_f32::vocab_spread rss_peak_window_mb                             1110           1112      +0.1%
+single_short_harrier_f32::vocab_spread rss_baseline_mb                                1110           1112      +0.1%
+single_short_harrier_f32::vocab_spread rss_avg_mb                                        —              —          —
+single_short_harrier_f32::vocab_spread pss_avg_mb                                        —              —          —
+single_short_harrier_f32::vocab_spread pss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32::vocab_spread uss_avg_mb                                        —              —          —
+single_short_harrier_f32::vocab_spread uss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32::vocab_spread latency_p50_ms                                603.8          617.7      +2.3%
+single_short_harrier_f32::vocab_spread latency_p90_ms                                612.2          665.3      +8.7%
+single_short_harrier_f32::vocab_spread latency_p99_ms                                612.2          665.3      +8.7%
+single_short_harrier_f32::vocab_spread single_request_items_per_sec                  1.648          1.543      -6.4%
+single_short_harrier_f32::vocab_spread page_faults_major                                 0              0          —
+single_short_harrier_f32::vocab_spread page_faults_minor                                 0              4          —
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-off-harrier-q8.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-off-eager-harrier-q8.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-off-harrier-q8.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-off-eager-harrier-q8.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_harrier_q8 requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8 requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8 resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8 execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8 strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_q8::multilingual_short requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8::multilingual_short requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::multilingual_short resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::multilingual_short execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8::multilingual_short strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_q8::vocab_spread requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8::vocab_spread requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::vocab_spread resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::vocab_spread execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8::vocab_spread strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_harrier_q8      rss_peak_lifetime_mb                          359.6          360.8      +0.3%
+single_short_harrier_q8      rss_peak_window_mb                            359.6          360.8      +0.3%
+single_short_harrier_q8      rss_baseline_mb                               359.6          360.8      +0.3%
+single_short_harrier_q8      rss_avg_mb                                        —              —          —
+single_short_harrier_q8      pss_avg_mb                                        —              —          —
+single_short_harrier_q8      pss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8      uss_avg_mb                                        —              —          —
+single_short_harrier_q8      uss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8      latency_p50_ms                                12.27          13.62     +11.0%
+single_short_harrier_q8      latency_p90_ms                                12.29          14.68     +19.5%
+single_short_harrier_q8      latency_p99_ms                                12.29          14.68     +19.5%
+single_short_harrier_q8      single_request_items_per_sec                  81.49          72.73     -10.8%
+single_short_harrier_q8      page_faults_major                                 0              0          —
+single_short_harrier_q8      page_faults_minor                                 0              0          —
+single_short_harrier_q8::multilingual_short rss_peak_lifetime_mb                          359.3            363      +1.0%
+single_short_harrier_q8::multilingual_short rss_peak_window_mb                            359.3            363      +1.0%
+single_short_harrier_q8::multilingual_short rss_baseline_mb                               359.3            363      +1.0%
+single_short_harrier_q8::multilingual_short rss_avg_mb                                        —              —          —
+single_short_harrier_q8::multilingual_short pss_avg_mb                                        —              —          —
+single_short_harrier_q8::multilingual_short pss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8::multilingual_short uss_avg_mb                                        —              —          —
+single_short_harrier_q8::multilingual_short uss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8::multilingual_short latency_p50_ms                                7.018          7.609      +8.4%
+single_short_harrier_q8::multilingual_short latency_p90_ms                                 7.04          9.829     +39.6%
+single_short_harrier_q8::multilingual_short latency_p99_ms                                 7.04          9.829     +39.6%
+single_short_harrier_q8::multilingual_short single_request_items_per_sec                  142.6          113.4     -20.4%
+single_short_harrier_q8::multilingual_short page_faults_major                                 0              0          —
+single_short_harrier_q8::multilingual_short page_faults_minor                                 0              0          —
+single_short_harrier_q8::vocab_spread rss_peak_lifetime_mb                          359.4          360.8      +0.4%
+single_short_harrier_q8::vocab_spread rss_peak_window_mb                            359.4          360.8      +0.4%
+single_short_harrier_q8::vocab_spread rss_baseline_mb                               359.4          360.8      +0.4%
+single_short_harrier_q8::vocab_spread rss_avg_mb                                        —              —          —
+single_short_harrier_q8::vocab_spread pss_avg_mb                                        —              —          —
+single_short_harrier_q8::vocab_spread pss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8::vocab_spread uss_avg_mb                                        —              —          —
+single_short_harrier_q8::vocab_spread uss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8::vocab_spread latency_p50_ms                                26.64          26.45      -0.7%
+single_short_harrier_q8::vocab_spread latency_p90_ms                                27.06          28.11      +3.9%
+single_short_harrier_q8::vocab_spread latency_p99_ms                                27.06          28.11      +3.9%
+single_short_harrier_q8::vocab_spread single_request_items_per_sec                  36.43          37.43      +2.7%
+single_short_harrier_q8::vocab_spread page_faults_major                                 0              0          —
+single_short_harrier_q8::vocab_spread page_faults_minor                                 0              0          —
+
+REGRESSIONS:
+  - single_short_harrier_q8 latency_p90_ms: 12.288 -> 14.681 (+19.5%, > ±+15.0%)
+  - single_short_harrier_q8 latency_p99_ms: 12.288 -> 14.681 (+19.5%, > ±+15.0%)
+  - single_short_harrier_q8::multilingual_short latency_p90_ms: 7.040 -> 9.829 (+39.6%, > ±+15.0%)
+  - single_short_harrier_q8::multilingual_short latency_p99_ms: 7.040 -> 9.829 (+39.6%, > ±+15.0%)
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-off-bert-short.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-off-eager-bert-short.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-off-bert-short.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-off-eager-bert-short.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_f16 requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_f16 requested execution mode: None -> 'eager'
+  - scenario single_short_f16 resolved execution mode: None -> 'eager'
+  - scenario single_short_f16 execution-mode contract version: None -> 1
+  - scenario single_short_f16 strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_f16             rss_peak_lifetime_mb                          78.99          78.87      -0.2%
+single_short_f16             rss_peak_window_mb                            78.99          78.87      -0.2%
+single_short_f16             rss_baseline_mb                               3.512          3.625      +3.2%
+single_short_f16             rss_avg_mb                                        —              —          —
+single_short_f16             pss_avg_mb                                        —              —          —
+single_short_f16             pss_peak_sampled_mb                               —              —          —
+single_short_f16             uss_avg_mb                                        —              —          —
+single_short_f16             uss_peak_sampled_mb                               —              —          —
+single_short_f16             latency_p50_ms                                 35.9          37.62      +4.8%
+single_short_f16             latency_p90_ms                                 35.9          37.62      +4.8%
+single_short_f16             latency_p99_ms                                 35.9          37.62      +4.8%
+single_short_f16             single_request_items_per_sec                  11.91          9.464     -20.5%
+single_short_f16             page_faults_major                                11             11      +0.0%
+single_short_f16             page_faults_minor                              3627           3973      +9.5%
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-off-bert-long.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-off-eager-bert-long.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-off-bert-long.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-off-eager-bert-long.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_long_f16 requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'long_context', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'long_context', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_long_f16 requested execution mode: None -> 'eager'
+  - scenario single_long_f16 resolved execution mode: None -> 'eager'
+  - scenario single_long_f16 execution-mode contract version: None -> 1
+  - scenario single_long_f16 strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_long_f16              rss_peak_lifetime_mb                          91.86          92.25      +0.4%
+single_long_f16              rss_peak_window_mb                            91.86          92.25      +0.4%
+single_long_f16              rss_baseline_mb                               3.512          3.609      +2.8%
+single_long_f16              rss_avg_mb                                        —              —          —
+single_long_f16              pss_avg_mb                                        —              —          —
+single_long_f16              pss_peak_sampled_mb                               —              —          —
+single_long_f16              uss_avg_mb                                        —              —          —
+single_long_f16              uss_peak_sampled_mb                               —              —          —
+single_long_f16              latency_p50_ms                                 2534           2555      +0.8%
+single_long_f16              latency_p90_ms                                 2534           2555      +0.8%
+single_long_f16              latency_p99_ms                                 2534           2555      +0.8%
+single_long_f16              single_request_items_per_sec                 0.3842          0.384      -0.0%
+single_long_f16              page_faults_major                                10             11     +10.0%
+single_long_f16              page_faults_minor                              4808           5448     +13.3%
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-off-harrier-f32.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-off-eager-harrier-f32.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-off-harrier-f32.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-off-eager-harrier-f32.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_harrier_f32 requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32 requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32 resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32 execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32 strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_f32::multilingual_short requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32::multilingual_short requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::multilingual_short resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::multilingual_short execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32::multilingual_short strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_f32::vocab_spread requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32::vocab_spread requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::vocab_spread resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::vocab_spread execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32::vocab_spread strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_harrier_f32     rss_peak_lifetime_mb                           1110           1112      +0.2%
+single_short_harrier_f32     rss_peak_window_mb                             1110           1112      +0.2%
+single_short_harrier_f32     rss_baseline_mb                                3.52          3.621      +2.9%
+single_short_harrier_f32     rss_avg_mb                                        —              —          —
+single_short_harrier_f32     pss_avg_mb                                        —              —          —
+single_short_harrier_f32     pss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32     uss_avg_mb                                        —              —          —
+single_short_harrier_f32     uss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32     latency_p50_ms                                307.5          315.8      +2.7%
+single_short_harrier_f32     latency_p90_ms                                307.5          315.8      +2.7%
+single_short_harrier_f32     latency_p99_ms                                307.5          315.8      +2.7%
+single_short_harrier_f32     single_request_items_per_sec                 0.6321         0.5945      -5.9%
+single_short_harrier_f32     page_faults_major                                11             12      +9.1%
+single_short_harrier_f32     page_faults_minor                         1.412e+04       1.85e+04     +31.0%
+single_short_harrier_f32::multilingual_short rss_peak_lifetime_mb                           1110           1112      +0.2%
+single_short_harrier_f32::multilingual_short rss_peak_window_mb                             1110           1112      +0.2%
+single_short_harrier_f32::multilingual_short rss_baseline_mb                               3.516          3.625      +3.1%
+single_short_harrier_f32::multilingual_short rss_avg_mb                                        —              —          —
+single_short_harrier_f32::multilingual_short pss_avg_mb                                        —              —          —
+single_short_harrier_f32::multilingual_short pss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32::multilingual_short uss_avg_mb                                        —              —          —
+single_short_harrier_f32::multilingual_short uss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32::multilingual_short latency_p50_ms                                152.5          158.5      +4.0%
+single_short_harrier_f32::multilingual_short latency_p90_ms                                152.5          158.5      +4.0%
+single_short_harrier_f32::multilingual_short latency_p99_ms                                152.5          158.5      +4.0%
+single_short_harrier_f32::multilingual_short single_request_items_per_sec                 0.9467         0.6247     -34.0%
+single_short_harrier_f32::multilingual_short page_faults_major                                11             12      +9.1%
+single_short_harrier_f32::multilingual_short page_faults_minor                         1.359e+04       1.85e+04     +36.1%
+single_short_harrier_f32::vocab_spread rss_peak_lifetime_mb                           1110           1112      +0.1%
+single_short_harrier_f32::vocab_spread rss_peak_window_mb                             1110           1112      +0.1%
+single_short_harrier_f32::vocab_spread rss_baseline_mb                                3.52          3.625      +3.0%
+single_short_harrier_f32::vocab_spread rss_avg_mb                                        —              —          —
+single_short_harrier_f32::vocab_spread pss_avg_mb                                        —              —          —
+single_short_harrier_f32::vocab_spread pss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32::vocab_spread uss_avg_mb                                        —              —          —
+single_short_harrier_f32::vocab_spread uss_peak_sampled_mb                               —              —          —
+single_short_harrier_f32::vocab_spread latency_p50_ms                                609.5            612      +0.4%
+single_short_harrier_f32::vocab_spread latency_p90_ms                                609.5            612      +0.4%
+single_short_harrier_f32::vocab_spread latency_p99_ms                                609.5            612      +0.4%
+single_short_harrier_f32::vocab_spread single_request_items_per_sec                 0.6843         0.4202     -38.6%
+single_short_harrier_f32::vocab_spread page_faults_major                                13             10     -23.1%
+single_short_harrier_f32::vocab_spread page_faults_minor                         1.464e+04      1.646e+04     +12.5%
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-off-harrier-q8.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-off-eager-harrier-q8.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-off-harrier-q8.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-off-eager-harrier-q8.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_harrier_q8 requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8 requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8 resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8 execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8 strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_q8::multilingual_short requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8::multilingual_short requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::multilingual_short resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::multilingual_short execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8::multilingual_short strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_q8::vocab_spread requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': False, 'memory_profile_interval_ms': 25, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8::vocab_spread requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::vocab_spread resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::vocab_spread execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8::vocab_spread strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_harrier_q8      rss_peak_lifetime_mb                          361.6          361.1      -0.1%
+single_short_harrier_q8      rss_peak_window_mb                            361.6          361.1      -0.1%
+single_short_harrier_q8      rss_baseline_mb                                3.52          3.617      +2.8%
+single_short_harrier_q8      rss_avg_mb                                        —              —          —
+single_short_harrier_q8      pss_avg_mb                                        —              —          —
+single_short_harrier_q8      pss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8      uss_avg_mb                                        —              —          —
+single_short_harrier_q8      uss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8      latency_p50_ms                                17.47          15.28     -12.5%
+single_short_harrier_q8      latency_p90_ms                                17.47          15.28     -12.5%
+single_short_harrier_q8      latency_p99_ms                                17.47          15.28     -12.5%
+single_short_harrier_q8      single_request_items_per_sec                  1.547          1.451      -6.2%
+single_short_harrier_q8      page_faults_major                                13             14      +7.7%
+single_short_harrier_q8      page_faults_minor                         1.351e+04      1.893e+04     +40.1%
+single_short_harrier_q8::multilingual_short rss_peak_lifetime_mb                          359.4            361      +0.4%
+single_short_harrier_q8::multilingual_short rss_peak_window_mb                            359.4            361      +0.4%
+single_short_harrier_q8::multilingual_short rss_baseline_mb                                3.52          3.613      +2.7%
+single_short_harrier_q8::multilingual_short rss_avg_mb                                        —              —          —
+single_short_harrier_q8::multilingual_short pss_avg_mb                                        —              —          —
+single_short_harrier_q8::multilingual_short pss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8::multilingual_short uss_avg_mb                                        —              —          —
+single_short_harrier_q8::multilingual_short uss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8::multilingual_short latency_p50_ms                                11.02           14.8     +34.3%
+single_short_harrier_q8::multilingual_short latency_p90_ms                                11.02           14.8     +34.3%
+single_short_harrier_q8::multilingual_short latency_p99_ms                                11.02           14.8     +34.3%
+single_short_harrier_q8::multilingual_short single_request_items_per_sec                  1.726          1.492     -13.6%
+single_short_harrier_q8::multilingual_short page_faults_major                                13             15     +15.4%
+single_short_harrier_q8::multilingual_short page_faults_minor                           1.3e+04      1.794e+04     +38.1%
+single_short_harrier_q8::vocab_spread rss_peak_lifetime_mb                          359.5            361      +0.4%
+single_short_harrier_q8::vocab_spread rss_peak_window_mb                            359.5            361      +0.4%
+single_short_harrier_q8::vocab_spread rss_baseline_mb                               3.516          3.625      +3.1%
+single_short_harrier_q8::vocab_spread rss_avg_mb                                        —              —          —
+single_short_harrier_q8::vocab_spread pss_avg_mb                                        —              —          —
+single_short_harrier_q8::vocab_spread pss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8::vocab_spread uss_avg_mb                                        —              —          —
+single_short_harrier_q8::vocab_spread uss_peak_sampled_mb                               —              —          —
+single_short_harrier_q8::vocab_spread latency_p50_ms                                47.66          38.47     -19.3%
+single_short_harrier_q8::vocab_spread latency_p90_ms                                47.66          38.47     -19.3%
+single_short_harrier_q8::vocab_spread latency_p99_ms                                47.66          38.47     -19.3%
+single_short_harrier_q8::vocab_spread single_request_items_per_sec                  1.607          1.406     -12.5%
+single_short_harrier_q8::vocab_spread page_faults_major                                14             15      +7.1%
+single_short_harrier_q8::vocab_spread page_faults_minor                         1.403e+04      1.844e+04     +31.4%
+
+IMPROVEMENTS (beyond tolerance — confirm they are real, then commit a new baseline):
+  - single_short_harrier_q8::vocab_spread latency_p50_ms: 47.661 -> 38.469 (-19.3%, > ±+15.0%)
+  - single_short_harrier_q8::vocab_spread latency_p90_ms: 47.661 -> 38.469 (-19.3%, > ±+15.0%)
+  - single_short_harrier_q8::vocab_spread latency_p99_ms: 47.661 -> 38.469 (-19.3%, > ±+15.0%)
+
+REGRESSIONS:
+  - single_short_harrier_q8::multilingual_short latency_p50_ms: 11.021 -> 14.803 (+34.3%, > ±+15.0%)
+  - single_short_harrier_q8::multilingual_short latency_p90_ms: 11.021 -> 14.803 (+34.3%, > ±+15.0%)
+  - single_short_harrier_q8::multilingual_short latency_p99_ms: 11.021 -> 14.803 (+34.3%, > ±+15.0%)
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-on-bert-short.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-bert-short.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-on-bert-short.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-bert-short.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_f16 requested settings: {'warmup': 5, 'iter': 50, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 50, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_f16 requested execution mode: None -> 'eager'
+  - scenario single_short_f16 resolved execution mode: None -> 'eager'
+  - scenario single_short_f16 execution-mode contract version: None -> 1
+  - scenario single_short_f16 strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_f16             rss_peak_lifetime_mb                          79.02          79.12      +0.1%
+single_short_f16             rss_peak_window_mb                            79.02          79.12      +0.1%
+single_short_f16             rss_baseline_mb                                79.3          79.35      +0.1%
+single_short_f16             rss_avg_mb                                     79.3          79.35      +0.1%
+single_short_f16             pss_avg_mb                                    77.18          77.13      -0.1%
+single_short_f16             pss_peak_sampled_mb                           77.18          77.13      -0.1%
+single_short_f16             uss_avg_mb                                    75.71          75.71      +0.0%
+single_short_f16             uss_peak_sampled_mb                           75.71          75.71      +0.0%
+single_short_f16             latency_p50_ms                                34.41          35.37      +2.8%
+single_short_f16             latency_p90_ms                                35.67          38.16      +7.0%
+single_short_f16             latency_p99_ms                                45.83          57.77     +26.1%
+single_short_f16             single_request_items_per_sec                  28.33          26.01      -8.2%
+single_short_f16             page_faults_major                                 0              0          —
+single_short_f16             page_faults_minor                                 1              1      +0.0%
+
+REGRESSIONS:
+  - single_short_f16 latency_p99_ms: 45.828 -> 57.770 (+26.1%, > ±+15.0%)
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-on-bert-long.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-bert-long.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-on-bert-long.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-bert-long.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_long_f16 requested settings: {'warmup': 2, 'iter': 10, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'long_context', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 2, 'iter': 10, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'long_context', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_long_f16 requested execution mode: None -> 'eager'
+  - scenario single_long_f16 resolved execution mode: None -> 'eager'
+  - scenario single_long_f16 execution-mode contract version: None -> 1
+  - scenario single_long_f16 strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_long_f16              rss_peak_lifetime_mb                          91.96          91.93      -0.0%
+single_long_f16              rss_peak_window_mb                            91.96          91.93      -0.0%
+single_long_f16              rss_baseline_mb                                92.5           92.6      +0.1%
+single_long_f16              rss_avg_mb                                     92.5           92.6      +0.1%
+single_long_f16              pss_avg_mb                                    90.39           90.4      +0.0%
+single_long_f16              pss_peak_sampled_mb                           90.39           90.4      +0.0%
+single_long_f16              uss_avg_mb                                    88.91          88.98      +0.1%
+single_long_f16              uss_peak_sampled_mb                           88.91          88.98      +0.1%
+single_long_f16              latency_p50_ms                                 2557           2548      -0.3%
+single_long_f16              latency_p90_ms                                 2790           2647      -5.1%
+single_long_f16              latency_p99_ms                                 2790           2647      -5.1%
+single_long_f16              single_request_items_per_sec                 0.3813         0.3865      +1.4%
+single_long_f16              page_faults_major                                 0              0          —
+single_long_f16              page_faults_minor                                 0              0          —
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-on-harrier-f32.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-harrier-f32.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-on-harrier-f32.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-harrier-f32.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_harrier_f32 requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32 requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32 resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32 execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32 strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_f32::multilingual_short requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32::multilingual_short requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::multilingual_short resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::multilingual_short execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32::multilingual_short strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_f32::vocab_spread requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32::vocab_spread requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::vocab_spread resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::vocab_spread execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32::vocab_spread strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_harrier_f32     rss_peak_lifetime_mb                           1110           1118      +0.7%
+single_short_harrier_f32     rss_peak_window_mb                             1110           1118      +0.7%
+single_short_harrier_f32     rss_baseline_mb                                1110           1118      +0.7%
+single_short_harrier_f32     rss_avg_mb                                     1110           1118      +0.7%
+single_short_harrier_f32     pss_avg_mb                                     1108           1116      +0.7%
+single_short_harrier_f32     pss_peak_sampled_mb                            1108           1116      +0.7%
+single_short_harrier_f32     uss_avg_mb                                     1107           1114      +0.7%
+single_short_harrier_f32     uss_peak_sampled_mb                            1107           1114      +0.7%
+single_short_harrier_f32     latency_p50_ms                                306.4          313.3      +2.3%
+single_short_harrier_f32     latency_p90_ms                                318.7          579.2     +81.8%
+single_short_harrier_f32     latency_p99_ms                                318.7          579.2     +81.8%
+single_short_harrier_f32     single_request_items_per_sec                  3.146          2.588     -17.7%
+single_short_harrier_f32     page_faults_major                                 0              0          —
+single_short_harrier_f32     page_faults_minor                                 0              0          —
+single_short_harrier_f32::multilingual_short rss_peak_lifetime_mb                           1110           1112      +0.1%
+single_short_harrier_f32::multilingual_short rss_peak_window_mb                             1110           1112      +0.1%
+single_short_harrier_f32::multilingual_short rss_baseline_mb                                1111           1112      +0.1%
+single_short_harrier_f32::multilingual_short rss_avg_mb                                     1111           1112      +0.1%
+single_short_harrier_f32::multilingual_short pss_avg_mb                                     1108           1110      +0.1%
+single_short_harrier_f32::multilingual_short pss_peak_sampled_mb                            1108           1110      +0.1%
+single_short_harrier_f32::multilingual_short uss_avg_mb                                     1107           1108      +0.1%
+single_short_harrier_f32::multilingual_short uss_peak_sampled_mb                            1107           1108      +0.1%
+single_short_harrier_f32::multilingual_short latency_p50_ms                                152.9          157.9      +3.3%
+single_short_harrier_f32::multilingual_short latency_p90_ms                                160.5          163.4      +1.8%
+single_short_harrier_f32::multilingual_short latency_p99_ms                                160.5          163.4      +1.8%
+single_short_harrier_f32::multilingual_short single_request_items_per_sec                  6.387          6.122      -4.2%
+single_short_harrier_f32::multilingual_short page_faults_major                                 0              0          —
+single_short_harrier_f32::multilingual_short page_faults_minor                                 0              0          —
+single_short_harrier_f32::vocab_spread rss_peak_lifetime_mb                           1112           1112      -0.0%
+single_short_harrier_f32::vocab_spread rss_peak_window_mb                             1112           1112      -0.0%
+single_short_harrier_f32::vocab_spread rss_baseline_mb                                1113           1112      -0.0%
+single_short_harrier_f32::vocab_spread rss_avg_mb                                     1113           1112      -0.0%
+single_short_harrier_f32::vocab_spread pss_avg_mb                                     1110           1110      -0.0%
+single_short_harrier_f32::vocab_spread pss_peak_sampled_mb                            1110           1110      -0.0%
+single_short_harrier_f32::vocab_spread uss_avg_mb                                     1109           1109      -0.0%
+single_short_harrier_f32::vocab_spread uss_peak_sampled_mb                            1109           1109      -0.0%
+single_short_harrier_f32::vocab_spread latency_p50_ms                                622.3          610.3      -1.9%
+single_short_harrier_f32::vocab_spread latency_p90_ms                                650.9          749.9     +15.2%
+single_short_harrier_f32::vocab_spread latency_p99_ms                                650.9          749.9     +15.2%
+single_short_harrier_f32::vocab_spread single_request_items_per_sec                   1.58          1.562      -1.2%
+single_short_harrier_f32::vocab_spread page_faults_major                                 0              0          —
+single_short_harrier_f32::vocab_spread page_faults_minor                                 0              0          —
+
+REGRESSIONS:
+  - single_short_harrier_f32 latency_p90_ms: 318.658 -> 579.243 (+81.8%, > ±+15.0%)
+  - single_short_harrier_f32 latency_p99_ms: 318.658 -> 579.243 (+81.8%, > ±+15.0%)
+  - single_short_harrier_f32::vocab_spread latency_p90_ms: 650.850 -> 749.925 (+15.2%, > ±+15.0%)
+  - single_short_harrier_f32::vocab_spread latency_p99_ms: 650.850 -> 749.925 (+15.2%, > ±+15.0%)
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-on-harrier-q8.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-harrier-q8.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-warm-profile-on-harrier-q8.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-warm-profile-on-eager-harrier-q8.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_harrier_q8 requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8 requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8 resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8 execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8 strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_q8::multilingual_short requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8::multilingual_short requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::multilingual_short resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::multilingual_short execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8::multilingual_short strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_q8::vocab_spread requested settings: {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 5, 'iter': 10, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'warm', 'strict_cold': False, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8::vocab_spread requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::vocab_spread resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::vocab_spread execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8::vocab_spread strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_harrier_q8      rss_peak_lifetime_mb                          361.3          362.8      +0.4%
+single_short_harrier_q8      rss_peak_window_mb                            361.3          362.8      +0.4%
+single_short_harrier_q8      rss_baseline_mb                               361.7          363.3      +0.5%
+single_short_harrier_q8      rss_avg_mb                                    361.7          363.3      +0.5%
+single_short_harrier_q8      pss_avg_mb                                    359.5          361.1      +0.4%
+single_short_harrier_q8      pss_peak_sampled_mb                           359.5          361.1      +0.4%
+single_short_harrier_q8      uss_avg_mb                                    358.1          359.7      +0.4%
+single_short_harrier_q8      uss_peak_sampled_mb                           358.1          359.7      +0.4%
+single_short_harrier_q8      latency_p50_ms                                12.31          16.23     +31.9%
+single_short_harrier_q8      latency_p90_ms                                12.55          28.12    +124.1%
+single_short_harrier_q8      latency_p99_ms                                12.55          28.12    +124.1%
+single_short_harrier_q8      single_request_items_per_sec                  80.86          53.61     -33.7%
+single_short_harrier_q8      page_faults_major                                 0              0          —
+single_short_harrier_q8      page_faults_minor                                 0              0          —
+single_short_harrier_q8::multilingual_short rss_peak_lifetime_mb                          359.5            361      +0.4%
+single_short_harrier_q8::multilingual_short rss_peak_window_mb                            359.5            361      +0.4%
+single_short_harrier_q8::multilingual_short rss_baseline_mb                               359.7          361.3      +0.5%
+single_short_harrier_q8::multilingual_short rss_avg_mb                                    359.7          361.3      +0.5%
+single_short_harrier_q8::multilingual_short pss_avg_mb                                    357.6          359.1      +0.4%
+single_short_harrier_q8::multilingual_short pss_peak_sampled_mb                           357.6          359.1      +0.4%
+single_short_harrier_q8::multilingual_short uss_avg_mb                                    356.1          357.7      +0.4%
+single_short_harrier_q8::multilingual_short uss_peak_sampled_mb                           356.1          357.7      +0.4%
+single_short_harrier_q8::multilingual_short latency_p50_ms                                7.211          7.455      +3.4%
+single_short_harrier_q8::multilingual_short latency_p90_ms                                7.336          11.03     +50.4%
+single_short_harrier_q8::multilingual_short latency_p99_ms                                7.336          11.03     +50.4%
+single_short_harrier_q8::multilingual_short single_request_items_per_sec                  137.6          118.4     -14.0%
+single_short_harrier_q8::multilingual_short page_faults_major                                 0              0          —
+single_short_harrier_q8::multilingual_short page_faults_minor                                 0              0          —
+single_short_harrier_q8::vocab_spread rss_peak_lifetime_mb                          363.6            363      -0.2%
+single_short_harrier_q8::vocab_spread rss_peak_window_mb                            363.6            363      -0.2%
+single_short_harrier_q8::vocab_spread rss_baseline_mb                               363.7          363.3      -0.1%
+single_short_harrier_q8::vocab_spread rss_avg_mb                                    363.7          363.3      -0.1%
+single_short_harrier_q8::vocab_spread pss_avg_mb                                    361.6          361.1      -0.1%
+single_short_harrier_q8::vocab_spread pss_peak_sampled_mb                           361.6          361.1      -0.1%
+single_short_harrier_q8::vocab_spread uss_avg_mb                                    360.1          359.7      -0.1%
+single_short_harrier_q8::vocab_spread uss_peak_sampled_mb                           360.1          359.7      -0.1%
+single_short_harrier_q8::vocab_spread latency_p50_ms                                26.71           26.3      -1.5%
+single_short_harrier_q8::vocab_spread latency_p90_ms                                27.95          26.47      -5.3%
+single_short_harrier_q8::vocab_spread latency_p99_ms                                27.95          26.47      -5.3%
+single_short_harrier_q8::vocab_spread single_request_items_per_sec                  35.42          37.95      +7.2%
+single_short_harrier_q8::vocab_spread page_faults_major                                 0              0          —
+single_short_harrier_q8::vocab_spread page_faults_minor                                 0              0          —
+
+REGRESSIONS:
+  - single_short_harrier_q8 latency_p50_ms: 12.307 -> 16.232 (+31.9%, > ±+15.0%)
+  - single_short_harrier_q8 latency_p90_ms: 12.548 -> 28.123 (+124.1%, > ±+15.0%)
+  - single_short_harrier_q8 latency_p99_ms: 12.548 -> 28.123 (+124.1%, > ±+15.0%)
+  - single_short_harrier_q8::multilingual_short latency_p90_ms: 7.336 -> 11.029 (+50.4%, > ±+15.0%)
+  - single_short_harrier_q8::multilingual_short latency_p99_ms: 7.336 -> 11.029 (+50.4%, > ±+15.0%)
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-on-bert-short.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-eager-bert-short.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-on-bert-short.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-eager-bert-short.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_f16 requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_f16 requested execution mode: None -> 'eager'
+  - scenario single_short_f16 resolved execution mode: None -> 'eager'
+  - scenario single_short_f16 execution-mode contract version: None -> 1
+  - scenario single_short_f16 strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_f16             rss_peak_lifetime_mb                          78.98          79.02      +0.0%
+single_short_f16             rss_peak_window_mb                            78.98          79.02      +0.0%
+single_short_f16             rss_baseline_mb                               3.684          3.711      +0.7%
+single_short_f16             rss_avg_mb                                    54.93          55.53      +1.1%
+single_short_f16             pss_avg_mb                                    52.87          53.38      +1.0%
+single_short_f16             pss_peak_sampled_mb                           77.18          77.13      -0.1%
+single_short_f16             uss_avg_mb                                    51.43          51.99      +1.1%
+single_short_f16             uss_peak_sampled_mb                            75.7          75.71      +0.0%
+single_short_f16             latency_p50_ms                                35.98          41.79     +16.2%
+single_short_f16             latency_p90_ms                                35.98          41.79     +16.2%
+single_short_f16             latency_p99_ms                                35.98          41.79     +16.2%
+single_short_f16             single_request_items_per_sec                  11.81          9.609     -18.6%
+single_short_f16             page_faults_major                                10             11     +10.0%
+single_short_f16             page_faults_minor                              3119           3939     +26.3%
+
+REGRESSIONS:
+  - single_short_f16 latency_p50_ms: 35.979 -> 41.791 (+16.2%, > ±+15.0%)
+  - single_short_f16 latency_p90_ms: 35.979 -> 41.791 (+16.2%, > ±+15.0%)
+  - single_short_f16 latency_p99_ms: 35.979 -> 41.791 (+16.2%, > ±+15.0%)
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-on-bert-long.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-eager-bert-long.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-on-bert-long.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-eager-bert-long.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_long_f16 requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'long_context', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'cls', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'long_context', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_long_f16 requested execution mode: None -> 'eager'
+  - scenario single_long_f16 resolved execution mode: None -> 'eager'
+  - scenario single_long_f16 execution-mode contract version: None -> 1
+  - scenario single_long_f16 strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_long_f16              rss_peak_lifetime_mb                          92.02          92.34      +0.3%
+single_long_f16              rss_peak_window_mb                            92.02          92.34      +0.3%
+single_long_f16              rss_baseline_mb                               3.699          3.738      +1.1%
+single_long_f16              rss_avg_mb                                    90.28           90.8      +0.6%
+single_long_f16              pss_avg_mb                                    88.17          88.59      +0.5%
+single_long_f16              pss_peak_sampled_mb                           90.38          90.39      +0.0%
+single_long_f16              uss_avg_mb                                     86.7          87.17      +0.5%
+single_long_f16              uss_peak_sampled_mb                            88.9          88.97      +0.1%
+single_long_f16              latency_p50_ms                                 2550           2535      -0.6%
+single_long_f16              latency_p90_ms                                 2550           2535      -0.6%
+single_long_f16              latency_p99_ms                                 2550           2535      -0.6%
+single_long_f16              single_request_items_per_sec                 0.3817         0.3866      +1.3%
+single_long_f16              page_faults_major                                11             11      +0.0%
+single_long_f16              page_faults_minor                              4817           5935     +23.2%
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-on-harrier-f32.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-eager-harrier-f32.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-on-harrier-f32.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-eager-harrier-f32.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_harrier_f32 requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32 requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32 resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32 execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32 strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_f32::multilingual_short requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32::multilingual_short requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::multilingual_short resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::multilingual_short execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32::multilingual_short strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_f32::vocab_spread requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_f32::vocab_spread requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::vocab_spread resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_f32::vocab_spread execution-mode contract version: None -> 1
+  - scenario single_short_harrier_f32::vocab_spread strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_harrier_f32     rss_peak_lifetime_mb                           1112           1112      -0.0%
+single_short_harrier_f32     rss_peak_window_mb                             1112           1112      -0.0%
+single_short_harrier_f32     rss_baseline_mb                               3.676           3.73      +1.5%
+single_short_harrier_f32     rss_avg_mb                                    788.5          725.3      -8.0%
+single_short_harrier_f32     pss_avg_mb                                    786.5          723.2      -8.1%
+single_short_harrier_f32     pss_peak_sampled_mb                            1110           1110      -0.0%
+single_short_harrier_f32     uss_avg_mb                                    785.1          721.8      -8.1%
+single_short_harrier_f32     uss_peak_sampled_mb                            1109           1108      -0.0%
+single_short_harrier_f32     latency_p50_ms                                318.3            334      +5.0%
+single_short_harrier_f32     latency_p90_ms                                318.3            334      +5.0%
+single_short_harrier_f32     latency_p99_ms                                318.3            334      +5.0%
+single_short_harrier_f32     single_request_items_per_sec                 0.4259         0.4638      +8.9%
+single_short_harrier_f32     page_faults_major                                12             13      +8.3%
+single_short_harrier_f32     page_faults_minor                         1.461e+04      1.802e+04     +23.3%
+single_short_harrier_f32::multilingual_short rss_peak_lifetime_mb                           1110           1112      +0.1%
+single_short_harrier_f32::multilingual_short rss_peak_window_mb                             1110           1112      +0.1%
+single_short_harrier_f32::multilingual_short rss_baseline_mb                               3.688          3.727      +1.1%
+single_short_harrier_f32::multilingual_short rss_avg_mb                                    697.9          686.8      -1.6%
+single_short_harrier_f32::multilingual_short pss_avg_mb                                    695.9          684.6      -1.6%
+single_short_harrier_f32::multilingual_short pss_peak_sampled_mb                            1108           1110      +0.1%
+single_short_harrier_f32::multilingual_short uss_avg_mb                                    694.5          683.2      -1.6%
+single_short_harrier_f32::multilingual_short uss_peak_sampled_mb                            1107           1108      +0.1%
+single_short_harrier_f32::multilingual_short latency_p50_ms                                160.8            183     +13.8%
+single_short_harrier_f32::multilingual_short latency_p90_ms                                160.8            183     +13.8%
+single_short_harrier_f32::multilingual_short latency_p99_ms                                160.8            183     +13.8%
+single_short_harrier_f32::multilingual_short single_request_items_per_sec                 0.7008         0.7603      +8.5%
+single_short_harrier_f32::multilingual_short page_faults_major                                 9             11     +22.2%
+single_short_harrier_f32::multilingual_short page_faults_minor                         1.308e+04      1.901e+04     +45.3%
+single_short_harrier_f32::vocab_spread rss_peak_lifetime_mb                           1110           1112      +0.2%
+single_short_harrier_f32::vocab_spread rss_peak_window_mb                             1110           1112      +0.2%
+single_short_harrier_f32::vocab_spread rss_baseline_mb                               3.688          3.711      +0.6%
+single_short_harrier_f32::vocab_spread rss_avg_mb                                      837          695.5     -16.9%
+single_short_harrier_f32::vocab_spread pss_avg_mb                                      835          693.4     -17.0%
+single_short_harrier_f32::vocab_spread pss_peak_sampled_mb                            1108           1110      +0.1%
+single_short_harrier_f32::vocab_spread uss_avg_mb                                    833.6            692     -17.0%
+single_short_harrier_f32::vocab_spread uss_peak_sampled_mb                            1107           1109      +0.1%
+single_short_harrier_f32::vocab_spread latency_p50_ms                                785.2          622.2     -20.8%
+single_short_harrier_f32::vocab_spread latency_p90_ms                                785.2          622.2     -20.8%
+single_short_harrier_f32::vocab_spread latency_p99_ms                                785.2          622.2     -20.8%
+single_short_harrier_f32::vocab_spread single_request_items_per_sec                 0.2509         0.2934     +17.0%
+single_short_harrier_f32::vocab_spread page_faults_major                                11             10      -9.1%
+single_short_harrier_f32::vocab_spread page_faults_minor                         1.413e+04      2.006e+04     +42.0%
+
+IMPROVEMENTS (beyond tolerance — confirm they are real, then commit a new baseline):
+  - single_short_harrier_f32::vocab_spread latency_p50_ms: 785.164 -> 622.201 (-20.8%, > ±+15.0%)
+  - single_short_harrier_f32::vocab_spread latency_p90_ms: 785.164 -> 622.201 (-20.8%, > ±+15.0%)
+  - single_short_harrier_f32::vocab_spread latency_p99_ms: 785.164 -> 622.201 (-20.8%, > ±+15.0%)
+
+no regressions
+
+COMMAND python3 bench/compare.py bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-on-harrier-q8.json /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-eager-harrier-q8.json
+base: M3.6 (f473b16) bench/baseline/M3.6-docker-desktop-arm64/M3.6-docker-desktop-arm64-cold-profile-on-harrier-q8.json
+cur : M4 (f473b16) /private/tmp/nanoembed-a8-output.2i2PmY/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-eager-harrier-q8.json
+
+FINGERPRINT DIFFERENCES — review before interpreting deltas:
+  - run benchmark binary SHA-256: '1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e' -> '8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c'
+  - run scenario config SHA-256: '19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e' -> '85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261'
+  - scenario single_short_harrier_q8 requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'english_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8 requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8 resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8 execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8 strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_q8::multilingual_short requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'multilingual_short', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8::multilingual_short requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::multilingual_short resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::multilingual_short execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8::multilingual_short strict execution-mode resolution: None -> True
+  - scenario single_short_harrier_q8::vocab_spread requested settings: {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0} -> {'warmup': 0, 'iter': 1, 'threads': 4, 'pooling': 'model-default', 'normalize': True, 'execution_mode': 'eager', 'cache_state': 'cold', 'strict_cold': True, 'memory_profile': True, 'memory_profile_interval_ms': 10, 'timeout_sec': 1800, 'raw_samples_requested': True, 'max_seq_len': None, 'max_seq_len_source': 'library-default', 'corpus_group': 'vocab_spread', 'selected_input_count': 1, 'selection_seed': 0}
+  - scenario single_short_harrier_q8::vocab_spread requested execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::vocab_spread resolved execution mode: None -> 'eager'
+  - scenario single_short_harrier_q8::vocab_spread execution-mode contract version: None -> 1
+  - scenario single_short_harrier_q8::vocab_spread strict execution-mode resolution: None -> True
+  (diagnostic only; existing regression gates are unchanged)
+
+scenario                     metric                                         base            cur      delta
+----------------------------------------------------------------------------------------------------------
+single_short_harrier_q8      rss_peak_lifetime_mb                          359.3          363.1      +1.0%
+single_short_harrier_q8      rss_peak_window_mb                            359.3          363.1      +1.0%
+single_short_harrier_q8      rss_baseline_mb                               3.688          3.727      +1.1%
+single_short_harrier_q8      rss_avg_mb                                    229.3          219.7      -4.2%
+single_short_harrier_q8      pss_avg_mb                                    227.3          217.5      -4.3%
+single_short_harrier_q8      pss_peak_sampled_mb                           357.6          361.1      +1.0%
+single_short_harrier_q8      uss_avg_mb                                    225.9          216.2      -4.3%
+single_short_harrier_q8      uss_peak_sampled_mb                           356.1          359.7      +1.0%
+single_short_harrier_q8      latency_p50_ms                                24.53          17.45     -28.9%
+single_short_harrier_q8      latency_p90_ms                                24.53          17.45     -28.9%
+single_short_harrier_q8      latency_p99_ms                                24.53          17.45     -28.9%
+single_short_harrier_q8      single_request_items_per_sec                  1.429          1.256     -12.1%
+single_short_harrier_q8      page_faults_major                                12             15     +25.0%
+single_short_harrier_q8      page_faults_minor                         1.454e+04      1.689e+04     +16.1%
+single_short_harrier_q8::multilingual_short rss_peak_lifetime_mb                          359.5          363.2      +1.0%
+single_short_harrier_q8::multilingual_short rss_peak_window_mb                            359.5          363.2      +1.0%
+single_short_harrier_q8::multilingual_short rss_baseline_mb                               3.688           3.73      +1.2%
+single_short_harrier_q8::multilingual_short rss_avg_mb                                    234.6          210.4     -10.3%
+single_short_harrier_q8::multilingual_short pss_avg_mb                                    232.5          208.2     -10.5%
+single_short_harrier_q8::multilingual_short pss_peak_sampled_mb                           357.6          361.1      +1.0%
+single_short_harrier_q8::multilingual_short uss_avg_mb                                    231.1          206.9     -10.5%
+single_short_harrier_q8::multilingual_short uss_peak_sampled_mb                           356.1          359.7      +1.0%
+single_short_harrier_q8::multilingual_short latency_p50_ms                                10.05          11.25     +12.0%
+single_short_harrier_q8::multilingual_short latency_p90_ms                                10.05          11.25     +12.0%
+single_short_harrier_q8::multilingual_short latency_p99_ms                                10.05          11.25     +12.0%
+single_short_harrier_q8::multilingual_short single_request_items_per_sec                  1.856          1.567     -15.6%
+single_short_harrier_q8::multilingual_short page_faults_major                                14             10     -28.6%
+single_short_harrier_q8::multilingual_short page_faults_minor                         1.299e+04      1.688e+04     +29.9%
+single_short_harrier_q8::vocab_spread rss_peak_lifetime_mb                          359.5          361.1      +0.4%
+single_short_harrier_q8::vocab_spread rss_peak_window_mb                            359.5          361.1      +0.4%
+single_short_harrier_q8::vocab_spread rss_baseline_mb                               3.684          3.727      +1.2%
+single_short_harrier_q8::vocab_spread rss_avg_mb                                    236.8          233.2      -1.5%
+single_short_harrier_q8::vocab_spread pss_avg_mb                                    234.8            231      -1.6%
+single_short_harrier_q8::vocab_spread pss_peak_sampled_mb                           357.6          359.1      +0.4%
+single_short_harrier_q8::vocab_spread uss_avg_mb                                    233.4          229.6      -1.6%
+single_short_harrier_q8::vocab_spread uss_peak_sampled_mb                           356.1          357.7      +0.4%
+single_short_harrier_q8::vocab_spread latency_p50_ms                                28.25          30.18      +6.8%
+single_short_harrier_q8::vocab_spread latency_p90_ms                                28.25          30.18      +6.8%
+single_short_harrier_q8::vocab_spread latency_p99_ms                                28.25          30.18      +6.8%
+single_short_harrier_q8::vocab_spread single_request_items_per_sec                  1.903          1.209     -36.5%
+single_short_harrier_q8::vocab_spread page_faults_major                                12             15     +25.0%
+single_short_harrier_q8::vocab_spread page_faults_minor                         1.402e+04      1.996e+04     +42.3%
+
+IMPROVEMENTS (beyond tolerance — confirm they are real, then commit a new baseline):
+  - single_short_harrier_q8 latency_p50_ms: 24.526 -> 17.447 (-28.9%, > ±+15.0%)
+  - single_short_harrier_q8 latency_p90_ms: 24.526 -> 17.447 (-28.9%, > ±+15.0%)
+  - single_short_harrier_q8 latency_p99_ms: 24.526 -> 17.447 (-28.9%, > ±+15.0%)
+
+no regressions
+

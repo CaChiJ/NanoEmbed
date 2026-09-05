@@ -1,0 +1,49 @@
+# 문장별 어텐션의 순효과만 재기 위한 축소 격자.
+# 파티션은 layer 하나로 고정하고 배치 크기만 바꾼다. mixed_short를 쓰므로
+# bench/m5-batch-partition-matrix.yaml 의 layer 열과 직접 비교할 수 있다.
+#
+# B=1은 코드 경로가 바뀌지 않으므로 오염 판별용 대조군이다. 기준선에서
+# 41.4 items/s 였고, 여기서 크게 벗어나면 그 실행은 버린다.
+psa_base: &psa_base
+  model: models/harrier-270m-q8_0.gguf
+  corpus_group: mixed_short
+  samples: 132
+  normalize: true
+  threads: 4
+  streaming: true
+  cache_state: warm
+  warmup: 1
+  iter: 5
+  partition: layer
+  milestones: [M5-PSA]
+
+scenarios:
+  - <<: *psa_base
+    name: m5_psa_b01_layer
+    batch_size: 1
+    max_batch: 1
+
+  - <<: *psa_base
+    name: m5_psa_b02_layer
+    batch_size: 2
+    max_batch: 2
+
+  - <<: *psa_base
+    name: m5_psa_b03_layer
+    batch_size: 3
+    max_batch: 3
+
+  - <<: *psa_base
+    name: m5_psa_b04_layer
+    batch_size: 4
+    max_batch: 4
+
+  - <<: *psa_base
+    name: m5_psa_b05_layer
+    batch_size: 5
+    max_batch: 5
+
+  - <<: *psa_base
+    name: m5_psa_b10_layer
+    batch_size: 10
+    max_batch: 10

@@ -1,6 +1,7 @@
 #include "arch/model_arch.h"
 
 #include "arch/bert_arch.h"
+#include "arch/gemma3_arch.h"
 #include "gguf_scanner.h"
 
 #include "gguf.h"
@@ -42,21 +43,49 @@ std::string peek_architecture(const std::string & gguf_path) {
 
 } // namespace
 
+std::unique_ptr<ModelArch> create_model_arch(gguf_context * gguf,
+                                             ggml_context * meta) {
+    if (gguf == nullptr || meta == nullptr) {
+        throw ScanError("architecture creation requires GGUF and ggml metadata contexts");
+    }
+    const int64_t key = gguf_find_key(gguf, "general.architecture");
+    if (key < 0 || gguf_get_kv_type(gguf, key) != GGUF_TYPE_STRING) {
+        throw ScanError("GGUF has no general.architecture string");
+    }
+    const std::string arch = gguf_get_val_str(gguf, key);
+
+    if (arch == "bert") {
+        return std::make_unique<BertModelArch>(scan_bert(gguf, meta));
+    }
+    if (arch == "gemma3") {
+        return std::make_unique<Gemma3ModelArch>(scan_gemma3(gguf, meta));
+    }
+    if (arch == "eurobert") {
+        throw ScanError(
+            "architecture 'eurobert' (jina-embeddings-v5-text-nano) is "
+            "recognized but not implemented");
+    }
+    throw ScanError("unsupported architecture: '" + arch + "'");
+}
+
 std::unique_ptr<ModelArch> create_model_arch(const std::string & gguf_path) {
     const std::string arch = peek_architecture(gguf_path);
 
     if (arch == "bert") {
         return std::make_unique<BertModelArch>(gguf_path);
     }
+    if (arch == "gemma3") {
+        return std::make_unique<Gemma3ModelArch>(gguf_path);
+    }
 
-    // jina-embeddings-v5-text-nano ships as "eurobert": a Llama-style encoder
-    // (rotary positions, RMSNorm, SwiGLU, unbiased projections) that shares no
-    // tensor layout with BERT. Named explicitly so the error tells the user
-    // what is missing rather than just refusing.
+    // jina-embeddings-v5-text-nano ships as "eurobert", another Llama-style
+    // encoder. Recognized by name so the error says what the file actually is
+    // rather than just refusing, but there is no plan to implement it: gemma3
+    // covers the same mechanisms with a permissive license.
     if (arch == "eurobert") {
         throw ScanError(
-            "architecture 'eurobert' is not implemented yet — "
-            "planned as PLAN.md M3.6 (rotary/RMSNorm/SwiGLU + byte-level BPE)");
+            "architecture 'eurobert' (jina-embeddings-v5-text-nano) is "
+            "recognized but not implemented");
     }
 
     throw ScanError("unsupported architecture: '" + arch + "'");

@@ -38,11 +38,22 @@ public:
 
     virtual int  max_seq_len() const noexcept = 0;
     virtual int  vocab_size()  const noexcept = 0;
+    // Preferred fill token for padded batch positions. A negative value means
+    // the tokenizer declares no PAD token; the batch planner then uses token
+    // zero as a masked, fill-only value.
+    virtual int  padding_id()  const noexcept = 0;
     virtual void set_max_seq_len(int n)       = 0;
 };
 
 // Build the tokenizer a GGUF declares. Throws TokenizerError if the family is
 // unknown or its metadata is missing.
 std::unique_ptr<Tokenizer> create_tokenizer(gguf_context * ctx);
+
+// Drop the large source arrays after every consumer has finished constructing
+// itself. The tokenizer owns everything it needs after create_tokenizer()
+// returns, but architecture construction may still need the token count, so
+// callers must invoke this only after both construction steps have succeeded.
+// Small scalar tokenizer metadata is deliberately retained for diagnostics.
+void discard_consumed_tokenizer_metadata(gguf_context * ctx) noexcept;
 
 } // namespace nanoembed

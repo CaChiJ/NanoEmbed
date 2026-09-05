@@ -1,0 +1,1639 @@
+{
+  "schema_version": 2,
+  "milestone": "M4",
+  "git_sha": "f473b16",
+  "started_at_utc": "2026-08-24T09:23:02.333329Z",
+  "independent_runs": 1,
+  "confidence_interval": null,
+  "run_settings": {
+    "requested": {
+      "milestone": "M4",
+      "scenario_filter": "single_short_harrier_f32_streaming",
+      "groups": [
+        "english_short:1",
+        "multilingual_short:1",
+        "vocab_spread:1"
+      ],
+      "samples_per_group": null,
+      "selection_seed": 0,
+      "memory_profile": true,
+      "memory_profile_interval_ms": 10,
+      "cache_state_override": "cold",
+      "strict_cold": true,
+      "raw_samples_out": "/out/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-streaming-harrier-f32.samples.json",
+      "scenarios_path": "bench/scenarios.yaml",
+      "corpus_manifest_path": "bench/corpus_groups.json",
+      "benchmark_binary_path": "/build/bin/nanoembed-bench",
+      "output_path": "/out/M4-docker-desktop-arm64/M4-docker-desktop-arm64-cold-profile-on-streaming-harrier-f32.json"
+    },
+    "resolved": {
+      "selected_scenario_definitions": 1,
+      "planned_scenario_group_runs": 3
+    }
+  },
+  "fingerprints": {
+    "code": {
+      "nanoembed": {
+        "collection_status": "collected",
+        "sha": "f473b1651e9f9084e6a24f1133061aab5b41032f",
+        "dirty": true
+      },
+      "ggml": {
+        "collection_status": "collected",
+        "sha": "387fa29fbbf3149f06a631c7850b6c35c24b0232"
+      }
+    },
+    "benchmark_binary": {
+      "collection_status": "collected",
+      "configured_path": "/build/bin/nanoembed-bench",
+      "resolved_path": "/build/bin/nanoembed-bench",
+      "size_bytes": 394520,
+      "sha256": "8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/build",
+        "source": "/run/host_mark/private[/tmp/nanoembed-a8-build.JucGHh]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "build": {
+      "collection_status": "collected",
+      "cmake_cache_path": "/build/CMakeCache.txt",
+      "build_type": "Release",
+      "compiler": {
+        "id": "GNU",
+        "version": "13.3.0",
+        "path": "/usr/bin/c++"
+      },
+      "cmake_options": {
+        "BUILD_SHARED_LIBS": "ON",
+        "BUILD_TESTING": "ON",
+        "CMAKE_CXX_FLAGS": "",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "CMAKE_C_FLAGS": "",
+        "CMAKE_C_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "GGML_AMX_BF16": "OFF",
+        "GGML_AMX_INT8": "OFF",
+        "GGML_ACCELERATE": "ON",
+        "GGML_AVX": "OFF",
+        "GGML_AVX2": "OFF",
+        "GGML_AVX512": "OFF",
+        "GGML_AVX512_BF16": "OFF",
+        "GGML_AVX512_VNNI": "OFF",
+        "GGML_BLAS": "OFF",
+        "GGML_BLAS_VENDOR": "Generic",
+        "GGML_BMI2": "OFF",
+        "GGML_CPU": "ON",
+        "GGML_CPU_ALL_VARIANTS": "OFF",
+        "GGML_CPU_REPACK": "ON",
+        "GGML_CUDA": "OFF",
+        "GGML_HIP": "OFF",
+        "GGML_F16C": "OFF",
+        "GGML_FMA": "OFF",
+        "GGML_LTO": "OFF",
+        "GGML_METAL": "OFF",
+        "GGML_NATIVE": "ON",
+        "GGML_OPENCL": "OFF",
+        "GGML_OPENMP": "ON",
+        "GGML_RPC": "OFF",
+        "GGML_SSE42": "OFF",
+        "GGML_SYCL": "OFF",
+        "GGML_VULKAN": "OFF"
+      }
+    },
+    "environment": {
+      "collection_status": "partial",
+      "os": "Linux",
+      "kernel": "6.12.5-linuxkit",
+      "machine": "aarch64",
+      "cpu_model": null,
+      "nproc": 8,
+      "page_size_bytes": 4096,
+      "cpu_frequency_policy": {
+        "collection_status": "unavailable",
+        "policy_count": null,
+        "governors": null,
+        "drivers": null
+      },
+      "numa": {
+        "collection_status": "unavailable",
+        "online_nodes": null,
+        "possible_nodes": null,
+        "node_count": null
+      },
+      "total_ram_bytes": 8217858048,
+      "total_ram_collection_status": "collected",
+      "working_directory_filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "scenario_config": {
+      "collection_status": "collected",
+      "configured_path": "bench/scenarios.yaml",
+      "resolved_path": "bench/scenarios.yaml",
+      "size_bytes": 4670,
+      "sha256": "85aab11134476c24b5b9b673c6d9cfcb44821b20157a34508e375c139d6bb261",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "corpus_manifest": {
+      "collection_status": "collected",
+      "configured_path": "bench/corpus_groups.json",
+      "resolved_path": "bench/corpus_groups.json",
+      "size_bytes": 1206,
+      "sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    }
+  },
+  "corpus_manifest": {
+    "path": "bench/corpus_groups.json",
+    "schema_version": 1,
+    "size_bytes": 1206,
+    "sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+    "selection_seed": 0,
+    "samples_per_group": null,
+    "duplicate_policy": {
+      "within_group": "error",
+      "across_groups": "preserve"
+    }
+  },
+  "cache_state_override": "cold",
+  "strict_cold": true,
+  "raw_samples": {
+    "collection_status": "collected",
+    "format": "nanoembed-benchmark-raw-latency-json",
+    "schema_version": 1,
+    "path": "M4-docker-desktop-arm64-cold-profile-on-streaming-harrier-f32.samples.json",
+    "size_bytes": 1681,
+    "sha256": "b29f9b219a8719c8961a3685339fb5f8d9e88364737073b6a070bfd387e80861",
+    "scenario_count": 3
+  },
+  "scenarios": {
+    "single_short_harrier_f32_streaming": {
+      "schema_version": 2,
+      "scenario": "single_short_harrier_f32_streaming",
+      "os": "linux",
+      "model": "/src/models/harrier-270m.gguf",
+      "inputs": "corpus-group:english_short",
+      "warmup": 0,
+      "iter": 1,
+      "total_items": 1,
+      "threads": 4,
+      "pooling": "model-default",
+      "normalize": 1,
+      "requested_execution_mode": "streaming",
+      "resolved_execution_mode": "streaming",
+      "settings": {
+        "requested": {
+          "warmup": 0,
+          "iter": 1,
+          "threads": 4,
+          "pooling": "model-default",
+          "normalize": true,
+          "execution_mode": "streaming",
+          "cache_state": "cold",
+          "strict_cold": true,
+          "memory_profile": true,
+          "memory_profile_interval_ms": 10,
+          "timeout_sec": 1800,
+          "raw_samples_requested": true,
+          "max_seq_len": null,
+          "max_seq_len_source": "library-default",
+          "corpus_group": "english_short",
+          "selected_input_count": 1,
+          "selection_seed": 0
+        },
+        "resolved": {
+          "threads": 4,
+          "threads_collection_status": "collected",
+          "pooling": "last",
+          "normalize": true,
+          "execution_mode": "streaming",
+          "cache_regime": "cold",
+          "max_seq_len": 512,
+          "corpus_group": "english_short",
+          "selected_input_count": 1
+        }
+      },
+      "execution_mode_resolution": {
+        "contract_version": 1,
+        "requested_execution_mode": "streaming",
+        "resolved_execution_mode": "streaming",
+        "strict_no_fallback": true,
+        "context_creation_succeeded_with_exact_request": true,
+        "evidence": "frozen nanoembed_context_params.use_streaming request plus successful strict context creation"
+      },
+      "environment": {
+        "collection_status": "partial",
+        "os": "Linux",
+        "kernel": "6.12.5-linuxkit",
+        "machine": "aarch64",
+        "cpu_model": "",
+        "nproc": 8,
+        "page_size_bytes": 4096,
+        "cpu_frequency_policy": {
+          "collection_status": "unavailable",
+          "policy_count": null,
+          "governors": null,
+          "drivers": null
+        },
+        "numa": {
+          "collection_status": "unavailable",
+          "online_nodes": null,
+          "possible_nodes": null,
+          "node_count": null
+        },
+        "total_ram_bytes": 8217858048,
+        "total_ram_collection_status": "collected",
+        "working_directory_filesystem": {
+          "collection_status": "collected",
+          "mount_target": "/src",
+          "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+          "fs_type": "fakeowner",
+          "uuid": null
+        },
+        "native_worker_report": {
+          "kernel": "6.12.5-linuxkit",
+          "cpu_model": "",
+          "nproc": 8,
+          "page_size_bytes": 4096
+        }
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "cache_regime_requested": "cold",
+        "cache_regime": "cold",
+        "execution_shape": "selected-inputs-each-use-one-fresh-native-and-worker-process",
+        "warmup_items_executed": 0,
+        "latency_scope": "first-inference-only-after-model-and-context-creation",
+        "throughput_scope": "worker-startup-through-first-result-excludes-eviction-and-process-launch",
+        "resource_counter_scope": "model-load-through-first-result",
+        "memory_profile_enabled": true,
+        "memory_profile_interval_requested_ms": 10,
+        "memory_profile_samples_requested": 90,
+        "memory_profile_samples_attempted": 72,
+        "memory_profile_samples_effective": 72,
+        "memory_profile_valid_sample_ratio": 1.0,
+        "memory_profile_final_sample_collected": true,
+        "memory_profile_final_in_aggregates": true,
+        "latency_result_role": "diagnostic",
+        "memory_profile_may_perturb_memory_lifecycle": true,
+        "memory_profile_observer_effect": "smaps_rollup page-table walks may perturb timing and page residency",
+        "memory_profile_read_duration_min_ms": 0.117,
+        "memory_profile_read_duration_mean_ms": 0.316644,
+        "memory_profile_read_duration_max_ms": 3.10263,
+        "percentile_method": "lower: floor(q * (count - 1))",
+        "stddev_kind": "population",
+        "hwm_reset": true,
+        "rss_interval_ms": 10,
+        "rollup_interval_ms": 10,
+        "rss_samples": 72,
+        "rollup_samples": 72,
+        "cache_control": {
+          "cold_cache_requested": true,
+          "strict_cold": true,
+          "platform_supported": true,
+          "eviction_call_succeeded": true,
+          "cold_cache_verified": true,
+          "verified_worker_count": 1,
+          "worker_count": 1,
+          "verification_definition": "every worker's pre-fork mincore observation saw zero resident model-file pages after fadvise",
+          "verification_status": "all_workers_verified_cold",
+          "per_worker": [
+            {
+              "selected_id": "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec",
+              "eviction_call_succeeded": true,
+              "cold_cache_verified": true,
+              "verification_status": "verified_zero_resident_pages_before_worker",
+              "before_eviction": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              },
+              "after_eviction_before_worker": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              },
+              "after_worker_load_and_first_result": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              }
+            }
+          ]
+        },
+        "cold_worker_invocations": 1,
+        "cold_aggregation": {
+          "worker_count": 1,
+          "latency_population": "one first inference from each fresh worker",
+          "throughput_denominator": "sum of worker GO-to-first-result durations; excludes cache eviction and process launch",
+          "rss_peak_fields": "maximum across workers",
+          "rss_pss_uss_baseline_average_final_fields": "mean across available workers",
+          "resource_counters": "sum across workers from model load through first result"
+        }
+      },
+      "metrics": {
+        "collection_status": {
+          "rss_peak_lifetime": "collected",
+          "rss_peak_window": "collected",
+          "rss_baseline": "collected",
+          "rss_final": "collected",
+          "rss_sampled": "collected",
+          "pss_baseline": "collected",
+          "pss_final": "collected",
+          "pss_sampled": "collected",
+          "uss_baseline": "collected",
+          "uss_final": "collected",
+          "uss_sampled": "collected",
+          "latency": "collected",
+          "single_request_items_per_sec": "collected",
+          "fixed_item_window_throughput": "not_applicable_cold_start"
+        },
+        "rss_peak_lifetime_mb": 102.367,
+        "rss_peak_window_mb": 102.367,
+        "rss_baseline_mb": 3.73047,
+        "rss_final_mb": 81.2695,
+        "rss_avg_mb": 73.8543,
+        "rss_max_sampled_mb": 101.559,
+        "pss_baseline_mb": 1.70703,
+        "pss_final_mb": 79.0527,
+        "pss_avg_mb": 71.6805,
+        "pss_peak_sampled_mb": 99.3418,
+        "uss_baseline_mb": 0.449219,
+        "uss_final_mb": 77.6328,
+        "uss_avg_mb": 70.2879,
+        "uss_peak_sampled_mb": 97.9219,
+        "memory_breakdown": {
+          "pss_anon": {
+            "collection_status": "collected",
+            "baseline_mb": 0.230469,
+            "average_mb": 64.7231,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "pss_file": {
+            "collection_status": "collected",
+            "baseline_mb": 1.47656,
+            "average_mb": 6.95741,
+            "peak_sampled_mb": 23.5137,
+            "final_mb": 3.22461
+          },
+          "anonymous": {
+            "collection_status": "collected",
+            "baseline_mb": 0.230469,
+            "average_mb": 64.7231,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "private_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 0.21875,
+            "average_mb": 5.56483,
+            "peak_sampled_mb": 22.0938,
+            "final_mb": 1.80469
+          },
+          "private_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 0.230469,
+            "average_mb": 64.7231,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "shared_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 3.28125,
+            "average_mb": 3.56641,
+            "peak_sampled_mb": 3.63672,
+            "final_mb": 3.63672
+          },
+          "shared_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 0.0,
+            "average_mb": 0.0,
+            "peak_sampled_mb": 0.0,
+            "final_mb": 0.0
+          }
+        },
+        "cpu_user_sec": 1.72147,
+        "cpu_sys_sec": 0.158217,
+        "page_faults_major": 395,
+        "page_faults_minor": 23361,
+        "io_read_bytes": 0,
+        "wall_sec": 0.885811,
+        "latency_count": 1,
+        "latency_min_ms": 445.461,
+        "latency_max_ms": 445.461,
+        "latency_mean_ms": 445.461,
+        "latency_p50_ms": 445.461,
+        "latency_p90_ms": 445.461,
+        "latency_p95_ms": 445.461,
+        "latency_p99_ms": 445.461,
+        "latency_stddev_ms": 0.0,
+        "latency_mad_ms": 0.0,
+        "single_request_items_per_sec": 1.128908988486257,
+        "cold_phase_timings": {
+          "collection_status": "collected",
+          "startup_boundary": "worker GO through first embed result; excludes cache eviction, process launch, input parsing and pipe synchronization",
+          "fresh_worker_count": 1,
+          "model_load_ms": {
+            "count": 1,
+            "min_ms": 89.9037,
+            "max_ms": 89.9037,
+            "mean_ms": 89.9037,
+            "p50_ms": 89.9037,
+            "p90_ms": 89.9037,
+            "p95_ms": 89.9037,
+            "p99_ms": 89.9037,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "context_create_ms": {
+            "count": 1,
+            "min_ms": 350.302,
+            "max_ms": 350.302,
+            "mean_ms": 350.302,
+            "p50_ms": 350.302,
+            "p90_ms": 350.302,
+            "p95_ms": 350.302,
+            "p99_ms": 350.302,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "first_request_latency_ms": {
+            "count": 1,
+            "min_ms": 445.461,
+            "max_ms": 445.461,
+            "mean_ms": 445.461,
+            "p50_ms": 445.461,
+            "p90_ms": 445.461,
+            "p95_ms": 445.461,
+            "p99_ms": 445.461,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "startup_to_first_result_ms": {
+            "count": 1,
+            "min_ms": 885.811,
+            "max_ms": 885.811,
+            "mean_ms": 885.811,
+            "p50_ms": 885.811,
+            "p90_ms": 885.811,
+            "p95_ms": 885.811,
+            "p99_ms": 885.811,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          }
+        },
+        "fixed_item_window_throughput": {
+          "collection_status": "not_applicable_cold_start",
+          "canonical": false,
+          "source": "not_applicable_cold_start",
+          "window_size_items": null,
+          "minimum_windows_for_statistics": null,
+          "complete_windows": 0,
+          "dropped_tail_items": 1,
+          "count": 0,
+          "min_items_per_sec": null,
+          "max_items_per_sec": null,
+          "mean_items_per_sec": null,
+          "p50_items_per_sec": null,
+          "p90_items_per_sec": null,
+          "p95_items_per_sec": null,
+          "p99_items_per_sec": null,
+          "stddev_items_per_sec": null,
+          "mad_items_per_sec": null
+        },
+        "cold_worker_runs": [
+          {
+            "selected_id": "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec",
+            "cold_cache_verified": true,
+            "phases_ms": {
+              "model_load_ms": 89.9037,
+              "context_create_ms": 350.302,
+              "first_request_latency_ms": 445.461,
+              "startup_to_first_result_ms": 885.811
+            },
+            "rss_peak_lifetime_mb": 102.367,
+            "rss_peak_window_mb": 102.367,
+            "page_faults_major": 395,
+            "page_faults_minor": 23361,
+            "io_read_bytes": 0
+          }
+        ]
+      },
+      "corpus_selection": {
+        "manifest": "bench/corpus_groups.json",
+        "manifest_schema_version": 1,
+        "group": "english_short",
+        "group_size": 100,
+        "selected_size": 1,
+        "seed": 0,
+        "selected_ids": [
+          "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec"
+        ],
+        "selection_sha256": "98b61fe80a3ce1790e04ce844249edfc7f38fbe7ac40caa85d59310270350c8f",
+        "sources": [
+          "tests/corpus/eval.txt"
+        ],
+        "duplicate_policy": {
+          "within_group": "error",
+          "across_groups": "preserve"
+        },
+        "manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "selected_input_sha256": "98b61fe80a3ce1790e04ce844249edfc7f38fbe7ac40caa85d59310270350c8f"
+      },
+      "independent_runs": 1,
+      "confidence_interval": null,
+      "scenario_definition": {
+        "name": "single_short_harrier_f32_streaming",
+        "model": "models/harrier-270m.gguf",
+        "corpus_group": "english_short",
+        "normalize": true,
+        "threads": 4,
+        "streaming": true,
+        "cache_state": "warm",
+        "warmup": 5,
+        "iter": 10,
+        "milestones": [
+          "M4",
+          "M5",
+          "M6",
+          "M7",
+          "M8"
+        ]
+      },
+      "fingerprints": {
+        "model": {
+          "collection_status": "collected",
+          "configured_path": "models/harrier-270m.gguf",
+          "resolved_path": "models/harrier-270m.gguf",
+          "size_bytes": 1088170176,
+          "sha256": "efa662cf610c091dac1fc7378b0f22ad2e4fa7d6510592650c6e405f50b0d78a",
+          "filesystem": {
+            "collection_status": "collected",
+            "mount_target": "/src",
+            "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+            "fs_type": "fakeowner",
+            "uuid": null
+          }
+        },
+        "selected_input": {
+          "collection_status": "collected",
+          "sha256": "98b61fe80a3ce1790e04ce844249edfc7f38fbe7ac40caa85d59310270350c8f",
+          "selected_ids": [
+            "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec"
+          ]
+        },
+        "corpus_manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "benchmark_binary_sha256": "8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c"
+      }
+    },
+    "single_short_harrier_f32_streaming::multilingual_short": {
+      "schema_version": 2,
+      "scenario": "single_short_harrier_f32_streaming::multilingual_short",
+      "os": "linux",
+      "model": "/src/models/harrier-270m.gguf",
+      "inputs": "corpus-group:multilingual_short",
+      "warmup": 0,
+      "iter": 1,
+      "total_items": 1,
+      "threads": 4,
+      "pooling": "model-default",
+      "normalize": 1,
+      "requested_execution_mode": "streaming",
+      "resolved_execution_mode": "streaming",
+      "settings": {
+        "requested": {
+          "warmup": 0,
+          "iter": 1,
+          "threads": 4,
+          "pooling": "model-default",
+          "normalize": true,
+          "execution_mode": "streaming",
+          "cache_state": "cold",
+          "strict_cold": true,
+          "memory_profile": true,
+          "memory_profile_interval_ms": 10,
+          "timeout_sec": 1800,
+          "raw_samples_requested": true,
+          "max_seq_len": null,
+          "max_seq_len_source": "library-default",
+          "corpus_group": "multilingual_short",
+          "selected_input_count": 1,
+          "selection_seed": 0
+        },
+        "resolved": {
+          "threads": 4,
+          "threads_collection_status": "collected",
+          "pooling": "last",
+          "normalize": true,
+          "execution_mode": "streaming",
+          "cache_regime": "cold",
+          "max_seq_len": 512,
+          "corpus_group": "multilingual_short",
+          "selected_input_count": 1
+        }
+      },
+      "execution_mode_resolution": {
+        "contract_version": 1,
+        "requested_execution_mode": "streaming",
+        "resolved_execution_mode": "streaming",
+        "strict_no_fallback": true,
+        "context_creation_succeeded_with_exact_request": true,
+        "evidence": "frozen nanoembed_context_params.use_streaming request plus successful strict context creation"
+      },
+      "environment": {
+        "collection_status": "partial",
+        "os": "Linux",
+        "kernel": "6.12.5-linuxkit",
+        "machine": "aarch64",
+        "cpu_model": "",
+        "nproc": 8,
+        "page_size_bytes": 4096,
+        "cpu_frequency_policy": {
+          "collection_status": "unavailable",
+          "policy_count": null,
+          "governors": null,
+          "drivers": null
+        },
+        "numa": {
+          "collection_status": "unavailable",
+          "online_nodes": null,
+          "possible_nodes": null,
+          "node_count": null
+        },
+        "total_ram_bytes": 8217858048,
+        "total_ram_collection_status": "collected",
+        "working_directory_filesystem": {
+          "collection_status": "collected",
+          "mount_target": "/src",
+          "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+          "fs_type": "fakeowner",
+          "uuid": null
+        },
+        "native_worker_report": {
+          "kernel": "6.12.5-linuxkit",
+          "cpu_model": "",
+          "nproc": 8,
+          "page_size_bytes": 4096
+        }
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "cache_regime_requested": "cold",
+        "cache_regime": "cold",
+        "execution_shape": "selected-inputs-each-use-one-fresh-native-and-worker-process",
+        "warmup_items_executed": 0,
+        "latency_scope": "first-inference-only-after-model-and-context-creation",
+        "throughput_scope": "worker-startup-through-first-result-excludes-eviction-and-process-launch",
+        "resource_counter_scope": "model-load-through-first-result",
+        "memory_profile_enabled": true,
+        "memory_profile_interval_requested_ms": 10,
+        "memory_profile_samples_requested": 89,
+        "memory_profile_samples_attempted": 69,
+        "memory_profile_samples_effective": 69,
+        "memory_profile_valid_sample_ratio": 1.0,
+        "memory_profile_final_sample_collected": true,
+        "memory_profile_final_in_aggregates": true,
+        "latency_result_role": "diagnostic",
+        "memory_profile_may_perturb_memory_lifecycle": true,
+        "memory_profile_observer_effect": "smaps_rollup page-table walks may perturb timing and page residency",
+        "memory_profile_read_duration_min_ms": 0.091291,
+        "memory_profile_read_duration_mean_ms": 0.42513,
+        "memory_profile_read_duration_max_ms": 2.20162,
+        "percentile_method": "lower: floor(q * (count - 1))",
+        "stddev_kind": "population",
+        "hwm_reset": true,
+        "rss_interval_ms": 10,
+        "rollup_interval_ms": 10,
+        "rss_samples": 69,
+        "rollup_samples": 69,
+        "cache_control": {
+          "cold_cache_requested": true,
+          "strict_cold": true,
+          "platform_supported": true,
+          "eviction_call_succeeded": true,
+          "cold_cache_verified": true,
+          "verified_worker_count": 1,
+          "worker_count": 1,
+          "verification_definition": "every worker's pre-fork mincore observation saw zero resident model-file pages after fadvise",
+          "verification_status": "all_workers_verified_cold",
+          "per_worker": [
+            {
+              "selected_id": "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43",
+              "eviction_call_succeeded": true,
+              "cold_cache_verified": true,
+              "verification_status": "verified_zero_resident_pages_before_worker",
+              "before_eviction": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              },
+              "after_eviction_before_worker": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              },
+              "after_worker_load_and_first_result": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              }
+            }
+          ]
+        },
+        "cold_worker_invocations": 1,
+        "cold_aggregation": {
+          "worker_count": 1,
+          "latency_population": "one first inference from each fresh worker",
+          "throughput_denominator": "sum of worker GO-to-first-result durations; excludes cache eviction and process launch",
+          "rss_peak_fields": "maximum across workers",
+          "rss_pss_uss_baseline_average_final_fields": "mean across available workers",
+          "resource_counters": "sum across workers from model load through first result"
+        }
+      },
+      "metrics": {
+        "collection_status": {
+          "rss_peak_lifetime": "collected",
+          "rss_peak_window": "collected",
+          "rss_baseline": "collected",
+          "rss_final": "collected",
+          "rss_sampled": "collected",
+          "pss_baseline": "collected",
+          "pss_final": "collected",
+          "pss_sampled": "collected",
+          "uss_baseline": "collected",
+          "uss_final": "collected",
+          "uss_sampled": "collected",
+          "latency": "collected",
+          "single_request_items_per_sec": "collected",
+          "fixed_item_window_throughput": "not_applicable_cold_start"
+        },
+        "rss_peak_lifetime_mb": 102.215,
+        "rss_peak_window_mb": 102.215,
+        "rss_baseline_mb": 3.72656,
+        "rss_final_mb": 81.2695,
+        "rss_avg_mb": 72.7159,
+        "rss_max_sampled_mb": 101.941,
+        "pss_baseline_mb": 1.70215,
+        "pss_final_mb": 79.0518,
+        "pss_avg_mb": 70.5445,
+        "pss_peak_sampled_mb": 99.7236,
+        "uss_baseline_mb": 0.445312,
+        "uss_final_mb": 77.6328,
+        "uss_avg_mb": 69.1552,
+        "uss_peak_sampled_mb": 98.3047,
+        "memory_breakdown": {
+          "pss_anon": {
+            "collection_status": "collected",
+            "baseline_mb": 0.226562,
+            "average_mb": 63.5166,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "pss_file": {
+            "collection_status": "collected",
+            "baseline_mb": 1.47559,
+            "average_mb": 7.02787,
+            "peak_sampled_mb": 23.8955,
+            "final_mb": 3.22363
+          },
+          "anonymous": {
+            "collection_status": "collected",
+            "baseline_mb": 0.226562,
+            "average_mb": 63.5166,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "private_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 0.21875,
+            "average_mb": 5.63859,
+            "peak_sampled_mb": 22.4766,
+            "final_mb": 1.80469
+          },
+          "private_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 0.226562,
+            "average_mb": 63.5166,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "shared_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 3.28125,
+            "average_mb": 3.56063,
+            "peak_sampled_mb": 3.63672,
+            "final_mb": 3.63672
+          },
+          "shared_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 0.0,
+            "average_mb": 0.0,
+            "peak_sampled_mb": 0.0,
+            "final_mb": 0.0
+          }
+        },
+        "cpu_user_sec": 1.134,
+        "cpu_sys_sec": 0.23649,
+        "page_faults_major": 618,
+        "page_faults_minor": 23897,
+        "io_read_bytes": 0,
+        "wall_sec": 0.878652,
+        "latency_count": 1,
+        "latency_min_ms": 401.776,
+        "latency_max_ms": 401.776,
+        "latency_mean_ms": 401.776,
+        "latency_p50_ms": 401.776,
+        "latency_p90_ms": 401.776,
+        "latency_p95_ms": 401.776,
+        "latency_p99_ms": 401.776,
+        "latency_stddev_ms": 0.0,
+        "latency_mad_ms": 0.0,
+        "single_request_items_per_sec": 1.1381070093734493,
+        "cold_phase_timings": {
+          "collection_status": "collected",
+          "startup_boundary": "worker GO through first embed result; excludes cache eviction, process launch, input parsing and pipe synchronization",
+          "fresh_worker_count": 1,
+          "model_load_ms": {
+            "count": 1,
+            "min_ms": 122.088,
+            "max_ms": 122.088,
+            "mean_ms": 122.088,
+            "p50_ms": 122.088,
+            "p90_ms": 122.088,
+            "p95_ms": 122.088,
+            "p99_ms": 122.088,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "context_create_ms": {
+            "count": 1,
+            "min_ms": 354.728,
+            "max_ms": 354.728,
+            "mean_ms": 354.728,
+            "p50_ms": 354.728,
+            "p90_ms": 354.728,
+            "p95_ms": 354.728,
+            "p99_ms": 354.728,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "first_request_latency_ms": {
+            "count": 1,
+            "min_ms": 401.776,
+            "max_ms": 401.776,
+            "mean_ms": 401.776,
+            "p50_ms": 401.776,
+            "p90_ms": 401.776,
+            "p95_ms": 401.776,
+            "p99_ms": 401.776,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "startup_to_first_result_ms": {
+            "count": 1,
+            "min_ms": 878.652,
+            "max_ms": 878.652,
+            "mean_ms": 878.652,
+            "p50_ms": 878.652,
+            "p90_ms": 878.652,
+            "p95_ms": 878.652,
+            "p99_ms": 878.652,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          }
+        },
+        "fixed_item_window_throughput": {
+          "collection_status": "not_applicable_cold_start",
+          "canonical": false,
+          "source": "not_applicable_cold_start",
+          "window_size_items": null,
+          "minimum_windows_for_statistics": null,
+          "complete_windows": 0,
+          "dropped_tail_items": 1,
+          "count": 0,
+          "min_items_per_sec": null,
+          "max_items_per_sec": null,
+          "mean_items_per_sec": null,
+          "p50_items_per_sec": null,
+          "p90_items_per_sec": null,
+          "p95_items_per_sec": null,
+          "p99_items_per_sec": null,
+          "stddev_items_per_sec": null,
+          "mad_items_per_sec": null
+        },
+        "cold_worker_runs": [
+          {
+            "selected_id": "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43",
+            "cold_cache_verified": true,
+            "phases_ms": {
+              "model_load_ms": 122.088,
+              "context_create_ms": 354.728,
+              "first_request_latency_ms": 401.776,
+              "startup_to_first_result_ms": 878.652
+            },
+            "rss_peak_lifetime_mb": 102.215,
+            "rss_peak_window_mb": 102.215,
+            "page_faults_major": 618,
+            "page_faults_minor": 23897,
+            "io_read_bytes": 0
+          }
+        ]
+      },
+      "corpus_selection": {
+        "manifest": "bench/corpus_groups.json",
+        "manifest_schema_version": 1,
+        "group": "multilingual_short",
+        "group_size": 32,
+        "selected_size": 1,
+        "seed": 0,
+        "selected_ids": [
+          "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43"
+        ],
+        "selection_sha256": "c36b6ecbad1a6fe5ec25fb40ea62ae6db54723cf8389c39b6f6c195491b09ad0",
+        "sources": [
+          "tests/corpus/eval_multilingual.txt"
+        ],
+        "duplicate_policy": {
+          "within_group": "error",
+          "across_groups": "preserve"
+        },
+        "manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "selected_input_sha256": "c36b6ecbad1a6fe5ec25fb40ea62ae6db54723cf8389c39b6f6c195491b09ad0"
+      },
+      "independent_runs": 1,
+      "confidence_interval": null,
+      "scenario_definition": {
+        "name": "single_short_harrier_f32_streaming",
+        "model": "models/harrier-270m.gguf",
+        "corpus_group": "english_short",
+        "normalize": true,
+        "threads": 4,
+        "streaming": true,
+        "cache_state": "warm",
+        "warmup": 5,
+        "iter": 10,
+        "milestones": [
+          "M4",
+          "M5",
+          "M6",
+          "M7",
+          "M8"
+        ]
+      },
+      "fingerprints": {
+        "model": {
+          "collection_status": "collected",
+          "configured_path": "models/harrier-270m.gguf",
+          "resolved_path": "models/harrier-270m.gguf",
+          "size_bytes": 1088170176,
+          "sha256": "efa662cf610c091dac1fc7378b0f22ad2e4fa7d6510592650c6e405f50b0d78a",
+          "filesystem": {
+            "collection_status": "collected",
+            "mount_target": "/src",
+            "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+            "fs_type": "fakeowner",
+            "uuid": null
+          }
+        },
+        "selected_input": {
+          "collection_status": "collected",
+          "sha256": "c36b6ecbad1a6fe5ec25fb40ea62ae6db54723cf8389c39b6f6c195491b09ad0",
+          "selected_ids": [
+            "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43"
+          ]
+        },
+        "corpus_manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "benchmark_binary_sha256": "8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c"
+      }
+    },
+    "single_short_harrier_f32_streaming::vocab_spread": {
+      "schema_version": 2,
+      "scenario": "single_short_harrier_f32_streaming::vocab_spread",
+      "os": "linux",
+      "model": "/src/models/harrier-270m.gguf",
+      "inputs": "corpus-group:vocab_spread",
+      "warmup": 0,
+      "iter": 1,
+      "total_items": 1,
+      "threads": 4,
+      "pooling": "model-default",
+      "normalize": 1,
+      "requested_execution_mode": "streaming",
+      "resolved_execution_mode": "streaming",
+      "settings": {
+        "requested": {
+          "warmup": 0,
+          "iter": 1,
+          "threads": 4,
+          "pooling": "model-default",
+          "normalize": true,
+          "execution_mode": "streaming",
+          "cache_state": "cold",
+          "strict_cold": true,
+          "memory_profile": true,
+          "memory_profile_interval_ms": 10,
+          "timeout_sec": 1800,
+          "raw_samples_requested": true,
+          "max_seq_len": null,
+          "max_seq_len_source": "library-default",
+          "corpus_group": "vocab_spread",
+          "selected_input_count": 1,
+          "selection_seed": 0
+        },
+        "resolved": {
+          "threads": 4,
+          "threads_collection_status": "collected",
+          "pooling": "last",
+          "normalize": true,
+          "execution_mode": "streaming",
+          "cache_regime": "cold",
+          "max_seq_len": 512,
+          "corpus_group": "vocab_spread",
+          "selected_input_count": 1
+        }
+      },
+      "execution_mode_resolution": {
+        "contract_version": 1,
+        "requested_execution_mode": "streaming",
+        "resolved_execution_mode": "streaming",
+        "strict_no_fallback": true,
+        "context_creation_succeeded_with_exact_request": true,
+        "evidence": "frozen nanoembed_context_params.use_streaming request plus successful strict context creation"
+      },
+      "environment": {
+        "collection_status": "partial",
+        "os": "Linux",
+        "kernel": "6.12.5-linuxkit",
+        "machine": "aarch64",
+        "cpu_model": "",
+        "nproc": 8,
+        "page_size_bytes": 4096,
+        "cpu_frequency_policy": {
+          "collection_status": "unavailable",
+          "policy_count": null,
+          "governors": null,
+          "drivers": null
+        },
+        "numa": {
+          "collection_status": "unavailable",
+          "online_nodes": null,
+          "possible_nodes": null,
+          "node_count": null
+        },
+        "total_ram_bytes": 8217858048,
+        "total_ram_collection_status": "collected",
+        "working_directory_filesystem": {
+          "collection_status": "collected",
+          "mount_target": "/src",
+          "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+          "fs_type": "fakeowner",
+          "uuid": null
+        },
+        "native_worker_report": {
+          "kernel": "6.12.5-linuxkit",
+          "cpu_model": "",
+          "nproc": 8,
+          "page_size_bytes": 4096
+        }
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "cache_regime_requested": "cold",
+        "cache_regime": "cold",
+        "execution_shape": "selected-inputs-each-use-one-fresh-native-and-worker-process",
+        "warmup_items_executed": 0,
+        "latency_scope": "first-inference-only-after-model-and-context-creation",
+        "throughput_scope": "worker-startup-through-first-result-excludes-eviction-and-process-launch",
+        "resource_counter_scope": "model-load-through-first-result",
+        "memory_profile_enabled": true,
+        "memory_profile_interval_requested_ms": 10,
+        "memory_profile_samples_requested": 156,
+        "memory_profile_samples_attempted": 115,
+        "memory_profile_samples_effective": 115,
+        "memory_profile_valid_sample_ratio": 1.0,
+        "memory_profile_final_sample_collected": true,
+        "memory_profile_final_in_aggregates": true,
+        "latency_result_role": "diagnostic",
+        "memory_profile_may_perturb_memory_lifecycle": true,
+        "memory_profile_observer_effect": "smaps_rollup page-table walks may perturb timing and page residency",
+        "memory_profile_read_duration_min_ms": 0.08175,
+        "memory_profile_read_duration_mean_ms": 0.978291,
+        "memory_profile_read_duration_max_ms": 26.4565,
+        "percentile_method": "lower: floor(q * (count - 1))",
+        "stddev_kind": "population",
+        "hwm_reset": true,
+        "rss_interval_ms": 10,
+        "rollup_interval_ms": 10,
+        "rss_samples": 115,
+        "rollup_samples": 115,
+        "cache_control": {
+          "cold_cache_requested": true,
+          "strict_cold": true,
+          "platform_supported": true,
+          "eviction_call_succeeded": true,
+          "cold_cache_verified": true,
+          "verified_worker_count": 1,
+          "worker_count": 1,
+          "verification_definition": "every worker's pre-fork mincore observation saw zero resident model-file pages after fadvise",
+          "verification_status": "all_workers_verified_cold",
+          "per_worker": [
+            {
+              "selected_id": "sha256:4811a411d71b12f363fb793c434b3354aae071b1c57adb5b1b2229057a173685",
+              "eviction_call_succeeded": true,
+              "cold_cache_verified": true,
+              "verification_status": "verified_zero_resident_pages_before_worker",
+              "before_eviction": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              },
+              "after_eviction_before_worker": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              },
+              "after_worker_load_and_first_result": {
+                "collection_status": "collected",
+                "file_size_bytes": 1088170176,
+                "page_size_bytes": 4096,
+                "total_pages": 265667,
+                "resident_pages": 0,
+                "resident_percent": 0,
+                "error_number": null,
+                "status": "collected"
+              }
+            }
+          ]
+        },
+        "cold_worker_invocations": 1,
+        "cold_aggregation": {
+          "worker_count": 1,
+          "latency_population": "one first inference from each fresh worker",
+          "throughput_denominator": "sum of worker GO-to-first-result durations; excludes cache eviction and process launch",
+          "rss_peak_fields": "maximum across workers",
+          "rss_pss_uss_baseline_average_final_fields": "mean across available workers",
+          "resource_counters": "sum across workers from model load through first result"
+        }
+      },
+      "metrics": {
+        "collection_status": {
+          "rss_peak_lifetime": "collected",
+          "rss_peak_window": "collected",
+          "rss_baseline": "collected",
+          "rss_final": "collected",
+          "rss_sampled": "collected",
+          "pss_baseline": "collected",
+          "pss_final": "collected",
+          "pss_sampled": "collected",
+          "uss_baseline": "collected",
+          "uss_final": "collected",
+          "uss_sampled": "collected",
+          "latency": "collected",
+          "single_request_items_per_sec": "collected",
+          "fixed_item_window_throughput": "not_applicable_cold_start"
+        },
+        "rss_peak_lifetime_mb": 102.438,
+        "rss_peak_window_mb": 102.438,
+        "rss_baseline_mb": 3.73047,
+        "rss_final_mb": 81.3203,
+        "rss_avg_mb": 76.6768,
+        "rss_max_sampled_mb": 102.551,
+        "pss_baseline_mb": 1.70605,
+        "pss_final_mb": 79.1025,
+        "pss_avg_mb": 74.4961,
+        "pss_peak_sampled_mb": 100.333,
+        "uss_baseline_mb": 0.449219,
+        "uss_final_mb": 77.6836,
+        "uss_avg_mb": 73.101,
+        "uss_peak_sampled_mb": 98.9141,
+        "memory_breakdown": {
+          "pss_anon": {
+            "collection_status": "collected",
+            "baseline_mb": 0.230469,
+            "average_mb": 65.7607,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "pss_file": {
+            "collection_status": "collected",
+            "baseline_mb": 1.47559,
+            "average_mb": 8.73539,
+            "peak_sampled_mb": 24.5049,
+            "final_mb": 3.27441
+          },
+          "anonymous": {
+            "collection_status": "collected",
+            "baseline_mb": 0.230469,
+            "average_mb": 65.7607,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "private_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 0.21875,
+            "average_mb": 7.34022,
+            "peak_sampled_mb": 23.0859,
+            "final_mb": 1.85547
+          },
+          "private_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 0.230469,
+            "average_mb": 65.7607,
+            "peak_sampled_mb": 75.8281,
+            "final_mb": 75.8281
+          },
+          "shared_clean": {
+            "collection_status": "collected",
+            "baseline_mb": 3.28125,
+            "average_mb": 3.57585,
+            "peak_sampled_mb": 3.63672,
+            "final_mb": 3.63672
+          },
+          "shared_dirty": {
+            "collection_status": "collected",
+            "baseline_mb": 0.0,
+            "average_mb": 0.0,
+            "peak_sampled_mb": 0.0,
+            "final_mb": 0.0
+          }
+        },
+        "cpu_user_sec": 3.20125,
+        "cpu_sys_sec": 0.227892,
+        "page_faults_major": 395,
+        "page_faults_minor": 22990,
+        "io_read_bytes": 0,
+        "wall_sec": 1.54084,
+        "latency_count": 1,
+        "latency_min_ms": 845.984,
+        "latency_max_ms": 845.984,
+        "latency_mean_ms": 845.984,
+        "latency_p50_ms": 845.984,
+        "latency_p90_ms": 845.984,
+        "latency_p95_ms": 845.984,
+        "latency_p99_ms": 845.984,
+        "latency_stddev_ms": 0.0,
+        "latency_mad_ms": 0.0,
+        "single_request_items_per_sec": 0.64899665117728,
+        "cold_phase_timings": {
+          "collection_status": "collected",
+          "startup_boundary": "worker GO through first embed result; excludes cache eviction, process launch, input parsing and pipe synchronization",
+          "fresh_worker_count": 1,
+          "model_load_ms": {
+            "count": 1,
+            "min_ms": 238.924,
+            "max_ms": 238.924,
+            "mean_ms": 238.924,
+            "p50_ms": 238.924,
+            "p90_ms": 238.924,
+            "p95_ms": 238.924,
+            "p99_ms": 238.924,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "context_create_ms": {
+            "count": 1,
+            "min_ms": 455.919,
+            "max_ms": 455.919,
+            "mean_ms": 455.919,
+            "p50_ms": 455.919,
+            "p90_ms": 455.919,
+            "p95_ms": 455.919,
+            "p99_ms": 455.919,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "first_request_latency_ms": {
+            "count": 1,
+            "min_ms": 845.984,
+            "max_ms": 845.984,
+            "mean_ms": 845.984,
+            "p50_ms": 845.984,
+            "p90_ms": 845.984,
+            "p95_ms": 845.984,
+            "p99_ms": 845.984,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          },
+          "startup_to_first_result_ms": {
+            "count": 1,
+            "min_ms": 1540.84,
+            "max_ms": 1540.84,
+            "mean_ms": 1540.84,
+            "p50_ms": 1540.84,
+            "p90_ms": 1540.84,
+            "p95_ms": 1540.84,
+            "p99_ms": 1540.84,
+            "stddev_ms": 0.0,
+            "mad_ms": 0.0
+          }
+        },
+        "fixed_item_window_throughput": {
+          "collection_status": "not_applicable_cold_start",
+          "canonical": false,
+          "source": "not_applicable_cold_start",
+          "window_size_items": null,
+          "minimum_windows_for_statistics": null,
+          "complete_windows": 0,
+          "dropped_tail_items": 1,
+          "count": 0,
+          "min_items_per_sec": null,
+          "max_items_per_sec": null,
+          "mean_items_per_sec": null,
+          "p50_items_per_sec": null,
+          "p90_items_per_sec": null,
+          "p95_items_per_sec": null,
+          "p99_items_per_sec": null,
+          "stddev_items_per_sec": null,
+          "mad_items_per_sec": null
+        },
+        "cold_worker_runs": [
+          {
+            "selected_id": "sha256:4811a411d71b12f363fb793c434b3354aae071b1c57adb5b1b2229057a173685",
+            "cold_cache_verified": true,
+            "phases_ms": {
+              "model_load_ms": 238.924,
+              "context_create_ms": 455.919,
+              "first_request_latency_ms": 845.984,
+              "startup_to_first_result_ms": 1540.84
+            },
+            "rss_peak_lifetime_mb": 102.438,
+            "rss_peak_window_mb": 102.438,
+            "page_faults_major": 395,
+            "page_faults_minor": 22990,
+            "io_read_bytes": 0
+          }
+        ]
+      },
+      "corpus_selection": {
+        "manifest": "bench/corpus_groups.json",
+        "manifest_schema_version": 1,
+        "group": "vocab_spread",
+        "group_size": 24,
+        "selected_size": 1,
+        "seed": 0,
+        "selected_ids": [
+          "sha256:4811a411d71b12f363fb793c434b3354aae071b1c57adb5b1b2229057a173685"
+        ],
+        "selection_sha256": "a2772d553d2ae4067904ac5afdf5069a4f3f3351d63b6e72b5807317ed49975c",
+        "sources": [
+          "tests/corpus/eval_vocab_spread.txt"
+        ],
+        "duplicate_policy": {
+          "within_group": "error",
+          "across_groups": "preserve"
+        },
+        "manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "selected_input_sha256": "a2772d553d2ae4067904ac5afdf5069a4f3f3351d63b6e72b5807317ed49975c"
+      },
+      "independent_runs": 1,
+      "confidence_interval": null,
+      "scenario_definition": {
+        "name": "single_short_harrier_f32_streaming",
+        "model": "models/harrier-270m.gguf",
+        "corpus_group": "english_short",
+        "normalize": true,
+        "threads": 4,
+        "streaming": true,
+        "cache_state": "warm",
+        "warmup": 5,
+        "iter": 10,
+        "milestones": [
+          "M4",
+          "M5",
+          "M6",
+          "M7",
+          "M8"
+        ]
+      },
+      "fingerprints": {
+        "model": {
+          "collection_status": "collected",
+          "configured_path": "models/harrier-270m.gguf",
+          "resolved_path": "models/harrier-270m.gguf",
+          "size_bytes": 1088170176,
+          "sha256": "efa662cf610c091dac1fc7378b0f22ad2e4fa7d6510592650c6e405f50b0d78a",
+          "filesystem": {
+            "collection_status": "collected",
+            "mount_target": "/src",
+            "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+            "fs_type": "fakeowner",
+            "uuid": null
+          }
+        },
+        "selected_input": {
+          "collection_status": "collected",
+          "sha256": "a2772d553d2ae4067904ac5afdf5069a4f3f3351d63b6e72b5807317ed49975c",
+          "selected_ids": [
+            "sha256:4811a411d71b12f363fb793c434b3354aae071b1c57adb5b1b2229057a173685"
+          ]
+        },
+        "corpus_manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "benchmark_binary_sha256": "8abd7e2840fc80317ff119bd175e6c3e8eb1be2355326d2cc913490f7afb481c"
+      }
+    }
+  },
+  "aggregates": {
+    "aggregation_role": "descriptive; individual scenario results are canonical",
+    "throughput_method": "sum(total_items) / sum(canonical timed wall seconds)",
+    "latency_method": "count-weighted mean plus extrema; percentiles require raw samples and are not reconstructed",
+    "independent_runs": 1,
+    "confidence_interval": null,
+    "by_group": {
+      "english_short": {
+        "scenario_keys": [
+          "single_short_harrier_f32_streaming"
+        ],
+        "scenario_count": 1,
+        "homogeneous_dimensions": true,
+        "dimensions": {
+          "model_sha256s": [
+            "efa662cf610c091dac1fc7378b0f22ad2e4fa7d6510592650c6e405f50b0d78a"
+          ],
+          "cache_regimes": [
+            "cold"
+          ],
+          "memory_profile_states": [
+            true
+          ],
+          "selection_sha256s": [
+            "98b61fe80a3ce1790e04ce844249edfc7f38fbe7ac40caa85d59310270350c8f"
+          ],
+          "resolved_execution_modes": [
+            "streaming"
+          ]
+        },
+        "total_items": 1,
+        "total_timed_wall_sec": 0.885811,
+        "single_request_items_per_sec": 1.1289089884862573,
+        "latency_count": 1,
+        "latency_min_ms": 445.461,
+        "latency_max_ms": 445.461,
+        "latency_weighted_mean_ms": 445.461,
+        "latency_percentiles": null,
+        "confidence_interval": null
+      },
+      "multilingual_short": {
+        "scenario_keys": [
+          "single_short_harrier_f32_streaming::multilingual_short"
+        ],
+        "scenario_count": 1,
+        "homogeneous_dimensions": true,
+        "dimensions": {
+          "model_sha256s": [
+            "efa662cf610c091dac1fc7378b0f22ad2e4fa7d6510592650c6e405f50b0d78a"
+          ],
+          "cache_regimes": [
+            "cold"
+          ],
+          "memory_profile_states": [
+            true
+          ],
+          "selection_sha256s": [
+            "c36b6ecbad1a6fe5ec25fb40ea62ae6db54723cf8389c39b6f6c195491b09ad0"
+          ],
+          "resolved_execution_modes": [
+            "streaming"
+          ]
+        },
+        "total_items": 1,
+        "total_timed_wall_sec": 0.878652,
+        "single_request_items_per_sec": 1.1381070093734493,
+        "latency_count": 1,
+        "latency_min_ms": 401.776,
+        "latency_max_ms": 401.776,
+        "latency_weighted_mean_ms": 401.776,
+        "latency_percentiles": null,
+        "confidence_interval": null
+      },
+      "vocab_spread": {
+        "scenario_keys": [
+          "single_short_harrier_f32_streaming::vocab_spread"
+        ],
+        "scenario_count": 1,
+        "homogeneous_dimensions": true,
+        "dimensions": {
+          "model_sha256s": [
+            "efa662cf610c091dac1fc7378b0f22ad2e4fa7d6510592650c6e405f50b0d78a"
+          ],
+          "cache_regimes": [
+            "cold"
+          ],
+          "memory_profile_states": [
+            true
+          ],
+          "selection_sha256s": [
+            "a2772d553d2ae4067904ac5afdf5069a4f3f3351d63b6e72b5807317ed49975c"
+          ],
+          "resolved_execution_modes": [
+            "streaming"
+          ]
+        },
+        "total_items": 1,
+        "total_timed_wall_sec": 1.54084,
+        "single_request_items_per_sec": 0.6489966511772799,
+        "latency_count": 1,
+        "latency_min_ms": 845.984,
+        "latency_max_ms": 845.984,
+        "latency_weighted_mean_ms": 845.984,
+        "latency_percentiles": null,
+        "confidence_interval": null
+      }
+    },
+    "overall": {
+      "scenario_keys": [
+        "single_short_harrier_f32_streaming",
+        "single_short_harrier_f32_streaming::multilingual_short",
+        "single_short_harrier_f32_streaming::vocab_spread"
+      ],
+      "scenario_count": 3,
+      "homogeneous_dimensions": false,
+      "dimensions": {
+        "model_sha256s": [
+          "efa662cf610c091dac1fc7378b0f22ad2e4fa7d6510592650c6e405f50b0d78a"
+        ],
+        "cache_regimes": [
+          "cold"
+        ],
+        "memory_profile_states": [
+          true
+        ],
+        "selection_sha256s": [
+          "98b61fe80a3ce1790e04ce844249edfc7f38fbe7ac40caa85d59310270350c8f",
+          "a2772d553d2ae4067904ac5afdf5069a4f3f3351d63b6e72b5807317ed49975c",
+          "c36b6ecbad1a6fe5ec25fb40ea62ae6db54723cf8389c39b6f6c195491b09ad0"
+        ],
+        "resolved_execution_modes": [
+          "streaming"
+        ]
+      },
+      "total_items": 3,
+      "total_timed_wall_sec": 3.3053030000000003,
+      "single_request_items_per_sec": 0.907632371374122,
+      "latency_count": 3,
+      "latency_min_ms": 401.776,
+      "latency_max_ms": 845.984,
+      "latency_weighted_mean_ms": 564.407,
+      "latency_percentiles": null,
+      "confidence_interval": null
+    }
+  }
+}

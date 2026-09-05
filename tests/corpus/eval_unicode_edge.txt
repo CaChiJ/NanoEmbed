@@ -1,0 +1,20 @@
+Family emoji sequences can join several code points: 👨‍👩‍👧‍👦 and 👩🏽‍💻.
+Skin-tone modifiers change emoji sequences: 👋🏻 👋🏼 👋🏽 👋🏾 👋🏿.
+Flags are regional-indicator pairs: 🇰🇷 🇺🇳 🇧🇷 🇿🇦.
+The decomposed word Café contains a combining acute accent.
+The precomposed word Café should remain a distinct byte sequence.
+Combining marks may stack: Z̴̥̯͆̽͑̚͝a̶͈̐l̴̯͌̈́ǧ̷̱́̑o̸͖̓.
+Arabic and Latin can share a line: رقم الإصدار 2.7 is ready.
+Hebrew and English can share a line: גרסה 3 is available.
+Right-to-left punctuation test: العربية (English) ١٢٣.
+Indic conjuncts form clusters: क्ष त्र ज्ञ and श्री.
+Hangul appears precomposed here: 한글 임베딩 테스트.
+Hangul Jamo appears separately here: ㅎㅏㄴㄱㅡㄹ.
+Japanese mixes scripts and width: カタカナ ひらがな 漢字 ＡＢＣ１２３.
+Variation selectors distinguish text and emoji presentation: ♥︎ ♥️.
+Keycap and tag-like emoji sequences: 1️⃣ #️⃣ *️⃣.
+Mathematical alphabets are compatibility characters: ℕ ℤ ℚ ℝ ℂ 𝔸 𝒜.
+Uncommon spacing characters separate these words: alpha beta gamma　delta.
+Quotes and dashes vary: 'single' “curly” — em – en ‐ hyphen.
+Replacement-like glyphs remain literal text: � ⍰ □ ◊.
+Currency and legal symbols cover several blocks: ₩ € ₹ ₿ © ® ™ § ¶.

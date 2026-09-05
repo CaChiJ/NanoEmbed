@@ -1,0 +1,646 @@
+{
+  "schema_version": 2,
+  "milestone": "M3.6",
+  "git_sha": "f473b16",
+  "started_at_utc": "2026-08-24T06:57:50.451031Z",
+  "independent_runs": 1,
+  "confidence_interval": null,
+  "run_settings": {
+    "requested": {
+      "milestone": "M3.6",
+      "scenario_filter": "single_long_f16",
+      "groups": [
+        "long_context:1"
+      ],
+      "samples_per_group": null,
+      "selection_seed": 0,
+      "memory_profile": false,
+      "memory_profile_interval_ms": null,
+      "cache_state_override": "warm",
+      "strict_cold": false,
+      "raw_samples_out": "/out/M3.6-docker-desktop-arm64-warm-profile-off-bert-long.samples.json",
+      "scenarios_path": "bench/scenarios.yaml",
+      "corpus_manifest_path": "bench/corpus_groups.json",
+      "benchmark_binary_path": "/build/bin/nanoembed-bench",
+      "output_path": "/out/M3.6-docker-desktop-arm64-warm-profile-off-bert-long.json"
+    },
+    "resolved": {
+      "selected_scenario_definitions": 1,
+      "planned_scenario_group_runs": 1
+    }
+  },
+  "fingerprints": {
+    "code": {
+      "nanoembed": {
+        "collection_status": "collected",
+        "sha": "f473b1651e9f9084e6a24f1133061aab5b41032f",
+        "dirty": true
+      },
+      "ggml": {
+        "collection_status": "collected",
+        "sha": "387fa29fbbf3149f06a631c7850b6c35c24b0232"
+      }
+    },
+    "benchmark_binary": {
+      "collection_status": "collected",
+      "configured_path": "/build/bin/nanoembed-bench",
+      "resolved_path": "/build/bin/nanoembed-bench",
+      "size_bytes": 243880,
+      "sha256": "1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/build",
+        "source": "/run/host_mark/private[/tmp/nanoembed-a8-build.JucGHh]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "build": {
+      "collection_status": "collected",
+      "cmake_cache_path": "/build/CMakeCache.txt",
+      "build_type": "Release",
+      "compiler": {
+        "id": "GNU",
+        "version": "13.3.0",
+        "path": "/usr/bin/c++"
+      },
+      "cmake_options": {
+        "BUILD_SHARED_LIBS": "ON",
+        "BUILD_TESTING": "ON",
+        "CMAKE_CXX_FLAGS": "",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "CMAKE_C_FLAGS": "",
+        "CMAKE_C_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "GGML_AMX_BF16": "OFF",
+        "GGML_AMX_INT8": "OFF",
+        "GGML_ACCELERATE": "ON",
+        "GGML_AVX": "OFF",
+        "GGML_AVX2": "OFF",
+        "GGML_AVX512": "OFF",
+        "GGML_AVX512_BF16": "OFF",
+        "GGML_AVX512_VNNI": "OFF",
+        "GGML_BLAS": "OFF",
+        "GGML_BLAS_VENDOR": "Generic",
+        "GGML_BMI2": "OFF",
+        "GGML_CPU": "ON",
+        "GGML_CPU_ALL_VARIANTS": "OFF",
+        "GGML_CPU_REPACK": "ON",
+        "GGML_CUDA": "OFF",
+        "GGML_HIP": "OFF",
+        "GGML_F16C": "OFF",
+        "GGML_FMA": "OFF",
+        "GGML_LTO": "OFF",
+        "GGML_METAL": "OFF",
+        "GGML_NATIVE": "ON",
+        "GGML_OPENCL": "OFF",
+        "GGML_OPENMP": "ON",
+        "GGML_RPC": "OFF",
+        "GGML_SSE42": "OFF",
+        "GGML_SYCL": "OFF",
+        "GGML_VULKAN": "OFF"
+      }
+    },
+    "environment": {
+      "collection_status": "partial",
+      "os": "Linux",
+      "kernel": "6.12.5-linuxkit",
+      "machine": "aarch64",
+      "cpu_model": null,
+      "nproc": 8,
+      "page_size_bytes": 4096,
+      "cpu_frequency_policy": {
+        "collection_status": "unavailable",
+        "policy_count": null,
+        "governors": null,
+        "drivers": null
+      },
+      "numa": {
+        "collection_status": "unavailable",
+        "online_nodes": null,
+        "possible_nodes": null,
+        "node_count": null
+      },
+      "total_ram_bytes": 8217858048,
+      "total_ram_collection_status": "collected",
+      "working_directory_filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "scenario_config": {
+      "collection_status": "collected",
+      "configured_path": "bench/scenarios.yaml",
+      "resolved_path": "bench/scenarios.yaml",
+      "size_bytes": 2781,
+      "sha256": "19ab58e0115ef6befd60cef8bfaf463e916511f468d4ceb3992bc7c93b82945e",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    },
+    "corpus_manifest": {
+      "collection_status": "collected",
+      "configured_path": "bench/corpus_groups.json",
+      "resolved_path": "bench/corpus_groups.json",
+      "size_bytes": 1206,
+      "sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+      "filesystem": {
+        "collection_status": "collected",
+        "mount_target": "/src",
+        "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+        "fs_type": "fakeowner",
+        "uuid": null
+      }
+    }
+  },
+  "corpus_manifest": {
+    "path": "bench/corpus_groups.json",
+    "schema_version": 1,
+    "size_bytes": 1206,
+    "sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+    "selection_seed": 0,
+    "samples_per_group": null,
+    "duplicate_policy": {
+      "within_group": "error",
+      "across_groups": "preserve"
+    }
+  },
+  "cache_state_override": "warm",
+  "strict_cold": false,
+  "raw_samples": {
+    "collection_status": "collected",
+    "format": "nanoembed-benchmark-raw-latency-json",
+    "schema_version": 1,
+    "path": "M3.6-docker-desktop-arm64-warm-profile-off-bert-long.samples.json",
+    "size_bytes": 605,
+    "sha256": "1d11f8adf22b09fe0d45b3e2401082f751585a37d3123e5cd4255c642268ca5c",
+    "scenario_count": 1
+  },
+  "scenarios": {
+    "single_long_f16": {
+      "schema_version": 2,
+      "scenario": "single_long_f16",
+      "os": "linux",
+      "model": "/src/models/bge-small-en-v1.5-f16.gguf",
+      "inputs": "corpus-group:long_context",
+      "warmup": 2,
+      "iter": 10,
+      "total_items": 10,
+      "threads": 4,
+      "pooling": "cls",
+      "normalize": 1,
+      "settings": {
+        "requested": {
+          "warmup": 2,
+          "iter": 10,
+          "threads": 4,
+          "pooling": "cls",
+          "normalize": true,
+          "cache_state": "warm",
+          "strict_cold": false,
+          "memory_profile": false,
+          "memory_profile_interval_ms": 25,
+          "timeout_sec": 1800,
+          "raw_samples_requested": true,
+          "max_seq_len": null,
+          "max_seq_len_source": "library-default",
+          "corpus_group": "long_context",
+          "selected_input_count": 1,
+          "selection_seed": 0
+        },
+        "resolved": {
+          "threads": 4,
+          "threads_collection_status": "collected",
+          "pooling": "cls",
+          "normalize": true,
+          "cache_regime": "warm",
+          "max_seq_len": 512,
+          "corpus_group": "long_context",
+          "selected_input_count": 1
+        }
+      },
+      "environment": {
+        "collection_status": "partial",
+        "os": "Linux",
+        "kernel": "6.12.5-linuxkit",
+        "machine": "aarch64",
+        "cpu_model": "",
+        "nproc": 8,
+        "page_size_bytes": 4096,
+        "cpu_frequency_policy": {
+          "collection_status": "unavailable",
+          "policy_count": null,
+          "governors": null,
+          "drivers": null
+        },
+        "numa": {
+          "collection_status": "unavailable",
+          "online_nodes": null,
+          "possible_nodes": null,
+          "node_count": null
+        },
+        "total_ram_bytes": 8217858048,
+        "total_ram_collection_status": "collected",
+        "working_directory_filesystem": {
+          "collection_status": "collected",
+          "mount_target": "/src",
+          "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+          "fs_type": "fakeowner",
+          "uuid": null
+        },
+        "native_worker_report": {
+          "kernel": "6.12.5-linuxkit",
+          "cpu_model": "",
+          "nproc": 8,
+          "page_size_bytes": 4096
+        }
+      },
+      "measurement": {
+        "mode": "fork-exec-isolated",
+        "cache_regime_requested": "warm",
+        "cache_regime": "warm",
+        "execution_shape": "one-worker-warmup-then-timed-repetitions",
+        "warmup_items_executed": 2,
+        "latency_scope": "timed-inference-window-warmup-excluded",
+        "throughput_scope": "timed-inference-window",
+        "resource_counter_scope": "timed-inference-window",
+        "memory_profile_enabled": false,
+        "memory_profile_interval_requested_ms": 25,
+        "memory_profile_samples_requested": 0,
+        "memory_profile_samples_attempted": 0,
+        "memory_profile_samples_effective": 0,
+        "memory_profile_valid_sample_ratio": null,
+        "memory_profile_final_sample_collected": false,
+        "memory_profile_final_in_aggregates": false,
+        "latency_result_role": "authoritative",
+        "memory_profile_may_perturb_memory_lifecycle": false,
+        "memory_profile_observer_effect": "not_applicable_detailed_sampling_disabled",
+        "memory_profile_read_duration_min_ms": null,
+        "memory_profile_read_duration_mean_ms": null,
+        "memory_profile_read_duration_max_ms": null,
+        "percentile_method": "lower: floor(q * (count - 1))",
+        "stddev_kind": "population",
+        "hwm_reset": true,
+        "rss_interval_ms": null,
+        "rollup_interval_ms": null,
+        "rss_samples": 0,
+        "rollup_samples": 0,
+        "cache_control": {
+          "cold_cache_requested": false,
+          "strict_cold": false,
+          "platform_supported": null,
+          "eviction_call_succeeded": null,
+          "eviction_error_number": null,
+          "cold_cache_verified": null,
+          "verification_definition": "not_requested",
+          "verification_status": "not_requested",
+          "before_eviction": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          },
+          "after_eviction_before_worker": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          },
+          "after_worker_load_and_first_result": {
+            "collection_status": "not_requested",
+            "file_size_bytes": null,
+            "page_size_bytes": null,
+            "total_pages": null,
+            "resident_pages": null,
+            "resident_percent": null,
+            "error_number": null,
+            "status": "not_requested"
+          }
+        }
+      },
+      "metrics": {
+        "collection_status": {
+          "rss_peak_lifetime": "collected",
+          "rss_peak_window": "collected",
+          "rss_baseline": "collected",
+          "rss_final": "collected",
+          "rss_sampled": "not_collected",
+          "pss_baseline": "not_collected",
+          "pss_final": "not_collected",
+          "pss_sampled": "not_collected",
+          "uss_baseline": "not_collected",
+          "uss_final": "not_collected",
+          "uss_sampled": "not_collected",
+          "latency": "collected",
+          "single_request_items_per_sec": "collected",
+          "fixed_item_window_throughput": "insufficient_samples"
+        },
+        "rss_peak_lifetime_mb": 92.1055,
+        "rss_peak_window_mb": 92.1055,
+        "rss_baseline_mb": 92.1055,
+        "rss_final_mb": 92.1055,
+        "rss_avg_mb": null,
+        "rss_max_sampled_mb": null,
+        "pss_baseline_mb": null,
+        "pss_final_mb": null,
+        "pss_avg_mb": null,
+        "pss_peak_sampled_mb": null,
+        "uss_baseline_mb": null,
+        "uss_final_mb": null,
+        "uss_avg_mb": null,
+        "uss_peak_sampled_mb": null,
+        "memory_breakdown": {
+          "pss_anon": {
+            "collection_status": "not_collected",
+            "baseline_mb": null,
+            "average_mb": null,
+            "peak_sampled_mb": null,
+            "final_mb": null
+          },
+          "pss_file": {
+            "collection_status": "not_collected",
+            "baseline_mb": null,
+            "average_mb": null,
+            "peak_sampled_mb": null,
+            "final_mb": null
+          },
+          "anonymous": {
+            "collection_status": "not_collected",
+            "baseline_mb": null,
+            "average_mb": null,
+            "peak_sampled_mb": null,
+            "final_mb": null
+          },
+          "private_clean": {
+            "collection_status": "not_collected",
+            "baseline_mb": null,
+            "average_mb": null,
+            "peak_sampled_mb": null,
+            "final_mb": null
+          },
+          "private_dirty": {
+            "collection_status": "not_collected",
+            "baseline_mb": null,
+            "average_mb": null,
+            "peak_sampled_mb": null,
+            "final_mb": null
+          },
+          "shared_clean": {
+            "collection_status": "not_collected",
+            "baseline_mb": null,
+            "average_mb": null,
+            "peak_sampled_mb": null,
+            "final_mb": null
+          },
+          "shared_dirty": {
+            "collection_status": "not_collected",
+            "baseline_mb": null,
+            "average_mb": null,
+            "peak_sampled_mb": null,
+            "final_mb": null
+          }
+        },
+        "cpu_user_sec": 101.366,
+        "cpu_sys_sec": 0.023124,
+        "page_faults_major": 0,
+        "page_faults_minor": 0,
+        "io_read_bytes": 0,
+        "wall_sec": 25.4018,
+        "latency_count": 10,
+        "latency_min_ms": 2513.84,
+        "latency_max_ms": 2611.03,
+        "latency_mean_ms": 2540.17,
+        "latency_p50_ms": 2531.12,
+        "latency_p90_ms": 2552.99,
+        "latency_p95_ms": 2552.99,
+        "latency_p99_ms": 2552.99,
+        "latency_stddev_ms": 26.6961,
+        "latency_mad_ms": 13.7636,
+        "single_request_items_per_sec": 0.393674,
+        "cold_phase_timings": {
+          "collection_status": "not_applicable_warm",
+          "startup_boundary": "worker GO through first embed result; excludes cache eviction, process launch, input parsing and pipe synchronization",
+          "fresh_worker_count": 0,
+          "model_load_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "context_create_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "first_request_latency_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          },
+          "startup_to_first_result_ms": {
+            "count": 0,
+            "min_ms": null,
+            "max_ms": null,
+            "mean_ms": null,
+            "p50_ms": null,
+            "p90_ms": null,
+            "p95_ms": null,
+            "p99_ms": null,
+            "stddev_ms": null,
+            "mad_ms": null
+          }
+        },
+        "fixed_item_window_throughput": {
+          "collection_status": "insufficient_samples",
+          "canonical": false,
+          "source": "sum-of-per-request-latencies",
+          "window_size_items": 10,
+          "minimum_windows_for_statistics": 2,
+          "complete_windows": 1,
+          "dropped_tail_items": 0,
+          "count": 1,
+          "min_items_per_sec": null,
+          "max_items_per_sec": null,
+          "mean_items_per_sec": null,
+          "p50_items_per_sec": null,
+          "p90_items_per_sec": null,
+          "p95_items_per_sec": null,
+          "p99_items_per_sec": null,
+          "stddev_items_per_sec": null,
+          "mad_items_per_sec": null
+        }
+      },
+      "corpus_selection": {
+        "manifest": "bench/corpus_groups.json",
+        "manifest_schema_version": 1,
+        "group": "long_context",
+        "group_size": 20,
+        "selected_size": 1,
+        "seed": 0,
+        "selected_ids": [
+          "sha256:fa088c808bfe49b649647117592c9e9791f41872984cb187c6ba25a94579444a"
+        ],
+        "selection_sha256": "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc",
+        "sources": [
+          "tests/corpus/eval_long.txt"
+        ],
+        "duplicate_policy": {
+          "within_group": "error",
+          "across_groups": "preserve"
+        },
+        "manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "selected_input_sha256": "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc"
+      },
+      "independent_runs": 1,
+      "confidence_interval": null,
+      "scenario_definition": {
+        "name": "single_long_f16",
+        "model": "models/bge-small-en-v1.5-f16.gguf",
+        "corpus_group": "long_context",
+        "pooling": "cls",
+        "normalize": true,
+        "threads": 4,
+        "cache_state": "warm",
+        "warmup": 2,
+        "iter": 10,
+        "milestones": [
+          "M3.5",
+          "M3.6",
+          "M4",
+          "M5",
+          "M6",
+          "M7",
+          "M8"
+        ]
+      },
+      "fingerprints": {
+        "model": {
+          "collection_status": "collected",
+          "configured_path": "models/bge-small-en-v1.5-f16.gguf",
+          "resolved_path": "models/bge-small-en-v1.5-f16.gguf",
+          "size_bytes": 67308128,
+          "sha256": "f0b2fef971e8366438bfd2d9aefea1b0115919389448806d290237f638bae999",
+          "filesystem": {
+            "collection_status": "collected",
+            "mount_target": "/src",
+            "source": "/run/host_mark/Users[/cachij/Documents/Repos/NanoEmbed]",
+            "fs_type": "fakeowner",
+            "uuid": null
+          }
+        },
+        "selected_input": {
+          "collection_status": "collected",
+          "sha256": "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc",
+          "selected_ids": [
+            "sha256:fa088c808bfe49b649647117592c9e9791f41872984cb187c6ba25a94579444a"
+          ]
+        },
+        "corpus_manifest_sha256": "8d62b41f2f86150191fb46e2e39c3b0ef93352b8e5147e51366d4325fbb97218",
+        "benchmark_binary_sha256": "1e083fda33981e1fbb22a7a1d6c984ce13a1f245347531dc43165023d94b6b6e"
+      }
+    }
+  },
+  "aggregates": {
+    "aggregation_role": "descriptive; individual scenario results are canonical",
+    "throughput_method": "sum(total_items) / sum(canonical timed wall seconds)",
+    "latency_method": "count-weighted mean plus extrema; percentiles require raw samples and are not reconstructed",
+    "independent_runs": 1,
+    "confidence_interval": null,
+    "by_group": {
+      "long_context": {
+        "scenario_keys": [
+          "single_long_f16"
+        ],
+        "scenario_count": 1,
+        "homogeneous_dimensions": true,
+        "dimensions": {
+          "model_sha256s": [
+            "f0b2fef971e8366438bfd2d9aefea1b0115919389448806d290237f638bae999"
+          ],
+          "cache_regimes": [
+            "warm"
+          ],
+          "memory_profile_states": [
+            false
+          ],
+          "selection_sha256s": [
+            "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc"
+          ]
+        },
+        "total_items": 10,
+        "total_timed_wall_sec": 25.4018,
+        "single_request_items_per_sec": 0.39367288932280387,
+        "latency_count": 10,
+        "latency_min_ms": 2513.84,
+        "latency_max_ms": 2611.03,
+        "latency_weighted_mean_ms": 2540.17,
+        "latency_percentiles": null,
+        "confidence_interval": null
+      }
+    },
+    "overall": {
+      "scenario_keys": [
+        "single_long_f16"
+      ],
+      "scenario_count": 1,
+      "homogeneous_dimensions": true,
+      "dimensions": {
+        "model_sha256s": [
+          "f0b2fef971e8366438bfd2d9aefea1b0115919389448806d290237f638bae999"
+        ],
+        "cache_regimes": [
+          "warm"
+        ],
+        "memory_profile_states": [
+          false
+        ],
+        "selection_sha256s": [
+          "beb6fa9ddf5bd629801ea067dee16355d3e81e36d1a540c4e7a59e0a7f48cccc"
+        ]
+      },
+      "total_items": 10,
+      "total_timed_wall_sec": 25.4018,
+      "single_request_items_per_sec": 0.39367288932280387,
+      "latency_count": 10,
+      "latency_min_ms": 2513.84,
+      "latency_max_ms": 2611.03,
+      "latency_weighted_mean_ms": 2540.17,
+      "latency_percentiles": null,
+      "confidence_interval": null
+    }
+  }
+}

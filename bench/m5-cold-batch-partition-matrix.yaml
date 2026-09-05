@@ -1,0 +1,164 @@
+# M5 follow-up: cold page cache across batch size and partition strategy.
+#
+# The warm matrix showed zero major faults, so batching had no first-use I/O
+# left to share. This file repeats the same grid against a verified-cold cache,
+# where that I/O exists. One fresh worker handles one sub-batch: later items in
+# a batch reuse pages the first item faulted in, which is exactly the effect
+# layer batching exists to produce.
+#
+# Batch size 1 reproduces the historical per-item cold shape and acts as the
+# control against bench/results/M5-docker-desktop-arm64/cold-b1/.
+cold_matrix_base: &cold_matrix_base
+  model: models/harrier-270m-q8_0.gguf
+  corpus_group: mixed_short
+  samples: 132
+  normalize: true
+  threads: 4
+  streaming: true
+  cache_state: cold
+  milestones: [M5-COLD-MATRIX]
+
+scenarios:
+  - <<: *cold_matrix_base
+    name: m5_cold_b01_layer
+    batch_size: 1
+    max_batch: 1
+    partition: layer
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b01_attn_ffn
+    batch_size: 1
+    max_batch: 1
+    partition: attn-ffn
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b01_budget10m
+    batch_size: 1
+    max_batch: 1
+    partition: budget:10485760
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b01_unit
+    batch_size: 1
+    max_batch: 1
+    partition: unit
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b02_layer
+    batch_size: 2
+    max_batch: 2
+    partition: layer
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b02_attn_ffn
+    batch_size: 2
+    max_batch: 2
+    partition: attn-ffn
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b02_budget10m
+    batch_size: 2
+    max_batch: 2
+    partition: budget:10485760
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b02_unit
+    batch_size: 2
+    max_batch: 2
+    partition: unit
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b03_layer
+    batch_size: 3
+    max_batch: 3
+    partition: layer
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b03_attn_ffn
+    batch_size: 3
+    max_batch: 3
+    partition: attn-ffn
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b03_budget10m
+    batch_size: 3
+    max_batch: 3
+    partition: budget:10485760
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b03_unit
+    batch_size: 3
+    max_batch: 3
+    partition: unit
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b04_layer
+    batch_size: 4
+    max_batch: 4
+    partition: layer
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b04_attn_ffn
+    batch_size: 4
+    max_batch: 4
+    partition: attn-ffn
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b04_budget10m
+    batch_size: 4
+    max_batch: 4
+    partition: budget:10485760
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b04_unit
+    batch_size: 4
+    max_batch: 4
+    partition: unit
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b05_layer
+    batch_size: 5
+    max_batch: 5
+    partition: layer
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b05_attn_ffn
+    batch_size: 5
+    max_batch: 5
+    partition: attn-ffn
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b05_budget10m
+    batch_size: 5
+    max_batch: 5
+    partition: budget:10485760
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b05_unit
+    batch_size: 5
+    max_batch: 5
+    partition: unit
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b10_layer
+    batch_size: 10
+    max_batch: 10
+    partition: layer
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b10_attn_ffn
+    batch_size: 10
+    max_batch: 10
+    partition: attn-ffn
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b10_budget10m
+    batch_size: 10
+    max_batch: 10
+    partition: budget:10485760
+
+  - <<: *cold_matrix_base
+    name: m5_cold_b10_unit
+    batch_size: 10
+    max_batch: 10
+    partition: unit

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "dataset_id": "openlanguagedata/flores_plus",
+  "dataset_revision": "5fec6c13f9e5a4db2f745d4ec0d7c9721ddc4f06",
+  "dataset_version": "4.6",
+  "license": "CC-BY-SA-4.0",
+  "splits": [
+    "dev",
+    "devtest"
+  ],
+  "shard_size": 10000,
+  "access_url": "https://huggingface.co/datasets/openlanguagedata/flores_plus",
+  "terms_note": "Access requires accepting the FLORES+ conditions on Hugging Face. Derived text shards are local certification artifacts and must not be committed or publicly redistributed."
+}

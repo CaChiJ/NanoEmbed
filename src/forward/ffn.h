@@ -23,6 +23,21 @@ struct FFNWeights {
     ggml_tensor * norm_b;   // [H]    post-FFN LN bias
 };
 
+// Up-projection and activation. Reads w.up_w and w.up_b.
+ggml_tensor * build_ffn_up(ggml_context *     ctx,
+                           ggml_tensor *      x,     // [H, S, B]
+                           const FFNWeights & w);    // -> [F, S, B], post-GeLU
+
+// Down-projection, residual and post-FFN LayerNorm. Reads w.down_* and w.norm_*.
+// The residual source is the sub-layer input, which this half no longer
+// computes, so it is passed explicitly.
+ggml_tensor * build_ffn_down(ggml_context *     ctx,
+                             ggml_tensor *      h,           // [F, S, B]
+                             ggml_tensor *      x_residual,  // [H, S, B]
+                             const FFNWeights & w,
+                             float              layer_norm_eps);
+
+// The composition of the two, emitting the same calls in the same order.
 ggml_tensor * build_ffn_block(
     ggml_context *     ctx,
     ggml_tensor *      x,

@@ -16,7 +16,19 @@
 
 #include "nanoembed/nanoembed.h"
 
+#include <stddef.h>
 #include <stdio.h>
+
+/* M4 changes behavior behind this frozen layout; it must not grow a mode
+ * result field or reorder the pre-existing selector. */
+_Static_assert(sizeof(nanoembed_context_params) == 24,
+               "nanoembed_context_params ABI size changed");
+_Static_assert(offsetof(nanoembed_context_params, n_threads) == 0, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, max_batch) == 4, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, max_seq_len) == 8, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, use_streaming) == 12, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, pooling) == 16, "ABI offset");
+_Static_assert(offsetof(nanoembed_context_params, normalize) == 20, "ABI offset");
 #include <string.h>
 
 static int g_check_count = 0;
@@ -35,7 +47,8 @@ int main(void) {
     nanoembed_context_params p = nanoembed_context_default_params();
     EXPECT(p.max_batch     >  0,                       "max_batch must be > 0");
     EXPECT(p.max_seq_len   >  0,                       "max_seq_len must be > 0");
-    EXPECT(p.pooling       == NANOEMBED_POOL_MEAN,     "pooling defaults to MEAN");
+    EXPECT(p.pooling       == NANOEMBED_POOL_MODEL_DEFAULT,
+           "pooling defaults to the model's own");
     EXPECT(p.normalize     == 1,                       "normalize defaults on");
     EXPECT(p.use_streaming == 0,                       "streaming defaults off");
 
@@ -65,6 +78,9 @@ int main(void) {
     const char * texts[2] = {"a", "b"};
     EXPECT(nanoembed_embed_batch(NULL, texts, 2, scratch) == NANOEMBED_ERR_INVALID_ARG,
            "embed_batch(NULL ctx)");
+    EXPECT(nanoembed_context_set_batch_layout(
+               NULL, NANOEMBED_BATCH_LAYOUT_PADDED) == NANOEMBED_ERR_INVALID_ARG,
+           "set_batch_layout(NULL ctx)");
 
     /* last_error remains valid after multiple calls. */
     err = nanoembed_last_error();

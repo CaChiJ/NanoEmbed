@@ -15,14 +15,44 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace nanoembed {
 
+enum class BatchLayout {
+    Default,
+    Padded,
+};
+
 struct EmbedderConfig {
     int      n_threads   = 0;            // 0 = auto
+    int      max_batch   = 1;
     int      max_seq_len = 0;            // 0 = use model's default
     PoolType pooling     = PoolType::Mean;
     bool     normalize   = true;         // L2 normalize the pooled output
+    BatchLayout batch_layout = BatchLayout::Default;
+};
+
+// Per-caller compute workspace: graph-metadata arena, reusable graph
+// allocator, and CPU backend. Held across calls so a steady-state embed()
+// performs no large allocation.
+//
+// NOT thread-safe, and deliberately separate from Embedder: the C ABI
+// promises that distinct nanoembed_context handles may be used concurrently
+// against one model, so the mutable scratch belongs to the context, not to
+// the (shared, read-only) model.
+class ComputeScratch {
+public:
+    ComputeScratch();
+    ~ComputeScratch();
+
+    ComputeScratch(const ComputeScratch &)             = delete;
+    ComputeScratch & operator=(const ComputeScratch &) = delete;
+
+private:
+    friend class Embedder;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 class Embedder {
@@ -40,27 +70,47 @@ public:
     // Pooling the loaded model was trained for.
     PoolType default_pooling() const noexcept;
 
-    // Grow the activation reservation to cover sequences up to max_seq_len.
+    // Grow a context's activation reservation to cover max_seq_len.
     // Idempotent and monotonic. Called when a context declares its cap, since
     // reserving a long-context model's full window up front is prohibitive
     // (attention is O(S^2)).
-    void reserve(int max_seq_len);
+    //
+    // `pooling` and `normalize` must be the ones the context will actually
+    // embed with. Reserving against a different graph shape silently defers
+    // the allocation to the first embed() — where a larger graph makes the
+    // allocator resize behind the caller's back, which is exactly the failure
+    // this reservation exists to move forward.
+    void reserve(ComputeScratch & scratch,
+                 int              max_seq_len,
+                 PoolType         pooling,
+                 bool             normalize) const;
 
-    // Sequence length the activation buffer is currently sized for. May be
+    // Sequence length this context's activation buffer is sized for. May be
     // below max_seq_len(): the reservation follows what contexts asked for,
     // not the model's full context window.
-    int reserved_seq_len() const noexcept;
+    int reserved_seq_len(const ComputeScratch & scratch) const noexcept;
 
-    // Bytes reserved for graph activations, fixed at construction against the
-    // worst case (max_seq_len) and reused by every call. Reported by the bench
-    // and inspect tools; the M4 budget is stated partly against this.
-    size_t graph_buffer_size() const noexcept;
+    // Bytes reserved for this context's graph activations and reused by every
+    // call. Reported by the inspect tool; the M4 budget is stated partly
+    // against this.
+    size_t graph_buffer_size(const ComputeScratch & scratch) const noexcept;
 
     // Tokenize, run forward, pool, normalize. out length = n_embed.
-    // Throws std::runtime_error on tokenizer / forward failures.
-    void embed(const std::string &    text,
+    // `scratch` carries the reusable compute buffers; it must not be shared
+    // between threads. Throws std::runtime_error on tokenizer / forward
+    // failures.
+    void embed(ComputeScratch &       scratch,
+               const std::string &    text,
                const EmbedderConfig & cfg,
                float *                out);
+
+    // Tokenize, length-bucket and execute true B>1 sub-batches. Results are
+    // scattered back to input order. `cfg.max_batch` is the sole subdivision
+    // limit; allocation failures are surfaced rather than silently retried.
+    void embed_batch(ComputeScratch &                 scratch,
+                     const std::vector<std::string> & texts,
+                     const EmbedderConfig &           cfg,
+                     float *                          out);
 
     Embedder(const Embedder &)             = delete;
     Embedder & operator=(const Embedder &) = delete;

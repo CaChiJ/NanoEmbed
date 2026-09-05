@@ -2,46 +2,363 @@
 #
 # Each scenario lists which milestones it should run for. runner.py picks
 # scenarios where the active milestone is in `milestones`. Paths are
-# relative to the repository root.
+# relative to the repository root. Each scenario declares its default corpus
+# group from bench/corpus_groups.json. CLI --group values replace that default.
+# Detailed memory sampling is off by default. A scenario may opt in with
+# `memory_profile: true` and set `memory_profile_interval_ms`; runner CLI values
+# can enable/override these for final memory-report runs.
+# Cache state defaults to warm, while runner --cache-state can produce a cold
+# pass from the same scenario definition without duplicating its model/settings.
+# `streaming` defaults to false. M4+ A/B pairs below differ only in that flag
+# and their result key; both are served by the same benchmark binary.
+# `partition` selects how a streaming layer is cut into graphs -- "layer" (the
+# default, one graph per block), "attn-ffn", "unit", or "budget:N" for a peak
+# weight-residency target in bytes. It only has an effect when streaming is
+# true. Scenarios that set it differ from their sibling in that field alone, so
+# the difference in resident bytes is attributable to the cut.
 
 scenarios:
   - name: single_short_f16
     model: models/bge-small-en-v1.5-f16.gguf
-    inputs: tests/corpus/eval.txt
+    corpus_group: english_short
     pooling: cls          # bge-small CLS pooling matches sentence-transformers default
     normalize: true
     threads: 4
+    streaming: false
+    cache_state: warm
     warmup: 5
     iter: 50
-    milestones: [M3, M3.5, M4, M5, M6, M7, M8]
+    milestones: [M3, M3.5, M3.6, M4, M5, M6, M7, M8]
 
   # Full-context inputs (every line saturates the 512-token cap). Impossible
   # before M3.5 — the old fixed graph arena aborted at S~270 — so this has no
   # M3 baseline to compare against and starts from M3.5.
   - name: single_long_f16
     model: models/bge-small-en-v1.5-f16.gguf
-    inputs: tests/corpus/eval_long.txt
+    corpus_group: long_context
     pooling: cls
     normalize: true
     threads: 4
+    streaming: false
+    cache_state: warm
     warmup: 2
     iter: 10
-    milestones: ["M3.5", M4, M5, M6, M7, M8]
+    milestones: ["M3.5", M3.6, M4, M5, M6, M7, M8]
 
-  # Larger model for the M4 streaming memory story. bge-small's weights are
-  # only 64 MiB, which understates what streaming buys; jina-v5-nano at Q3_K_M
-  # is the model the savings get measured on. Needs eurobert (M3.6) first, and
-  # the file has to be in the local HF cache -- see bench/model_source.py.
-  - name: single_short_jina_q3km
-    model: "hf:jinaai/jina-embeddings-v5-text-nano-retrieval-GGUF:v5-nano-retrieval-Q3_K_M.gguf"
-    inputs: tests/corpus/eval.txt
+  # The model the streaming story actually gets measured on. bge-small's 64 MiB
+  # of weights understates what M4 buys; harrier-270m is 1.09 GB at F32, and
+  # 63% of that is one token-embedding table that layer streaming cannot touch,
+  # which is the case M4 has to answer. Pooling is left unset so the run uses
+  # what the model was trained with (last-token).
+  #
+  # The file is gitignored -- fetch it as README.md describes.
+  - name: single_short_harrier_f32
+    model: models/harrier-270m.gguf
+    corpus_group: english_short
     normalize: true
     threads: 4
+    streaming: false
+    cache_state: warm
     warmup: 5
     iter: 10
     milestones: ["M3.6", M4, M5, M6, M7, M8]
 
-  # Future scenarios:
-  # - name: single_short_q8_streaming     # M4+
-  # - name: batch32_mixed_q8              # M5+
-  # - name: batch128_mixed_q8             # M5+
+  # Same model quantized. Records what streaming costs on the file size a
+  # deployment would actually ship, and its embedding table stays q8_0 there
+  # too, so the 63% does not shrink.
+  - name: single_short_harrier_q8
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: english_short
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 5
+    iter: 10
+    milestones: ["M3.6", M4, M5, M6, M7, M8]
+
+  - name: single_short_f16_streaming
+    model: models/bge-small-en-v1.5-f16.gguf
+    corpus_group: english_short
+    pooling: cls
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 5
+    iter: 50
+    milestones: [M4, M5, M6, M7, M8]
+
+  - name: single_long_f16_streaming
+    model: models/bge-small-en-v1.5-f16.gguf
+    corpus_group: long_context
+    pooling: cls
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 2
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  - name: single_short_harrier_f32_streaming
+    model: models/harrier-270m.gguf
+    corpus_group: english_short
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 5
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  # The partition sweep. These differ from single_short_harrier_f32_streaming in
+  # the `partition` field alone, so the change in resident bytes and in
+  # throughput is attributable to where the block is cut. harrier F32 is the
+  # model that shows it: one block is 21.26 MiB, 71% of it the FFN.
+  - name: single_short_harrier_f32_streaming_attn_ffn
+    model: models/harrier-270m.gguf
+    corpus_group: english_short
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: attn-ffn
+    cache_state: warm
+    warmup: 5
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  - name: single_short_harrier_f32_streaming_unit
+    model: models/harrier-270m.gguf
+    corpus_group: english_short
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: unit
+    cache_state: warm
+    warmup: 5
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  - name: single_short_harrier_f32_streaming_budget10m
+    model: models/harrier-270m.gguf
+    corpus_group: english_short
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: budget:10485760
+    cache_state: warm
+    warmup: 5
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  # Long inputs are where the trade reverses: the weights saved are constant
+  # while the values crossing each new boundary grow with the token count.
+  - name: single_long_harrier_f32_streaming_budget10m
+    model: models/harrier-270m.gguf
+    corpus_group: long_context
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: budget:10485760
+    cache_state: warm
+    warmup: 2
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  - name: single_short_harrier_q8_streaming
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: english_short
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 5
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  # Q4 is a report-only M4 accuracy/performance axis. It deliberately has no
+  # pre-M4 baseline and does not alter the historical gates.
+  - name: single_short_harrier_q4
+    model: models/harrier-270m-q4_k.gguf
+    corpus_group: english_short
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 5
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  - name: single_short_harrier_q4_streaming
+    model: models/harrier-270m-q4_k.gguf
+    corpus_group: english_short
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 5
+    iter: 10
+    milestones: [M4, M5, M6, M7, M8]
+
+  # M5 true-batch axes. `samples` is resolved with the global fixed seed, and
+  # CLI --group/--samples-per-group still overrides it for ad-hoc runs.
+  - name: batch32_mixed_harrier_q8
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_q8_streaming
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch128_mixed_harrier_q8
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 128
+    batch_size: 128
+    max_batch: 128
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 1
+    iter: 3
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch128_mixed_harrier_q8_streaming
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 128
+    batch_size: 128
+    max_batch: 128
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 1
+    iter: 3
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch128_mixed_harrier_q8_streaming_control
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 128
+    batch_size: 128
+    max_batch: 128
+    batch_control: true
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 1
+    iter: 3
+    milestones: [M5]
+
+  - name: batch32_mixed_bert_f16
+    model: models/bge-small-en-v1.5-f16.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    pooling: cls
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_f32
+    model: models/harrier-270m.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: false
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_q8_streaming_control
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    batch_control: true
+    normalize: true
+    threads: 4
+    streaming: true
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5]
+
+  - name: batch32_mixed_harrier_q8_streaming_attn_ffn
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: attn-ffn
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_q8_streaming_budget10m
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: budget:10485760
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]
+
+  - name: batch32_mixed_harrier_q8_streaming_unit
+    model: models/harrier-270m-q8_0.gguf
+    corpus_group: mixed_short
+    samples: 32
+    batch_size: 32
+    max_batch: 32
+    normalize: true
+    threads: 4
+    streaming: true
+    partition: unit
+    cache_state: warm
+    warmup: 2
+    iter: 5
+    milestones: [M5, M6, M7, M8]

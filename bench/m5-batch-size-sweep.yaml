@@ -1,0 +1,59 @@
+# 배치를 키우면 언제까지 이득인가.
+# 어텐션 결과를 합칠 때 ggml_concat 을 왼쪽부터 접으므로 복사량이 배치 크기의
+# 제곱에 비례한다. 배치 10까지는 묻히지만 어디서 꺾이는지 확인한다.
+#
+# mixed_short 는 132문장이므로 배치 64는 3묶음, 128은 2묶음이다. 큰 배치일수록
+# 묶음 수가 적어 표본이 줄어드는 점을 감안해서 읽어야 한다.
+sweep_base: &sweep_base
+  model: models/harrier-270m-q8_0.gguf
+  corpus_group: mixed_short
+  samples: 132
+  normalize: true
+  threads: 4
+  streaming: true
+  cache_state: warm
+  warmup: 1
+  iter: 5
+  partition: layer
+  milestones: [M5-SWEEP]
+
+scenarios:
+  - <<: *sweep_base
+    name: m5_sweep_b001_layer
+    batch_size: 1
+    max_batch: 1
+
+  - <<: *sweep_base
+    name: m5_sweep_b002_layer
+    batch_size: 2
+    max_batch: 2
+
+  - <<: *sweep_base
+    name: m5_sweep_b005_layer
+    batch_size: 5
+    max_batch: 5
+
+  - <<: *sweep_base
+    name: m5_sweep_b010_layer
+    batch_size: 10
+    max_batch: 10
+
+  - <<: *sweep_base
+    name: m5_sweep_b016_layer
+    batch_size: 16
+    max_batch: 16
+
+  - <<: *sweep_base
+    name: m5_sweep_b032_layer
+    batch_size: 32
+    max_batch: 32
+
+  - <<: *sweep_base
+    name: m5_sweep_b064_layer
+    batch_size: 64
+    max_batch: 64
+
+  - <<: *sweep_base
+    name: m5_sweep_b128_layer
+    batch_size: 128
+    max_batch: 128

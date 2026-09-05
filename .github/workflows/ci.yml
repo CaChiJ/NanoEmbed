@@ -30,11 +30,39 @@ jobs:
         with:
           submodules: recursive
 
+      # Every accuracy test skips itself without a model, which would make a
+      # green CI run meaningless. Both families plus the Q8_0 regression file
+      # are fetched here and the
+      # configure step sets NANOEMBED_REQUIRE_MODEL=ON, so a missing file fails
+      # the build instead of quietly turning assertions into skips.
+      #
+      # Harrier F32 uses the same-precision golden gate. Q8_0 is compared with
+      # its own explicitly looser gate, so implementation drift and expected
+      # quantization loss remain distinguishable.
+      - name: Cache models
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: models-bge-small-f16-harrier-270m-f32-q8-v2
+
+      - name: Download models
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p models
+          curl -fsSL -o models/bge-small-en-v1.5-f16.gguf \
+            https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-f16.gguf
+          curl -fsSL -o models/harrier-270m.gguf \
+            https://huggingface.co/cstr/harrier-270m-GGUF/resolve/main/harrier-270m.gguf
+          curl -fsSL -o models/harrier-270m-q8_0.gguf \
+            https://huggingface.co/cstr/harrier-270m-GGUF/resolve/main/harrier-270m-q8_0.gguf
+
       - name: Configure
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DNANOEMBED_REQUIRE_MODEL=ON
 
       - name: Build
         run: cmake --build build -j
@@ -42,13 +70,42 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      - name: Smoke-test inspect tool (no GGUF — usage only)
-        # Real GGUF inspection is gated on having a model file, which is
-        # handled by the M3+ download/cache step. M1 only verifies the
-        # binary exists and prints help.
+      - name: Smoke-test inspect tool
         run: |
-          if [ -x build/bin/nanoembed-inspect ]; then
-            build/bin/nanoembed-inspect 2>&1 | grep -q "usage:" || exit 1
-          else
-            echo "nanoembed-inspect binary missing"; exit 1
-          fi
+          build/bin/nanoembed-inspect 2>&1 | grep -q "usage:" || exit 1
+          build/bin/nanoembed-inspect models/bge-small-en-v1.5-f16.gguf | tee /dev/stderr \
+            | grep -q "layers=12" || exit 1
+          # Asserts the head geometry that BERT's division would get wrong:
+          # 4 query heads of width 256 over a 640-wide model, one shared KV head.
+          build/bin/nanoembed-inspect models/harrier-270m.gguf | tee /dev/stderr \
+            | grep -q "heads=4 kv_heads=1 head_dim=256" || exit 1
+
+      - name: Smoke-test CLI
+        run: |
+          for m in models/bge-small-en-v1.5-f16.gguf models/harrier-270m.gguf; do
+            echo "hello world" | build/bin/nanoembed-cli "$m" | grep -q "," || exit 1
+          done
+
+  windows-core-synthetic:
+    name: windows-core-synthetic
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # The Windows job intentionally stays synthetic: it exercises SHA-256,
+      # VirtualAlloc arena lifetime, explicit-offset ReadFile, corruption
+      # recovery, concurrent cache creation, and the M5 batch planner/mask
+      # layout without downloading a 1 GiB model. Ubuntu/macOS above run the
+      # real Harrier fixtures.
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build synthetic core tests
+        run: cmake --build build --config Release --target nanoembed_tokenizer_test nanoembed_batch_test -j 2
+
+      - name: Test tokenizer disk index and batch planner
+        run: ctest --test-dir build -C Release --output-on-failure -R "^(tokenizer|batch)$"

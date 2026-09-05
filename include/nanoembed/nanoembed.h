@@ -62,7 +62,7 @@ typedef enum {
     NANOEMBED_ERR_INVALID_ARG = -1,
     NANOEMBED_ERR_FILE        = -2, /* file not found / unreadable */
     NANOEMBED_ERR_FORMAT      = -3, /* not a valid GGUF file */
-    NANOEMBED_ERR_ARCH        = -4, /* unsupported architecture (non-BERT in v0) */
+    NANOEMBED_ERR_ARCH        = -4, /* unsupported model architecture */
     NANOEMBED_ERR_TENSOR      = -5, /* expected tensor missing or shape mismatch */
     NANOEMBED_ERR_TOKENIZE    = -6,
     NANOEMBED_ERR_OOM         = -7,
@@ -73,9 +73,29 @@ typedef enum {
 /* ---- Pooling -------------------------------------------------------- */
 
 typedef enum {
-    NANOEMBED_POOL_MEAN = 0, /* mean over non-pad tokens */
-    NANOEMBED_POOL_CLS  = 1  /* [CLS] token only */
+    /* Whatever the loaded model was trained with. The default, because the
+       right choice is a property of the model, not of the caller: pooling a
+       last-token model with MEAN returns a confident, wrong vector and
+       nothing in the output says so. */
+    NANOEMBED_POOL_MODEL_DEFAULT = -1,
+    NANOEMBED_POOL_MEAN          =  0, /* mean over non-pad tokens */
+    NANOEMBED_POOL_CLS           =  1, /* first token (BERT's [CLS]) */
+    NANOEMBED_POOL_LAST          =  2  /* last token (decoder-derived models) */
 } nanoembed_pool_type;
+
+/* ---- Batch layout --------------------------------------------------- */
+
+typedef enum {
+    /* Use the preferred layout supported by the model family. Harrier uses
+       per-sentence attention with packed token-wise operators; model families
+       without that implementation retain padded attention and pooling. */
+    NANOEMBED_BATCH_LAYOUT_DEFAULT = 0,
+
+    /* Force the compatibility path for unequal-length batches: right padding,
+       a padding attention mask, and padded token-wise operators. Useful for
+       workloads where the dense masked kernel is faster than sentence slices. */
+    NANOEMBED_BATCH_LAYOUT_PADDED  = 1
+} nanoembed_batch_layout;
 
 /* ---- Opaque handles ------------------------------------------------- */
 
@@ -85,10 +105,11 @@ typedef struct nanoembed_context nanoembed_context;
 /* ---- Context parameters --------------------------------------------- */
 
 typedef struct {
-    int                  n_threads;     /* 0 = auto (detect cores)            */
+    int                  n_threads;     /* 0 = auto (performance cores)       */
     int                  max_batch;     /* > 0; over-batch is auto-subdivided */
-    int                  max_seq_len;   /* > 0; longer inputs are truncated   */
-    int                  use_streaming; /* 0/1 — ignored in M3, honored M4+   */
+    int                  max_seq_len;   /* >= 2; longer inputs are truncated, */
+                                        /* and clamped to the model's context */
+    int                  use_streaming; /* 0=eager, 1=Linux mmap streaming    */
     nanoembed_pool_type  pooling;
     int                  normalize;     /* 0/1 — L2 normalize output          */
 } nanoembed_context_params;
@@ -103,6 +124,15 @@ NANOEMBED_API void              nanoembed_free_model(nanoembed_model * model);
 NANOEMBED_API int               nanoembed_n_embed(const nanoembed_model * model);
 NANOEMBED_API int               nanoembed_n_layer(const nanoembed_model * model);
 
+/* The model's own context length. Callers need it to choose max_seq_len:
+   activation memory grows with its square, so a long-context model's full
+   window can be far more than a machine has. */
+NANOEMBED_API int               nanoembed_model_max_seq_len(const nanoembed_model * model);
+
+/* Pooling the model was trained for. Never returns MODEL_DEFAULT. */
+NANOEMBED_API nanoembed_pool_type
+                                nanoembed_model_default_pooling(const nanoembed_model * model);
+
 /* ---- Context: per-instance runtime state --------------------------- */
 
 NANOEMBED_API nanoembed_context * nanoembed_new_context(
@@ -110,6 +140,14 @@ NANOEMBED_API nanoembed_context * nanoembed_new_context(
         nanoembed_context_params params);
 
 NANOEMBED_API void                nanoembed_free_context(nanoembed_context * ctx);
+
+/* Select the layout used by subsequent embed_batch calls. The default is
+ * NANOEMBED_BATCH_LAYOUT_DEFAULT. This additive setter keeps the frozen
+ * nanoembed_context_params ABI intact. A context is not thread-safe; do not
+ * call this concurrently with inference on the same context. */
+NANOEMBED_API int nanoembed_context_set_batch_layout(
+        nanoembed_context *      ctx,
+        nanoembed_batch_layout   layout);
 
 /* ---- Inference ------------------------------------------------------ */
 
@@ -119,7 +157,10 @@ NANOEMBED_API int nanoembed_embed(
         const char *        text,
         float *             out);
 
-/* n_texts inputs. out must hold n_texts * n_embed floats. */
+/* n_texts inputs. out must hold n_texts * n_embed floats. Inputs are
+ * length-bucketed internally, split at max_batch, and returned in caller
+ * order. Invalid arguments leave out untouched; execution failures poison
+ * the entire output with NaN. */
 NANOEMBED_API int nanoembed_embed_batch(
         nanoembed_context * ctx,
         const char * const * texts,

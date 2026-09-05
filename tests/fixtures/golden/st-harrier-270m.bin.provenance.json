@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "provenance_status": "legacy_unverified",
+  "provenance_note": "This fixture predates provenance manifests. Its exact Hugging Face revision, generator command, package versions, and execution environment were not recorded and are intentionally not inferred.",
+  "fixture": {
+    "path": "st-harrier-270m.bin",
+    "format": "NEGD",
+    "format_version": 1,
+    "sample_count": 132,
+    "embedding_dimension": 640,
+    "size_bytes": 344785,
+    "fixture_sha256": "e2ff5013786f556b47bbea2f41c051c94e34e3d0b97c46e76ee10ca82a5dfccc"
+  },
+  "reference": {
+    "framework": "sentence-transformers/pytorch",
+    "model_id": "microsoft/harrier-oss-v1-270m",
+    "requested_revision": null,
+    "resolved_revision": null,
+    "device": null,
+    "dtype": null,
+    "deterministic_algorithms": null,
+    "seed": null,
+    "batch_size": null,
+    "pooling": null,
+    "normalize": null,
+    "truncation": null,
+    "max_length": null
+  },
+  "generator": {
+    "command": null,
+    "repository_commit_containing_fixture": "e99ab89f074dd5bbc6b76e528402fcf0ed37556a",
+    "package_versions": null,
+    "requirements_lock": null
+  },
+  "verified_inputs_recovered_from_fixture_text": [
+    {
+      "path": "tests/corpus/eval.txt",
+      "size_bytes": 5087,
+      "sha256": "920bbd79bc8302b10b88c905ec085bbf05628fe6bdc85b6b01c4be99901e23ec"
+    },
+    {
+      "path": "tests/corpus/eval_multilingual.txt",
+      "size_bytes": 1366,
+      "sha256": "e967eb90522d7c2324d2b6fbfe6803ecc837ec18a71421ef9dd2ef9b018d768e"
+    }
+  ],
+  "migration": {
+    "required": true,
+    "instructions": "Regenerate with tools/dump_golden.py, requirements-golden.lock, and an explicitly supplied Hugging Face revision. The generator resolves and records the exact commit SHA. Do not promote this manifest to verified without regenerating the fixture."
+  }
+}

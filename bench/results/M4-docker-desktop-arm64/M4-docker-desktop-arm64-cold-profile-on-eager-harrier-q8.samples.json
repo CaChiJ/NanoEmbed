@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "result_schema_version": 2,
+  "started_at_utc": "2026-08-24T09:22:53.558434Z",
+  "latency_unit": "ms",
+  "scenarios": {
+    "single_short_harrier_q8": {
+      "corpus_group": "english_short",
+      "cache_state": "cold",
+      "selected_ids": [
+        "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec"
+      ],
+      "latency_ms": [
+        17.44725
+      ],
+      "cold_workers": [
+        {
+          "selected_id": "sha256:fd6c392049c4d26d741c576353461aa981e54dd492cb7fc2e7ffe9ee61e6cdec",
+          "latency_ms": [
+            17.44725
+          ]
+        }
+      ]
+    },
+    "single_short_harrier_q8::multilingual_short": {
+      "corpus_group": "multilingual_short",
+      "cache_state": "cold",
+      "selected_ids": [
+        "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43"
+      ],
+      "latency_ms": [
+        11.253375
+      ],
+      "cold_workers": [
+        {
+          "selected_id": "sha256:0bbae9f33a962046c5e08c7be22142125435a5f963ff73d7492dd5b580074d43",
+          "latency_ms": [
+            11.253375
+          ]
+        }
+      ]
+    },
+    "single_short_harrier_q8::vocab_spread": {
+      "corpus_group": "vocab_spread",
+      "cache_state": "cold",
+      "selected_ids": [
+        "sha256:4811a411d71b12f363fb793c434b3354aae071b1c57adb5b1b2229057a173685"
+      ],
+      "latency_ms": [
+        30.184208
+      ],
+      "cold_workers": [
+        {
+          "selected_id": "sha256:4811a411d71b12f363fb793c434b3354aae071b1c57adb5b1b2229057a173685",
+          "latency_ms": [
+            30.184208
+          ]
+        }
+      ]
+    }
+  }
+}
