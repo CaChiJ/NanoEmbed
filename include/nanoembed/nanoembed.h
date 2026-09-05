@@ -83,6 +83,20 @@ typedef enum {
     NANOEMBED_POOL_LAST          =  2  /* last token (decoder-derived models) */
 } nanoembed_pool_type;
 
+/* ---- Batch layout --------------------------------------------------- */
+
+typedef enum {
+    /* Use the preferred layout supported by the model family. Harrier uses
+       per-sentence attention with packed token-wise operators; model families
+       without that implementation retain padded attention and pooling. */
+    NANOEMBED_BATCH_LAYOUT_DEFAULT = 0,
+
+    /* Force the compatibility path for unequal-length batches: right padding,
+       a padding attention mask, and padded token-wise operators. Useful for
+       workloads where the dense masked kernel is faster than sentence slices. */
+    NANOEMBED_BATCH_LAYOUT_PADDED  = 1
+} nanoembed_batch_layout;
+
 /* ---- Opaque handles ------------------------------------------------- */
 
 typedef struct nanoembed_model   nanoembed_model;
@@ -126,6 +140,14 @@ NANOEMBED_API nanoembed_context * nanoembed_new_context(
         nanoembed_context_params params);
 
 NANOEMBED_API void                nanoembed_free_context(nanoembed_context * ctx);
+
+/* Select the layout used by subsequent embed_batch calls. The default is
+ * NANOEMBED_BATCH_LAYOUT_DEFAULT. This additive setter keeps the frozen
+ * nanoembed_context_params ABI intact. A context is not thread-safe; do not
+ * call this concurrently with inference on the same context. */
+NANOEMBED_API int nanoembed_context_set_batch_layout(
+        nanoembed_context *      ctx,
+        nanoembed_batch_layout   layout);
 
 /* ---- Inference ------------------------------------------------------ */
 

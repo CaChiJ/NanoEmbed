@@ -105,6 +105,7 @@ struct Embedder::Impl {
                         bool            padded,
                         PoolType        pooling,
                         bool            normalize,
+                        BatchLayout     batch_layout = BatchLayout::Default,
                         const MaterializedBatch * batch = nullptr) const {
         const InputRequirements req = arch->inputs();
         GraphIO io;
@@ -113,6 +114,7 @@ struct Embedder::Impl {
         // It needs the architecture to opt in, because attention and pooling
         // must then slice by sentence offset rather than by batch stride.
         const bool packed = padded && batch != nullptr &&
+                            batch_layout != BatchLayout::Padded &&
                             req.consumes_seq_lengths && req.consumes_packed_batch;
         if (packed) {
             const int64_t T = batch->total_tokens;
@@ -154,7 +156,8 @@ struct Embedder::Impl {
         if (req.needs_type_ids) make_input(&io.in.type_ids);
         // Per-sentence attention needs no mask, so only build one when the
         // architecture has not been handed the lengths it would replace.
-        io.in.seq_lengths = (padded && req.consumes_seq_lengths && batch != nullptr)
+        io.in.seq_lengths = (padded && batch_layout != BatchLayout::Padded &&
+                             req.consumes_seq_lengths && batch != nullptr)
             ? batch->lengths.data() : nullptr;
         if (padded && req.uses_kq_mask && io.in.seq_lengths == nullptr) {
             io.in.kq_mask = ggml_new_tensor_4d(
@@ -393,7 +396,7 @@ void Embedder::embed_batch(ComputeScratch &                 scratch,
         try {
             const GraphIO io = impl_->build_graph(
                 gctx, batch.seq_len, batch.batch_size, batch.padded,
-                cfg.pooling, cfg.normalize, &batch);
+                cfg.pooling, cfg.normalize, cfg.batch_layout, &batch);
             if (!ggml_gallocr_alloc_graph(sc.galloc, io.graph)) {
                 throw AllocationError("failed to allocate the batched graph buffer");
             }

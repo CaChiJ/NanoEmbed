@@ -19,12 +19,18 @@
 
 namespace nanoembed {
 
+enum class BatchLayout {
+    Default,
+    Padded,
+};
+
 struct EmbedderConfig {
     int      n_threads   = 0;            // 0 = auto
     int      max_batch   = 1;
     int      max_seq_len = 0;            // 0 = use model's default
     PoolType pooling     = PoolType::Mean;
     bool     normalize   = true;         // L2 normalize the pooled output
+    BatchLayout batch_layout = BatchLayout::Default;
 };
 
 // Per-caller compute workspace: graph-metadata arena, reusable graph

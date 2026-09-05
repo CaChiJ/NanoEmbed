@@ -33,7 +33,7 @@ AB_CONTROLLED_FIELDS = (
     "model", "corpus_group", "pooling", "normalize", "threads",
     "cache_state", "warmup", "iter", "max_seq_len", "memory_profile",
     "memory_profile_interval_ms", "partition", "batch_size", "max_batch",
-    "batch_control", "samples",
+    "batch_layout", "batch_control", "samples",
 )
 
 
@@ -89,6 +89,11 @@ def build_cmd(
         raise SystemExit(
             f"scenario {sc['name']}: batch_control must be true or false"
         )
+    batch_layout = sc.get("batch_layout", "default")
+    if batch_layout not in ("default", "padded"):
+        raise SystemExit(
+            f"scenario {sc['name']}: batch_layout must be default or padded"
+        )
 
     cmd: List[str] = [
         str(bench),
@@ -106,6 +111,7 @@ def build_cmd(
         "--threads",   str(sc.get("threads", 0)),
         "--batch-size", str(sc.get("batch_size", 1)),
         "--max-batch", str(sc.get("max_batch", 64)),
+        "--batch-layout", batch_layout,
         "--cache-state", resolved_cache_state,
     ]
     if strict_cold:

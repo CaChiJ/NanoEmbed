@@ -1,5 +1,6 @@
 // M5 true-batch contract: stable length bucketing, max_batch subdivision,
-// padding-aware attention/pooling and restoration to caller order.
+// default packed execution, selectable padded compatibility execution and
+// restoration to caller order.
 
 #include "nanoembed/nanoembed.h"
 #include "batch.h"
@@ -191,6 +192,35 @@ void run_model(const char * label, const char * env, bool report_only) {
                           "batch boundary call preserves item outputs");
                 }
             }
+
+            check(nanoembed_context_set_batch_layout(
+                      ctx, NANOEMBED_BATCH_LAYOUT_PADDED) == NANOEMBED_OK,
+                  "padded compatibility layout is selectable");
+            std::vector<float> padded_out(reference.size());
+            check(nanoembed_embed_batch(
+                      ctx, pointers.data(), static_cast<int>(pointers.size()),
+                      padded_out.data()) == NANOEMBED_OK,
+                  "padded compatibility batch succeeds");
+            double padded_cos = 1.0;
+            for (size_t i = 0; i < texts.size(); ++i) {
+                padded_cos = std::min(
+                    padded_cos,
+                    cosine(reference.data() + i * static_cast<size_t>(H),
+                           padded_out.data() + i * static_cast<size_t>(H), H));
+            }
+            std::fprintf(stderr, "[batch_test] %s padded-layout cos=%.12f\n",
+                         label, padded_cos);
+            if (!report_only) {
+                check(padded_cos >= 0.999998,
+                      "padded compatibility layout preserves item outputs");
+            }
+            check(nanoembed_context_set_batch_layout(
+                      ctx, static_cast<nanoembed_batch_layout>(99)) ==
+                      NANOEMBED_ERR_INVALID_ARG,
+                  "invalid batch layout is rejected");
+            check(nanoembed_context_set_batch_layout(
+                      ctx, NANOEMBED_BATCH_LAYOUT_DEFAULT) == NANOEMBED_OK,
+                  "default packed layout can be restored");
         }
 
         std::vector<float> sentinel(static_cast<size_t>(H) * 3, 123.0f);

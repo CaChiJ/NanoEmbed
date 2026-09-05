@@ -78,6 +78,9 @@ int main(void) {
     const char * texts[2] = {"a", "b"};
     EXPECT(nanoembed_embed_batch(NULL, texts, 2, scratch) == NANOEMBED_ERR_INVALID_ARG,
            "embed_batch(NULL ctx)");
+    EXPECT(nanoembed_context_set_batch_layout(
+               NULL, NANOEMBED_BATCH_LAYOUT_PADDED) == NANOEMBED_ERR_INVALID_ARG,
+           "set_batch_layout(NULL ctx)");
 
     /* last_error remains valid after multiple calls. */
     err = nanoembed_last_error();

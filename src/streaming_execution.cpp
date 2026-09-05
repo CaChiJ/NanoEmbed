@@ -698,7 +698,8 @@ struct InternalStreamingContext::Impl {
     void run_group(const ResolvedGroup &        group,
                    ggml_context *               gctx,
                    const MaterializedBatch &     batch,
-                   bool                          packed) {
+                   bool                          packed,
+                   bool                          per_sentence_attention) {
         // `packed` is a property of the whole sub-batch, not of one group: the
         // embedding phase already produced a packed activation, so every group
         // downstream must agree. Deriving it per group let an FFN-only group
@@ -721,7 +722,7 @@ struct InternalStreamingContext::Impl {
         }
         // Per-sentence attention replaces the mask; see GraphInputs.
         graph_in.seq_lengths =
-            (batch.padded && group.graph_inputs.consumes_seq_lengths)
+            (per_sentence_attention && group.graph_inputs.consumes_seq_lengths)
                 ? batch.lengths.data() : nullptr;
         if (packed) {
             graph_in.seq_offsets = batch.offsets.data();
@@ -1133,7 +1134,11 @@ void InternalStreamingModel::embed_batch(
 
         // One decision for the whole sub-batch: the embedding phase, every
         // layer group and the final pooling must all read the same layout.
-        const bool packed_stream = batch.padded && arch.inputs().consumes_packed_batch;
+        const bool per_sentence_attention =
+            batch.padded && config.batch_layout != BatchLayout::Padded &&
+            arch.inputs().consumes_seq_lengths;
+        const bool packed_stream =
+            per_sentence_attention && arch.inputs().consumes_packed_batch;
 
         // Previous sub-batch values mean nothing to this one. Retain capacity
         // but invalidate contents so a liveness error cannot read stale data.
@@ -1228,7 +1233,8 @@ void InternalStreamingModel::embed_batch(
                         impl_->residency->acquire(group.key, group.ranges, false);
                     try {
                         std::fill(sc.slot_tensors.begin(), sc.slot_tensors.end(), nullptr);
-                        sc.run_group(group, group_ctx, batch, packed_stream);
+                        sc.run_group(group, group_ctx, batch, packed_stream,
+                                     per_sentence_attention);
                         group_lease.mark_compute_complete();
                         group_lease.release();
                     } catch (...) {

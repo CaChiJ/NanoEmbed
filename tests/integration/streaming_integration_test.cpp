@@ -171,6 +171,54 @@ int run_case(const Case & item) {
     const auto serial_residency =
         streaming.diagnostics(streaming_context).residency;
 
+    // The public default is packed for Harrier, but M5 deliberately retains
+    // the previous dense padded/masked path for workloads where that kernel
+    // shape wins. Both eager and streaming must honor the same selection.
+    config.batch_layout = nanoembed::BatchLayout::Padded;
+    nanoembed::InternalStreamingContext padded_streaming_context;
+    eager.embed_batch(eager_context, batch_texts, config, eager_batch.data());
+    streaming.embed_batch(
+        padded_streaming_context, batch_texts, config, stream_batch.data());
+    for (size_t i = 0; i < batch_texts.size(); ++i) {
+        const size_t offset = i * static_cast<size_t>(streaming.n_embed());
+        std::vector<float> expected(
+            eager_batch.begin() + static_cast<std::ptrdiff_t>(offset),
+            eager_batch.begin() + static_cast<std::ptrdiff_t>(
+                offset + streaming.n_embed()));
+        std::vector<float> actual(
+            stream_batch.begin() + static_cast<std::ptrdiff_t>(offset),
+            stream_batch.begin() + static_cast<std::ptrdiff_t>(
+                offset + streaming.n_embed()));
+        if (cosine(expected, actual) < 0.999999) {
+            throw std::runtime_error(
+                std::string(item.label) + " padded batch streaming/eager parity failed");
+        }
+    }
+
+    // Switching back on a context that has already run the padded layout must
+    // re-plan rather than reuse the previous shape, so run the same texts once
+    // more on that same streaming context and require default-layout parity.
+    config.batch_layout = nanoembed::BatchLayout::Default;
+    eager.embed_batch(eager_context, batch_texts, config, eager_batch.data());
+    streaming.embed_batch(
+        padded_streaming_context, batch_texts, config, stream_batch.data());
+    for (size_t i = 0; i < batch_texts.size(); ++i) {
+        const size_t offset = i * static_cast<size_t>(streaming.n_embed());
+        std::vector<float> expected(
+            eager_batch.begin() + static_cast<std::ptrdiff_t>(offset),
+            eager_batch.begin() + static_cast<std::ptrdiff_t>(
+                offset + streaming.n_embed()));
+        std::vector<float> actual(
+            stream_batch.begin() + static_cast<std::ptrdiff_t>(offset),
+            stream_batch.begin() + static_cast<std::ptrdiff_t>(
+                offset + streaming.n_embed()));
+        if (cosine(expected, actual) < 0.999999) {
+            throw std::runtime_error(
+                std::string(item.label) +
+                " layout switch back to default failed parity");
+        }
+    }
+
     // A graph metadata failure must happen before its corresponding residency
     // lease is published. Verify both the embedding boundary (countdown 0) and
     // the first layer-group boundary (countdown 1), then reuse the same context

@@ -83,6 +83,20 @@ nanoembed::EmbedderConfig from_params(const nanoembed_context_params & p,
     return c;
 }
 
+bool to_internal_batch_layout(nanoembed_batch_layout   layout,
+                              nanoembed::BatchLayout & out) {
+    switch (layout) {
+        case NANOEMBED_BATCH_LAYOUT_DEFAULT:
+            out = nanoembed::BatchLayout::Default;
+            return true;
+        case NANOEMBED_BATCH_LAYOUT_PADDED:
+            out = nanoembed::BatchLayout::Padded;
+            return true;
+        default:
+            return false;
+    }
+}
+
 void require_descriptor_match(const nanoembed::ModelArch & descriptor,
                               int n_embed,
                               int n_layer,
@@ -297,6 +311,22 @@ nanoembed_context * nanoembed_new_context(nanoembed_model *         model,
 
 void nanoembed_free_context(nanoembed_context * ctx) {
     delete ctx;
+}
+
+int nanoembed_context_set_batch_layout(nanoembed_context *    ctx,
+                                       nanoembed_batch_layout layout) {
+    if (ctx == nullptr) {
+        set_error("ctx must be non-null");
+        return NANOEMBED_ERR_INVALID_ARG;
+    }
+    nanoembed::BatchLayout internal = nanoembed::BatchLayout::Default;
+    if (!to_internal_batch_layout(layout, internal)) {
+        set_error("layout is not a valid nanoembed_batch_layout");
+        return NANOEMBED_ERR_INVALID_ARG;
+    }
+    ctx->cfg.batch_layout = internal;
+    clear_error();
+    return NANOEMBED_OK;
 }
 
 int nanoembed_embed(nanoembed_context * ctx,

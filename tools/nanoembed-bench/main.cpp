@@ -167,6 +167,7 @@ struct Args {
     int  max_seq_len        = 0;       // 0 = no CLI override (library default)
     int  batch_size         = 1;       // items per measured API batch
     int  max_batch          = 64;      // context subdivision limit
+    std::string batch_layout = "default"; // default packed path or padded compatibility
     bool batch_control      = false;   // M4-style sequential calls, one timed batch window
     // Unset means the model's own pooling, matching the library default.
     // Naming one here would mean-pool a last-token model and time a graph the
@@ -194,7 +195,8 @@ void print_usage(const char * prog) {
         "usage: %s --model PATH --inputs FILE [--scenario NAME] [--warmup N]\n"
         "       [--iter N] [--cls] [--no-normalize] [--threads N]\n"
         "       [--streaming] [--partition PRESET]\n"
-        "       [--batch-size N] [--max-batch N] [--batch-control]\n"
+        "       [--batch-size N] [--max-batch N] [--batch-layout default|padded]\n"
+        "       [--batch-control]\n"
         "       [--max-seq-len N] [--out PATH]\n"
         "       [--cache-state cold|warm] [--strict-cold]\n"
         "       [--memory-profile] [--memory-profile-interval-ms N]\n"
@@ -252,6 +254,7 @@ bool parse_args(int argc, char ** argv, Args & a) {
         else if (int_opt("--max-seq-len",        a.max_seq_len))        { }
         else if (int_opt("--batch-size",         a.batch_size))         { }
         else if (int_opt("--max-batch",          a.max_batch))          { }
+        else if (str_opt("--batch-layout",       a.batch_layout))       { }
         else if (int_opt("--memory-profile-interval-ms",
                          a.memory_profile_interval_ms))                  { }
         // Backward-compatible alias for pre-A3 invocations. It configures the
@@ -305,6 +308,11 @@ bool parse_args(int argc, char ** argv, Args & a) {
         std::fprintf(stderr,
                      "error: interval, timeout and iter must be positive; "
                      "warmup must be non-negative\n");
+        return false;
+    }
+    if (a.batch_layout != "default" && a.batch_layout != "padded") {
+        std::fprintf(stderr,
+                     "error: --batch-layout must be default or padded\n");
         return false;
     }
     if (a.cache_state == CacheState::Cold &&
@@ -473,6 +481,18 @@ int run_worker(const Args & a) {
             std::fprintf(stderr, "worker: new_context failed: %s\n",
                          nanoembed_last_error());
             nanoembed_free_model(model);
+            model = nullptr;
+            return false;
+        }
+        const nanoembed_batch_layout layout = a.batch_layout == "padded"
+            ? NANOEMBED_BATCH_LAYOUT_PADDED
+            : NANOEMBED_BATCH_LAYOUT_DEFAULT;
+        if (nanoembed_context_set_batch_layout(ctx, layout) != NANOEMBED_OK) {
+            std::fprintf(stderr, "worker: set_batch_layout failed: %s\n",
+                         nanoembed_last_error());
+            nanoembed_free_context(ctx);
+            nanoembed_free_model(model);
+            ctx = nullptr;
             model = nullptr;
             return false;
         }
@@ -759,6 +779,7 @@ std::vector<std::string> worker_argv(const Args & a) {
     add("--threads",     std::to_string(a.threads));
     add("--batch-size",  std::to_string(a.batch_size));
     add("--max-batch",   std::to_string(a.max_batch));
+    add("--batch-layout", a.batch_layout);
     add("--cache-state", cache_state_name(a.cache_state));
     if (a.max_seq_len > 0) add("--max-seq-len", std::to_string(a.max_seq_len));
     switch (a.pooling) {
@@ -1228,6 +1249,7 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
     w.num_i("total_batches", static_cast<long long>(m.report.total_batches), true);
     w.num_i("batch_size", a.batch_size, true);
     w.num_i("max_batch", a.max_batch, true);
+    w.str  ("batch_layout", a.batch_layout, true);
     w.num_i("threads",     a.threads,    true);
     w.str  ("pooling",     pool_name(a.pooling), true);
     w.num_i("normalize",   a.normalize ? 1 : 0, true);
@@ -1243,6 +1265,7 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
     w.num_i("threads",   a.threads, true);
     w.num_i("batch_size", a.batch_size, true);
     w.num_i("max_batch", a.max_batch, true);
+    w.str  ("batch_layout", a.batch_layout, true);
     w.num_b("batch_control", a.batch_control, true);
     w.str  ("pooling",   pool_name(a.pooling), true);
     w.num_b("normalize", a.normalize, true);
@@ -1265,6 +1288,7 @@ std::string build_json(const Args & a, const Measurement & m, const Environment 
     w.num_i_or_null("threads", m.report.resolved_threads > 0,
                     m.report.resolved_threads, true);
     w.num_i("max_batch", m.report.resolved_max_batch, true);
+    w.str("batch_layout", a.batch_layout, true);
     w.str("threads_collection_status",
           m.report.resolved_threads > 0 ? "collected" : "unavailable", true);
     w.str("pooling", pool_name(static_cast<nanoembed_pool_type>(

@@ -187,6 +187,30 @@ class BenchRunnerColdTest(unittest.TestCase):
         self.assertEqual(command[command.index("--cache-state") + 1], "cold")
         self.assertIn("--strict-cold", command)
 
+    def test_batch_layout_is_validated_and_forwarded(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / "model.gguf").write_bytes(b"model")
+            scenario = {
+                "name": "scenario",
+                "model": "model.gguf",
+                "batch_layout": "padded",
+            }
+            command = runner.build_cmd(
+                pathlib.Path("bench-bin"), scenario, root,
+                pathlib.Path("one.txt"), "scenario",
+            )
+            self.assertEqual(
+                command[command.index("--batch-layout") + 1], "padded"
+            )
+
+            scenario["batch_layout"] = "unknown"
+            with self.assertRaisesRegex(SystemExit, "batch_layout"):
+                runner.build_cmd(
+                    pathlib.Path("bench-bin"), scenario, root,
+                    pathlib.Path("one.txt"), "scenario",
+                )
+
     def test_cold_aggregation_uses_one_sample_per_worker(self) -> None:
         results = [cold_native_result(0), cold_native_result(1, verified=False)]
         aggregated = runner.aggregate_cold_results(results, [["id-0"], ["id-1"]])
